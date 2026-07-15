@@ -1,0 +1,634 @@
+import asyncio
+import json
+import os
+from typing import Any, cast
+from uuid import uuid4
+
+import aio_pika
+import asyncpg  # type: ignore[import-untyped]
+import httpx
+import pytest
+
+pytestmark = pytest.mark.integration
+
+
+def required_environment(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        pytest.fail(f"Required integration environment variable is missing: {name}")
+    return value
+
+
+async def wait_for_published_event(connection: Any, user_id: str) -> asyncpg.Record:
+    for _ in range(40):
+        row = await connection.fetchrow(
+            """
+            SELECT event_type, payload, published_at
+            FROM outbox_events
+            WHERE aggregate_id = $1::uuid
+            """,
+            user_id,
+        )
+        if row is not None and row["published_at"] is not None:
+            return row
+        await asyncio.sleep(0.25)
+    pytest.fail("The user-created outbox event was not published within 10 seconds.")
+
+
+async def wait_for_message(
+    queue: aio_pika.abc.AbstractQueue,
+) -> aio_pika.abc.AbstractIncomingMessage:
+    for _ in range(40):
+        message = await queue.get(timeout=1, fail=False)
+        if message is not None:
+            return message
+        await asyncio.sleep(0.25)
+    pytest.fail("The RabbitMQ event was not received within 10 seconds.")
+
+
+async def expected_error(
+    client: httpx.AsyncClient,
+    method: str,
+    path: str,
+    status_code: int,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    response = await client.request(method, path, **kwargs)
+    assert response.status_code == status_code, response.text
+    body = response.json()
+    assert body["correlation_id"]
+    return cast(dict[str, Any], body["error"])
+
+
+@pytest.mark.asyncio
+async def test_administrator_identity_event_and_audit_flow() -> None:
+    api_url = required_environment("ATEP_INTEGRATION_API_URL")
+    database_url = required_environment("ATEP_INTEGRATION_DATABASE_URL")
+    rabbitmq_url = required_environment("ATEP_INTEGRATION_RABBITMQ_URL")
+    admin_email = required_environment("ATEP_INTEGRATION_ADMIN_EMAIL")
+    admin_password = required_environment("ATEP_INTEGRATION_ADMIN_PASSWORD")
+
+    database = await asyncpg.connect(database_url)
+    broker = await aio_pika.connect_robust(rabbitmq_url)
+    try:
+        channel = await broker.channel()
+        exchange = await channel.declare_exchange(
+            "atep.events", aio_pika.ExchangeType.TOPIC, durable=True
+        )
+        queue = await channel.declare_queue(exclusive=True, auto_delete=True)
+        await queue.bind(exchange, routing_key="atep.identity.user.created.v1")
+
+        async with httpx.AsyncClient(base_url=api_url, timeout=10) as client:
+            token_response = await client.post(
+                "/api/v1/auth/token",
+                data={"username": admin_email, "password": admin_password},
+            )
+            assert token_response.status_code == 200, token_response.text
+            assert token_response.headers["x-ratelimit-limit"] == "5"
+            assert int(token_response.headers["x-ratelimit-remaining"]) >= 0
+            admin_headers = {
+                "Authorization": f"Bearer {token_response.json()['access_token']}",
+                "X-Correlation-ID": str(uuid4()),
+            }
+
+            permissions_response = await client.get("/api/v1/permissions", headers=admin_headers)
+            assert permissions_response.status_code == 200, permissions_response.text
+            permission_names = {item["name"] for item in permissions_response.json()}
+            assert {
+                "users:read",
+                "users:write",
+                "roles:manage",
+                "audit:read",
+                "audit:export",
+                "modules:read",
+                "modules:manage",
+            } <= permission_names
+
+            module_name = f"integration-can-{uuid4().hex[:12]}"
+            module_command = {
+                "name": module_name,
+                "display_name": "Integration CAN Simulator",
+                "description": "Disposable module registration",
+                "version": "1.0.0",
+                "base_url": "http://can-simulator:8080",
+                "capabilities": [
+                    {
+                        "name": "can.frames.publish",
+                        "version": "1.0.0",
+                        "description": "Publish simulated CAN frames",
+                    }
+                ],
+            }
+            module_create_response = await client.post(
+                "/api/v1/modules", headers=admin_headers, json=module_command
+            )
+            assert module_create_response.status_code == 201, module_create_response.text
+            module = module_create_response.json()
+            module_id = module["id"]
+            assert module["status"] == "registered"
+            assert [item["name"] for item in module["capabilities"]] == ["can.frames.publish"]
+
+            duplicate_module = await expected_error(
+                client,
+                "POST",
+                "/api/v1/modules",
+                409,
+                headers=admin_headers,
+                json=module_command,
+            )
+            assert duplicate_module["code"] == "module_name_already_exists"
+
+            module_page_response = await client.get(
+                "/api/v1/modules",
+                headers=admin_headers,
+                params={"capability": "can.frames.publish", "limit": 100},
+            )
+            assert module_page_response.status_code == 200, module_page_response.text
+            assert any(item["id"] == module_id for item in module_page_response.json()["items"])
+
+            module_update_response = await client.patch(
+                f"/api/v1/modules/{module_id}",
+                headers=admin_headers,
+                json={"version": "1.1.0"},
+            )
+            assert module_update_response.status_code == 200, module_update_response.text
+            assert module_update_response.json()["status"] == "registered"
+
+            credential_response = await client.post(
+                f"/api/v1/modules/{module_id}/credentials",
+                headers=admin_headers,
+                json={"lease_duration_seconds": 5},
+            )
+            assert credential_response.status_code == 200, credential_response.text
+            module_token = credential_response.json()["module_token"]
+            assert len(module_token) >= 32
+            stored_module_token = await database.fetchval(
+                "SELECT heartbeat_token_hash FROM platform_modules WHERE id = $1::uuid",
+                module_id,
+            )
+            assert stored_module_token != module_token
+            assert len(stored_module_token) == 64
+
+            invalid_heartbeat = await expected_error(
+                client,
+                "POST",
+                f"/api/v1/modules/{module_id}/heartbeat",
+                401,
+                headers={"X-ATEP-Module-Token": "invalid-module-token-with-sufficient-length"},
+                json={"status": "active"},
+            )
+            assert invalid_heartbeat["code"] == "invalid_module_credential"
+
+            heartbeat_response = await client.post(
+                f"/api/v1/modules/{module_id}/heartbeat",
+                headers={"X-ATEP-Module-Token": module_token},
+                json={"status": "degraded", "version": "1.2.0"},
+            )
+            assert heartbeat_response.status_code == 200, heartbeat_response.text
+            heartbeat_module = heartbeat_response.json()
+            assert heartbeat_module["status"] == "degraded"
+            assert heartbeat_module["version"] == "1.2.0"
+            assert heartbeat_module["last_seen_at"]
+            assert heartbeat_module["lease_expires_at"]
+            assert heartbeat_module["lease_duration_seconds"] == 5
+
+            capability_response = await client.put(
+                f"/api/v1/modules/{module_id}/capabilities/can.frames.consume",
+                headers=admin_headers,
+                json={"version": "1.0.0", "description": "Consume CAN frames"},
+            )
+            assert capability_response.status_code == 200, capability_response.text
+            assert {item["name"] for item in capability_response.json()["capabilities"]} == {
+                "can.frames.consume",
+                "can.frames.publish",
+            }
+            capability_removal = await client.delete(
+                f"/api/v1/modules/{module_id}/capabilities/can.frames.consume",
+                headers=admin_headers,
+            )
+            assert capability_removal.status_code == 200, capability_removal.text
+            assert [item["name"] for item in capability_removal.json()["capabilities"]] == [
+                "can.frames.publish"
+            ]
+
+            for _ in range(16):
+                await asyncio.sleep(0.5)
+                reconciled_module = await client.get(
+                    f"/api/v1/modules/{module_id}", headers=admin_headers
+                )
+                assert reconciled_module.status_code == 200, reconciled_module.text
+                if reconciled_module.json()["status"] == "inactive":
+                    break
+            else:
+                pytest.fail("The expired module lease was not reconciled within 8 seconds.")
+
+            role_name = f"integration-qa-{uuid4().hex[:12]}"
+            role_command = {
+                "name": role_name,
+                "description": "Integration test role",
+                "permissions": ["users:read"],
+            }
+            role_create_response = await client.post(
+                "/api/v1/roles", headers=admin_headers, json=role_command
+            )
+            assert role_create_response.status_code == 201, role_create_response.text
+            role = role_create_response.json()
+            role_id = role["id"]
+            assert role["permissions"] == ["users:read"]
+
+            duplicate_role = await expected_error(
+                client,
+                "POST",
+                "/api/v1/roles",
+                409,
+                headers=admin_headers,
+                json=role_command,
+            )
+            assert duplicate_role["code"] == "role_name_already_exists"
+
+            role_page_response = await client.get(
+                "/api/v1/roles", headers=admin_headers, params={"limit": 100}
+            )
+            assert role_page_response.status_code == 200, role_page_response.text
+            role_page = role_page_response.json()
+            platform_admin = next(
+                item for item in role_page["items"] if item["name"] == "platform-admin"
+            )
+            assert any(item["id"] == role_id for item in role_page["items"])
+
+            protected_delete = await expected_error(
+                client,
+                "DELETE",
+                f"/api/v1/roles/{platform_admin['id']}",
+                409,
+                headers=admin_headers,
+            )
+            assert protected_delete["code"] == "protected_role"
+
+            role_detail_response = await client.get(
+                f"/api/v1/roles/{role_id}", headers=admin_headers
+            )
+            assert role_detail_response.status_code == 200, role_detail_response.text
+            role_update_response = await client.patch(
+                f"/api/v1/roles/{role_id}",
+                headers=admin_headers,
+                json={"description": "Updated integration test role"},
+            )
+            assert role_update_response.status_code == 200, role_update_response.text
+
+            grant_response = await client.put(
+                f"/api/v1/roles/{role_id}/permissions/roles:manage",
+                headers=admin_headers,
+            )
+            assert grant_response.status_code == 200, grant_response.text
+            assert "roles:manage" in grant_response.json()["permissions"]
+            revoke_response = await client.delete(
+                f"/api/v1/roles/{role_id}/permissions/roles:manage",
+                headers=admin_headers,
+            )
+            assert revoke_response.status_code == 200, revoke_response.text
+            assert "roles:manage" not in revoke_response.json()["permissions"]
+
+            email = f"integration-{uuid4().hex}@example.com"
+            password = f"Integration-{uuid4().hex}!"
+            command = {
+                "email": email,
+                "display_name": "Integration Engineer",
+                "password": password,
+            }
+            create_response = await client.post(
+                "/api/v1/users", headers=admin_headers, json=command
+            )
+            assert create_response.status_code == 201, create_response.text
+            created = create_response.json()
+            user_id = created["id"]
+            assert "password" not in created
+            assert "password_hash" not in created
+
+            stored = await database.fetchrow(
+                "SELECT email, password_hash FROM users WHERE id = $1::uuid", user_id
+            )
+            assert stored is not None
+            assert stored["email"] == email
+            assert password not in stored["password_hash"]
+            assert (
+                await database.fetchval(
+                    "SELECT count(*) FROM outbox_events WHERE aggregate_id = $1::uuid",
+                    user_id,
+                )
+                == 1
+            )
+
+            duplicate = await expected_error(
+                client,
+                "POST",
+                "/api/v1/users",
+                409,
+                headers=admin_headers,
+                json=command,
+            )
+            assert duplicate["code"] == "email_already_exists"
+
+            page_response = await client.get(
+                "/api/v1/users", headers=admin_headers, params={"limit": 100, "offset": 0}
+            )
+            assert page_response.status_code == 200, page_response.text
+            page = page_response.json()
+            assert page["limit"] == 100
+            assert any(item["id"] == user_id for item in page["items"])
+
+            detail_response = await client.get(f"/api/v1/users/{user_id}", headers=admin_headers)
+            assert detail_response.status_code == 200, detail_response.text
+            assert detail_response.json()["email"] == email
+
+            validation = await expected_error(
+                client,
+                "GET",
+                "/api/v1/users?limit=101",
+                422,
+                headers=admin_headers,
+            )
+            assert validation["code"] == "validation_error"
+
+            assignment_response = await client.put(
+                f"/api/v1/users/{user_id}/roles/{role_id}", headers=admin_headers
+            )
+            assert assignment_response.status_code == 200, assignment_response.text
+            assert role_name in assignment_response.json()["roles"]
+
+            role_in_use = await expected_error(
+                client,
+                "DELETE",
+                f"/api/v1/roles/{role_id}",
+                409,
+                headers=admin_headers,
+            )
+            assert role_in_use["code"] == "role_in_use"
+
+            user_token_response = await client.post(
+                "/api/v1/auth/token", data={"username": email, "password": password}
+            )
+            assert user_token_response.status_code == 200, user_token_response.text
+            first_pair = user_token_response.json()
+            first_refresh_token = first_pair["refresh_token"]
+            assert first_pair["refresh_expires_in"] > first_pair["expires_in"]
+
+            refresh_response = await client.post(
+                "/api/v1/auth/refresh",
+                json={"refresh_token": first_refresh_token},
+            )
+            assert refresh_response.status_code == 200, refresh_response.text
+            rotated_pair = refresh_response.json()
+            assert rotated_pair["refresh_token"] != first_refresh_token
+            refreshed_me = await client.get(
+                "/api/v1/auth/me",
+                headers={"Authorization": f"Bearer {rotated_pair['access_token']}"},
+            )
+            assert refreshed_me.status_code == 200, refreshed_me.text
+
+            reuse = await expected_error(
+                client,
+                "POST",
+                "/api/v1/auth/refresh",
+                401,
+                json={"refresh_token": first_refresh_token},
+            )
+            assert reuse["code"] == "invalid_refresh_token"
+            revoked_family = await expected_error(
+                client,
+                "POST",
+                "/api/v1/auth/refresh",
+                401,
+                json={"refresh_token": rotated_pair["refresh_token"]},
+            )
+            assert revoked_family["code"] == "invalid_refresh_token"
+
+            logout_pair_response = await client.post(
+                "/api/v1/auth/token", data={"username": email, "password": password}
+            )
+            logout_pair = logout_pair_response.json()
+            logout_response = await client.post(
+                "/api/v1/auth/logout",
+                json={"refresh_token": logout_pair["refresh_token"]},
+            )
+            assert logout_response.status_code == 204, logout_response.text
+            logged_out = await expected_error(
+                client,
+                "POST",
+                "/api/v1/auth/refresh",
+                401,
+                json={"refresh_token": logout_pair["refresh_token"]},
+            )
+            assert logged_out["code"] == "invalid_refresh_token"
+
+            logout_all_pair_response = await client.post(
+                "/api/v1/auth/token", data={"username": email, "password": password}
+            )
+            logout_all_pair = logout_all_pair_response.json()
+            logout_all_response = await client.post(
+                "/api/v1/auth/logout-all",
+                headers={"Authorization": f"Bearer {logout_all_pair['access_token']}"},
+            )
+            assert logout_all_response.status_code == 204, logout_all_response.text
+            globally_logged_out = await expected_error(
+                client,
+                "POST",
+                "/api/v1/auth/refresh",
+                401,
+                json={"refresh_token": logout_all_pair["refresh_token"]},
+            )
+            assert globally_logged_out["code"] == "invalid_refresh_token"
+
+            final_pair_response = await client.post(
+                "/api/v1/auth/token", data={"username": email, "password": password}
+            )
+            final_pair = final_pair_response.json()
+            user_headers = {"Authorization": f"Bearer {final_pair['access_token']}"}
+
+            permitted_response = await client.get("/api/v1/users", headers=user_headers)
+            assert permitted_response.status_code == 200, permitted_response.text
+            audit_denied = await expected_error(
+                client, "GET", "/api/v1/audit-records", 403, headers=user_headers
+            )
+            assert audit_denied["code"] == "permission_denied"
+            modules_denied = await expected_error(
+                client, "GET", "/api/v1/modules", 403, headers=user_headers
+            )
+            assert modules_denied["code"] == "permission_denied"
+
+            refresh_rows = await database.fetch(
+                "SELECT token_hash FROM refresh_tokens WHERE user_id = $1::uuid", user_id
+            )
+            assert len(refresh_rows) >= 5
+            assert all(len(row["token_hash"]) == 64 for row in refresh_rows)
+            assert all(first_refresh_token != row["token_hash"] for row in refresh_rows)
+
+            removal_response = await client.delete(
+                f"/api/v1/users/{user_id}/roles/{role_id}", headers=admin_headers
+            )
+            assert removal_response.status_code == 200, removal_response.text
+            denied = await expected_error(client, "GET", "/api/v1/users", 403, headers=user_headers)
+            assert denied["code"] == "permission_denied"
+
+            reassignment_response = await client.put(
+                f"/api/v1/users/{user_id}/roles/{role_id}", headers=admin_headers
+            )
+            assert reassignment_response.status_code == 200, reassignment_response.text
+            disable_response = await client.patch(
+                f"/api/v1/users/{user_id}/status",
+                headers=admin_headers,
+                json={"is_active": False},
+            )
+            assert disable_response.status_code == 200, disable_response.text
+            assert disable_response.json()["is_active"] is False
+            inactive = await expected_error(
+                client, "GET", "/api/v1/auth/me", 401, headers=user_headers
+            )
+            assert inactive["code"] == "invalid_credentials"
+
+            final_removal = await client.delete(
+                f"/api/v1/users/{user_id}/roles/{role_id}", headers=admin_headers
+            )
+            assert final_removal.status_code == 200, final_removal.text
+            role_delete_response = await client.delete(
+                f"/api/v1/roles/{role_id}", headers=admin_headers
+            )
+            assert role_delete_response.status_code == 204, role_delete_response.text
+
+            audit_response = await client.get(
+                "/api/v1/audit-records",
+                headers=admin_headers,
+                params={"resource_id": role_id, "limit": 100},
+            )
+            assert audit_response.status_code == 200, audit_response.text
+            audit_page = audit_response.json()
+            assert audit_page["total"] == 5
+            assert [item["action"] for item in audit_page["items"]] == [
+                "identity.role.deleted",
+                "identity.role.permission_revoked",
+                "identity.role.permission_granted",
+                "identity.role.updated",
+                "identity.role.created",
+            ]
+            detail = await client.get(
+                f"/api/v1/audit-records/{audit_page['items'][0]['id']}",
+                headers=admin_headers,
+            )
+            assert detail.status_code == 200, detail.text
+            assert detail.json()["resource_id"] == role_id
+
+            export_response = await client.get(
+                "/api/v1/audit-records/export",
+                headers=admin_headers,
+                params={"resource_id": role_id, "limit": 100},
+            )
+            assert export_response.status_code == 200, export_response.text
+            assert export_response.headers["content-type"].startswith("text/csv")
+            assert "identity.role.created" in export_response.text
+            assert "identity.role.deleted" in export_response.text
+
+            invalid_audit_page = await expected_error(
+                client,
+                "GET",
+                "/api/v1/audit-records?limit=101",
+                422,
+                headers=admin_headers,
+            )
+            assert invalid_audit_page["code"] == "validation_error"
+
+            limited_email = f"limited-{uuid4().hex}@example.com"
+            for _ in range(5):
+                invalid_login = await client.post(
+                    "/api/v1/auth/token",
+                    data={"username": limited_email, "password": "invalid-password"},
+                )
+                assert invalid_login.status_code == 401, invalid_login.text
+            rate_limited = await client.post(
+                "/api/v1/auth/token",
+                data={"username": limited_email, "password": "invalid-password"},
+            )
+            assert rate_limited.status_code == 429, rate_limited.text
+            assert rate_limited.json()["error"]["code"] == "rate_limit_exceeded"
+            assert rate_limited.headers["retry-after"]
+            assert rate_limited.headers["x-ratelimit-limit"] == "5"
+            assert rate_limited.headers["x-ratelimit-remaining"] == "0"
+
+        message = await wait_for_message(queue)
+        async with message.process():
+            envelope = json.loads(message.body)
+        assert envelope["event_type"] == "atep.identity.user.created.v1"
+        assert envelope["aggregate"] == {"type": "user", "id": user_id}
+        assert envelope["payload"]["email"] == email
+        assert "password" not in json.dumps(envelope).casefold()
+
+        outbox = await wait_for_published_event(database, user_id)
+        assert outbox["event_type"] == "atep.identity.user.created.v1"
+        assert "password" not in json.dumps(outbox["payload"]).casefold()
+
+        audit_actions = await database.fetch(
+            """
+            SELECT action
+            FROM audit_records
+            WHERE resource_id = $1::uuid AND action LIKE 'identity.user.%'
+            ORDER BY created_at, id
+            """,
+            user_id,
+        )
+        assert [row["action"] for row in audit_actions] == [
+            "identity.user.created",
+            "identity.user.role_assigned",
+            "identity.user.role_removed",
+            "identity.user.role_assigned",
+            "identity.user.status_changed",
+            "identity.user.role_removed",
+        ]
+        role_audit_actions = await database.fetch(
+            """
+            SELECT action
+            FROM audit_records
+            WHERE resource_id = $1::uuid AND action LIKE 'identity.role.%'
+            ORDER BY created_at, id
+            """,
+            role_id,
+        )
+        assert [row["action"] for row in role_audit_actions] == [
+            "identity.role.created",
+            "identity.role.updated",
+            "identity.role.permission_granted",
+            "identity.role.permission_revoked",
+            "identity.role.deleted",
+        ]
+        module_audit_actions = await database.fetch(
+            """
+            SELECT action
+            FROM audit_records
+            WHERE resource_id = $1::uuid AND action LIKE 'platform.module.%'
+            ORDER BY created_at, id
+            """,
+            module_id,
+        )
+        assert [row["action"] for row in module_audit_actions] == [
+            "platform.module.registered",
+            "platform.module.updated",
+            "platform.module.credential_rotated",
+            "platform.module.capability_declared",
+            "platform.module.capability_removed",
+            "platform.module.lease_expired",
+        ]
+        assert (
+            await database.fetchval(
+                "SELECT count(*) FROM outbox_events WHERE aggregate_id = $1::uuid",
+                module_id,
+            )
+            == 7
+        )
+        audit_id = await database.fetchval(
+            "SELECT id FROM audit_records WHERE resource_id = $1::uuid LIMIT 1", user_id
+        )
+        with pytest.raises(asyncpg.RaiseError, match="immutable"):
+            await database.execute(
+                "UPDATE audit_records SET action = 'tampered' WHERE id = $1", audit_id
+            )
+    finally:
+        await broker.close()
+        await database.close()

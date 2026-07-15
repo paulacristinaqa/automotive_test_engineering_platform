@@ -1,0 +1,63 @@
+name: integration
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  docker-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install project
+        run: python -m pip install -e ".[dev]"
+      - name: Run fast quality gates
+        run: |
+          python -m pytest
+          python -m ruff check .
+          python -m mypy src tests
+      - name: Generate ephemeral integration credentials
+        shell: bash
+        run: |
+          echo "ATEP_INTEGRATION_DB_PASSWORD=$(openssl rand -hex 16)" >> "$GITHUB_ENV"
+          echo "ATEP_INTEGRATION_RABBITMQ_USER=atep-integration" >> "$GITHUB_ENV"
+          echo "ATEP_INTEGRATION_RABBITMQ_PASSWORD=$(openssl rand -hex 16)" >> "$GITHUB_ENV"
+          echo "ATEP_INTEGRATION_JWT_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "ATEP_INTEGRATION_ADMIN_EMAIL=integration-admin@atep.example.com" >> "$GITHUB_ENV"
+          echo "ATEP_INTEGRATION_ADMIN_PASSWORD=Integration-$(openssl rand -hex 16)!" >> "$GITHUB_ENV"
+          echo "ATEP_INTEGRATION_API_URL=http://localhost:18000" >> "$GITHUB_ENV"
+          echo "ATEP_INTEGRATION_API_PORT=18000" >> "$GITHUB_ENV"
+          echo "ATEP_INTEGRATION_POSTGRES_PORT=15432" >> "$GITHUB_ENV"
+          echo "ATEP_INTEGRATION_RABBITMQ_PORT=15673" >> "$GITHUB_ENV"
+      - name: Export dependency URLs
+        shell: bash
+        run: |
+          echo "ATEP_INTEGRATION_DATABASE_URL=postgresql://atep:${ATEP_INTEGRATION_DB_PASSWORD}@localhost:15432/atep" >> "$GITHUB_ENV"
+          echo "ATEP_INTEGRATION_RABBITMQ_URL=amqp://${ATEP_INTEGRATION_RABBITMQ_USER}:${ATEP_INTEGRATION_RABBITMQ_PASSWORD}@localhost:15673/" >> "$GITHUB_ENV"
+      - name: Start disposable stack
+        shell: bash
+        run: |
+          docker compose -p atep-integration -f compose.integration.yaml up --build -d
+          for attempt in {1..90}; do
+            if curl --fail --silent http://localhost:18000/health/ready > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+      - name: Run integration tests
+        run: python -m pytest -p no:cacheprovider -o addopts= -m integration tests/integration
+      - name: Show service logs on failure
+        if: failure()
+        run: docker compose -p atep-integration -f compose.integration.yaml logs --no-color --tail 200
+      - name: Remove disposable stack
+        if: always()
+        run: docker compose -p atep-integration -f compose.integration.yaml down -v --remove-orphans

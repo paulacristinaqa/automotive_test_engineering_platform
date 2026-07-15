@@ -1,0 +1,99 @@
+x-app-environment: &app-environment
+  ATEP_ENVIRONMENT: integration
+  ATEP_DATABASE_URL: postgresql+asyncpg://atep:${ATEP_INTEGRATION_DB_PASSWORD:?required}@postgres:5432/atep
+  ATEP_REDIS_URL: redis://redis:6379/0
+  ATEP_RABBITMQ_URL: amqp://${ATEP_INTEGRATION_RABBITMQ_USER:?required}:${ATEP_INTEGRATION_RABBITMQ_PASSWORD:?required}@rabbitmq:5672/
+  ATEP_JWT_SECRET: ${ATEP_INTEGRATION_JWT_SECRET:?required}
+  ATEP_ACCESS_TOKEN_MINUTES: 5
+  ATEP_AUTH_RATE_LIMIT_REQUESTS: 5
+  ATEP_AUTH_RATE_LIMIT_IP_REQUESTS: 50
+  ATEP_AUTH_RATE_LIMIT_WINDOW_SECONDS: 60
+  ATEP_API_RATE_LIMIT_REQUESTS: 300
+  ATEP_API_RATE_LIMIT_WINDOW_SECONDS: 60
+  ATEP_MODULE_RECONCILIATION_ENABLED: true
+  ATEP_MODULE_RECONCILIATION_INTERVAL_SECONDS: 1
+  ATEP_BOOTSTRAP_ADMIN_EMAIL: ${ATEP_INTEGRATION_ADMIN_EMAIL:?required}
+  ATEP_BOOTSTRAP_ADMIN_PASSWORD: ${ATEP_INTEGRATION_ADMIN_PASSWORD:?required}
+
+x-app-service: &app-service
+  build: .
+  image: atep-integration-app:local
+  environment: *app-environment
+
+services:
+  migrate:
+    <<: *app-service
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *app-service
+    command: ["uvicorn", "atep.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "${ATEP_INTEGRATION_API_PORT:-18000}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready', timeout=3)"
+      interval: 2s
+      timeout: 4s
+      retries: 30
+
+  outbox-worker:
+    <<: *app-service
+    command: ["python", "-m", "atep.events.worker"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: atep
+      POSTGRES_USER: atep
+      POSTGRES_PASSWORD: ${ATEP_INTEGRATION_DB_PASSWORD:?required}
+    ports:
+      - "${ATEP_INTEGRATION_POSTGRES_PORT:-15432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U atep -d atep"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7.4-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  rabbitmq:
+    image: rabbitmq:4.0-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${ATEP_INTEGRATION_RABBITMQ_USER:?required}
+      RABBITMQ_DEFAULT_PASS: ${ATEP_INTEGRATION_RABBITMQ_PASSWORD:?required}
+    ports:
+      - "${ATEP_INTEGRATION_RABBITMQ_PORT:-15673}:5672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 2s
+      timeout: 5s
+      retries: 45
