@@ -27,6 +27,16 @@
 | CORE-F-021 | Module registration and effective catalogue mutations shall append correlated immutable audit evidence and versioned transactional outbox events. | Service/database and automated Docker integration test |
 | CORE-F-022 | An authorized administrator shall issue or rotate a module workload credential whose raw value is returned once and whose SHA-256 digest is the only persisted representation. | Service and automated Docker integration test |
 | CORE-F-023 | An authenticated module shall renew a bounded availability lease through heartbeat, while automatic reconciliation shall mark an expired module inactive and record the transition. | Unit, API contract, and automated Docker integration test |
+| CORE-F-024 | An authorized administrator shall register, list, inspect, activate, and deactivate canonical vehicle records through versioned APIs. | Service and API contract test |
+| CORE-F-025 | An authenticated Vehicle Gateway declaring `vehicle.telemetry.publish` shall submit timezone-aware vehicle observations without direct access to platform infrastructure. | Unit, negative, API contract, and automated Docker integration test |
+| CORE-F-026 | Telemetry persistence and `atep.vehicle.telemetry.received.v1` outbox creation shall be atomic. | Service/database and automated Docker integration test |
+| CORE-F-027 | Repeating the same telemetry event shall not duplicate state or events; reusing its identifier with different data shall return a stable conflict. | Positive retry, negative conflict, and automated Docker integration test |
+| CORE-F-028 | The Android Vehicle Gateway shall persist changed simulated properties before delivery and reuse the original event identifier and timestamp after a temporary failure. | Android unit tests and manual end-to-end test `CT-SHOW-006` |
+| CORE-F-029 | The Android showcase shall expose gateway disabled, synchronized, pending, and rejected states without displaying workload credentials. | Android build verification and manual UI test `CT-SHOW-006` |
+| CORE-F-030 | The Android showcase shall obtain canonical vehicle state through a replaceable `VehiclePropertySource` supporting both deterministic simulation and read-only AAOS `CarPropertyManager` observations. | Android source-contract and mapping unit tests |
+| CORE-F-031 | Explicit AAOS mode shall report inaccessible or unsupported VHAL properties and shall never silently replace them with simulated observations. | Negative Android unit test and manual AAOS test `CT-SHOW-007` |
+| CORE-F-032 | Pending Android telemetry shall reconcile to one persistent background job per vehicle, run only with connectivity, retain queue order and event identity, and use bounded exponential retry. | Android retry-policy tests and manual process-death test `CT-SHOW-008` |
+| CORE-F-033 | The Android showcase shall expose rejected telemetry and exhausted background delivery, retain non-sensitive event evidence across process restart, and allow one selected event to be retried with unchanged identity or discarded. | Android gateway-operation tests and manual operator test `CT-SHOW-009` |
 
 ## Non-functional requirements
 
@@ -46,3 +56,9 @@
 | CORE-NF-012 | Abuse-control consistency | rate-limit counters are atomic, expire automatically, store no raw email, address, or credential, and fail closed with a controlled response when Redis is unavailable |
 | CORE-NF-013 | Module-catalogue integrity | module and capability names are canonical and unique in scope, versions follow semantic-version syntax, pagination is bounded, and read/manage permissions are independent |
 | CORE-NF-014 | Operational-registry integrity | raw workload credentials never enter persistence or evidence, operational states are heartbeat-controlled, leases are bounded, and expiry transitions are evented and audited |
+| CORE-NF-015 | Automotive integration isolation | Android clients communicate only through public ATEP APIs; PostgreSQL, Redis, and RabbitMQ remain inaccessible to CarSystemUI and the Vehicle Gateway |
+| CORE-NF-016 | Telemetry interoperability | property names and event identifiers are canonical, timestamps are timezone-aware, contracts are published in OpenAPI, and retries are idempotent |
+| CORE-NF-017 | Gateway resilience | pending telemetry survives Android process restart, delivery preserves queue order, permanent client rejections are bounded, and temporary failures remain retryable |
+| CORE-NF-018 | Evidence provenance | the UI identifies simulator versus AAOS origin, disables local mutation for AAOS observations, and preserves unit conversions defined by the canonical source adapter |
+| CORE-NF-019 | Background delivery control | retry work is unique per vehicle, persists beyond the activity lifecycle, requires connectivity, remains inactive for disabled configuration, and stops after eight worker attempts |
+| CORE-NF-020 | Telemetry disposition safety | exhausted work does not restart silently; retry preserves event identity; discard affects only the selected rejected record; credentials never enter operator evidence |
