@@ -275,7 +275,12 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                             "name": "vehicle.telemetry.publish",
                             "version": "1.0.0",
                             "description": "Publish Android Automotive telemetry",
-                        }
+                        },
+                        {
+                            "name": "vehicle.commands.consume",
+                            "version": "1.0.0",
+                            "description": "Consume leased vehicle commands",
+                        },
                     ],
                 },
             )
@@ -351,6 +356,109 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             assert telemetry_page.status_code == 200, telemetry_page.text
             assert telemetry_page.json()["total"] == 1
             assert telemetry_page.json()["items"][0]["event_id"] == telemetry_event_id
+
+            command_id = uuid4().hex
+            command_payload = {
+                "command_id": command_id,
+                "target_module_id": gateway_id,
+                "test_run_id": uuid4().hex,
+                "kind": "set_property",
+                "parameters": {"property": "battery_level", "value": 25},
+            }
+            command_response = await client.post(
+                f"/api/v1/vehicles/{vehicle_identifier}/commands",
+                headers=admin_headers,
+                json=command_payload,
+            )
+            assert command_response.status_code == 201, command_response.text
+            assert command_response.json()["status"] == "pending"
+
+            duplicate_command = await client.post(
+                f"/api/v1/vehicles/{vehicle_identifier}/commands",
+                headers=admin_headers,
+                json=command_payload,
+            )
+            assert duplicate_command.status_code == 200, duplicate_command.text
+            assert duplicate_command.json()["id"] == command_response.json()["id"]
+
+            command_conflict = await expected_error(
+                client,
+                "POST",
+                f"/api/v1/vehicles/{vehicle_identifier}/commands",
+                409,
+                headers=admin_headers,
+                json={
+                    **command_payload,
+                    "parameters": {"property": "battery_level", "value": 30},
+                },
+            )
+            assert command_conflict["code"] == "vehicle_command_conflict"
+
+            missing_command_capability = await expected_error(
+                client,
+                "POST",
+                f"/api/v1/vehicles/{vehicle_identifier}/commands/claim",
+                403,
+                headers={
+                    "X-ATEP-Module-ID": module_id,
+                    "X-ATEP-Module-Token": module_token,
+                },
+                json={"lease_seconds": 60},
+            )
+            assert missing_command_capability["code"] == "module_capability_required"
+
+            claimed_command = await client.post(
+                f"/api/v1/vehicles/{vehicle_identifier}/commands/claim",
+                headers=telemetry_headers,
+                json={"lease_seconds": 60},
+            )
+            assert claimed_command.status_code == 200, claimed_command.text
+            claimed = claimed_command.json()
+            assert claimed["command_id"] == command_id
+            assert claimed["status"] == "claimed"
+            assert claimed["attempt_count"] == 1
+            claim_token = claimed["claim_token"]
+            stored_claim_hash = await database.fetchval(
+                "SELECT lease_token_hash FROM vehicle_commands WHERE command_id = $1",
+                command_id,
+            )
+            assert stored_claim_hash != claim_token
+            assert len(stored_claim_hash) == 64
+
+            acknowledgement_payload = {
+                "claim_token": claim_token,
+                "outcome": "succeeded",
+                "result": {"property": "battery_level", "applied": True},
+            }
+            acknowledgement = await client.post(
+                f"/api/v1/vehicles/{vehicle_identifier}/commands/{command_id}/acknowledgement",
+                headers=telemetry_headers,
+                json=acknowledgement_payload,
+            )
+            assert acknowledgement.status_code == 200, acknowledgement.text
+            assert acknowledgement.json()["status"] == "succeeded"
+
+            duplicate_acknowledgement = await client.post(
+                f"/api/v1/vehicles/{vehicle_identifier}/commands/{command_id}/acknowledgement",
+                headers=telemetry_headers,
+                json=acknowledgement_payload,
+            )
+            assert duplicate_acknowledgement.status_code == 200
+
+            command_page = await client.get(
+                f"/api/v1/vehicles/{vehicle_identifier}/commands",
+                headers=admin_headers,
+            )
+            assert command_page.status_code == 200, command_page.text
+            assert command_page.json()["total"] == 1
+            assert command_page.json()["items"][0]["status"] == "succeeded"
+            assert (
+                await database.fetchval(
+                    "SELECT count(*) FROM outbox_events WHERE aggregate_id = $1::uuid",
+                    command_response.json()["id"],
+                )
+                == 3
+            )
 
             role_name = f"integration-qa-{uuid4().hex[:12]}"
             role_command = {

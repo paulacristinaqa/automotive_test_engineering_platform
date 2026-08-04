@@ -94,6 +94,33 @@ class TelemetryEventConflictError(ApplicationError):
         )
 
 
+class VehicleCommandConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="vehicle_command_conflict",
+            message="The command identifier was already used for a different command.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class VehicleCommandStateError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="vehicle_command_state_conflict",
+            message="The command cannot transition from its current state.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class InvalidCommandClaimError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="invalid_command_claim",
+            message="The command claim is invalid or has expired.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
 class ProtectedRoleError(ApplicationError):
     def __init__(self) -> None:
         super().__init__(
