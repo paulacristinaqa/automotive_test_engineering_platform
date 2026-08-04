@@ -11,6 +11,7 @@ from atep.db.base import Base
 from atep.events import models as event_models  # noqa: F401
 from atep.identity import models as identity_models  # noqa: F401
 from atep.registry import models as registry_models  # noqa: F401
+from atep.vehicles import models as vehicle_models  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:

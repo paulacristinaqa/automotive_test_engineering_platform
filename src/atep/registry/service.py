@@ -9,6 +9,7 @@ from atep.audit.service import record_audit
 from atep.core.errors import (
     DuplicateModuleNameError,
     InvalidModuleCredentialError,
+    ModuleCapabilityRequiredError,
     ResourceNotFoundError,
 )
 from atep.core.security import generate_module_token, hash_module_token, verify_module_token
@@ -50,6 +51,25 @@ async def require_module(session: AsyncSession, module_id: UUID) -> PlatformModu
     module = await session.get(PlatformModule, module_id)
     if module is None:
         raise ResourceNotFoundError("module")
+    return module
+
+
+async def authenticate_module(
+    session: AsyncSession,
+    *,
+    module_id: UUID,
+    token: str,
+    required_capability: str | None = None,
+) -> PlatformModule:
+    module = await require_module(session, module_id)
+    if module.heartbeat_token_hash is None or not verify_module_token(
+        token, module.heartbeat_token_hash
+    ):
+        raise InvalidModuleCredentialError()
+    if required_capability is not None and required_capability not in {
+        item.name for item in module.capabilities
+    }:
+        raise ModuleCapabilityRequiredError(required_capability)
     return module
 
 

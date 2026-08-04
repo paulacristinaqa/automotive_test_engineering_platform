@@ -136,3 +136,27 @@ def test_module_registry_contracts_and_safe_pagination_are_published() -> None:
     assert parameters["offset"]["maximum"] == 1_000_000
     assert "status" in parameters
     assert "capability" in parameters
+
+
+def test_vehicle_gateway_contracts_and_safe_pagination_are_published() -> None:
+    paths = core_app.openapi()["paths"]
+    assert "/api/v1/vehicles" in paths
+    assert "/api/v1/vehicles/{vehicle_id}" in paths
+    assert "/api/v1/vehicles/{vehicle_id}/status" in paths
+    telemetry_path = paths["/api/v1/vehicles/{vehicle_id}/telemetry"]
+    assert {"get", "post"} <= set(telemetry_path)
+    headers = {
+        item["name"]: item
+        for item in telemetry_path["post"]["parameters"]
+        if item["in"] == "header"
+    }
+    assert {"X-ATEP-Module-ID", "X-ATEP-Module-Token"} <= set(headers)
+    list_parameters = {
+        item["name"]: item["schema"] for item in paths["/api/v1/vehicles"]["get"]["parameters"]
+    }
+    assert list_parameters["limit"]["maximum"] == 100
+    telemetry_parameters = {
+        item["name"]: item["schema"] for item in telemetry_path["get"]["parameters"]
+    }
+    assert telemetry_parameters["limit"]["maximum"] == 500
+    assert telemetry_parameters["offset"]["maximum"] == 1_000_000

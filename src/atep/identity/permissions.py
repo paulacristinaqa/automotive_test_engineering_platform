@@ -9,6 +9,9 @@ class PermissionName(StrEnum):
     AUDIT_EXPORT = "audit:export"
     MODULES_READ = "modules:read"
     MODULES_MANAGE = "modules:manage"
+    VEHICLES_READ = "vehicles:read"
+    VEHICLES_MANAGE = "vehicles:manage"
+    TELEMETRY_READ = "telemetry:read"
     PLATFORM_ADMIN = "platform:admin"
 
 
