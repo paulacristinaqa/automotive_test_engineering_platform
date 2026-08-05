@@ -149,6 +149,15 @@ flowchart LR
    instruments the replaceable artifact-store protocol with fixed operation/outcome labels, byte
    counters, and optional capacity reporting. Keys, filenames, endpoints, exception messages, and
    domain identifiers never enter labels. Telemetry failure must not alter authoritative state.
+29. **Supply-chain inputs are immutable and independently evidenced.** Linux x86-64/Python 3.14 is
+   the canonical dependency-lock platform because it matches the digest-pinned official Python
+   3.14.6/Alpine 3.24 runtime container; CI still tests Python 3.12 as the supported minimum. Runtime and
+   development graphs, including build requirements, are committed with SHA-256 hashes. The runtime
+   base image is digest-pinned and third-party workflow actions use full commit SHAs. Separate CI
+   jobs scan repository history, Python dependencies, Python source, and the built image while
+   retaining CycloneDX SBOM evidence. Scanner exceptions must match an exact advisory, package,
+   version, and type, name an owner and review date, and expire; all other findings remain gated.
+   Dependabot proposes reviewed updates without weakening pins.
 
 ## Initial bounded contexts
 
@@ -185,6 +194,12 @@ contracts live under an explicit version and remain backward compatible during m
 - Authentication failures do not reveal whether an email exists.
 - Authorization is deny-by-default.
 - Containers run as an unprivileged user.
+- Runtime and development dependencies are installed from hash-locked manifests; the runtime base
+  image and every third-party CI action are pinned to immutable identifiers.
+- CI scans history with Gitleaks, audits Python packages, analyses Python with CodeQL, generates
+  CycloneDX SBOMs, and rejects high or critical vulnerabilities in the built container image
+  unless an exact, documented, owned, and time-bounded exception applies.
+- Dependabot proposes weekly Python, GitHub Actions, and Docker updates for review.
 - Opaque refresh-token rotation and append-only administrative audit trails are implemented.
 - Audit search and export are protected by `audit:read` and `audit:export`; no mutation or
   deletion endpoint exists.
@@ -212,4 +227,5 @@ contracts live under an explicit version and remain backward compatible during m
   anonymous Grafana access is disposable-only; production requires network isolation, TLS,
   workload authentication, access audit, and retention controls.
 - Production follow-ups include proxy-aware client attribution, capacity tuning,
-  secret-manager integration, and TLS/mTLS between workloads.
+  secret-manager integration, TLS/mTLS between workloads, artifact signing, and verifiable
+  build provenance.

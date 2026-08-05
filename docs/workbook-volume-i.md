@@ -2,11 +2,11 @@
 
 **Subtitle:** Architecture, implementation record, verification strategy, and engineering evidence  
 **Project:** Automotive Test Engineering Platform (ATEP)  
-**Document version:** 0.25.0
+**Document version:** 0.27.0
 
 **Baseline date:** 4 August 2026
 
-**Status:** Living engineering document — dependency and storage observability baseline implemented
+**Status:** Living engineering document — software supply-chain security baseline implemented
 **Language:** English
 
 ## Document Purpose
@@ -59,6 +59,8 @@ The document distinguishes three types of statements:
 | 0.23.0 | 5 August 2026 | Added internal outbox-worker metrics, aggregate outbox/scheduler backlog age, scheduler throughput/failure metrics, bounded WebSocket connection/message/live-publish metrics, six domain alerts, dashboard panels, controlled worker retry, and expanded Docker scrape evidence | 89 fast Python tests plus the expanded disposable integration scenario, Ruff, strict mypy, Compose validation, and `promtool` validation |
 | 0.24.0 | 5 August 2026 | Added pinned Alertmanager routing, critical/warning grouping intervals, same-service inhibition, firing/resolved delivery, a loopback-only aggregate webhook receiver, bounded delivery metrics, configuration tests, `amtool` validation, and synthetic end-to-end CI delivery | 92 fast Python tests plus the expanded Docker and live alert-delivery scenarios, Ruff, strict mypy, Compose validation, `promtool`, and `amtool` |
 | 0.25.0 | 5 August 2026 | Added bounded PostgreSQL/Redis/RabbitMQ readiness metrics, a replaceable artifact-store instrumentation decorator, operation latency/outcomes, transferred bytes, optional filesystem capacity, three runbook-linked alerts, and expanded Docker scrape evidence | 94 fast Python tests plus the expanded disposable integration scenario, Ruff, strict mypy, cardinality/privacy checks, and `promtool` validation |
+| 0.26.0 | 5 August 2026 | Added hash-locked runtime/development dependencies, digest/SHA-pinned build inputs, weekly update automation, history/secret scanning, Python dependency and CodeQL analysis, CycloneDX SBOMs, and a high/critical image vulnerability gate | 97 fast Python tests, Ruff, strict mypy, and lock-policy tests passed locally; deterministic lock regeneration, dependency audit, image scan, and CodeQL are enforced by remote CI |
+| 0.27.0 | 5 August 2026 | Migrated the runtime to official digest-pinned Python 3.14.6/Alpine 3.24 and governed three exact CPython scanner exceptions with owner, review date, expiry, and policy-as-code verification | 98 fast Python tests, Ruff, strict mypy, and four supply-chain policy tests; every other high/critical image finding remains blocking |
 
 ## How to Use This Workbook
 
@@ -135,7 +137,8 @@ The initial design deliberately starts as a modular monolith rather than a colle
 | Redis integration | Implemented | Readiness plus atomic expiring authentication and versioned-API rate-limit counters |
 | Structured logging | Implemented | JSON logs with request correlation context |
 | Container environment | Implemented and locally executed | One-shot migration, API, worker, PostgreSQL, Redis, and RabbitMQ services verified with Docker Compose |
-| Automated verification | Implemented | 94 fast tests plus expanded disposable black-box and live alert-delivery scenarios, 27 Android tests, Ruff, strict mypy, Android lint/build, and CI workflow |
+| Software supply-chain security | Implemented baseline | Hash locks, immutable build inputs, Gitleaks, pip-audit, CodeQL, CycloneDX SBOMs, Grype image gate, and Dependabot |
+| Automated verification | Implemented | 98 fast tests plus expanded disposable black-box and live alert-delivery scenarios, 27 Android tests, Ruff, strict mypy, Android lint/build, and integration/security CI workflows |
 
 ## 2. Scope and Boundaries
 
@@ -372,6 +375,14 @@ External dashboards, test automation clients, and future ATEP modules call the C
 **Rationale.** Readiness already performs the authoritative dependency probes, and the object-store protocol already owns evidence I/O. Instrumenting those boundaries avoids duplicate traffic and preserves the domain model. Fixed vocabularies make series count predictable, while a decorator allows filesystem, S3, MinIO, or managed adapters to share the same operational contract.
 
 **Consequences.** Readiness traffic contributes to dependency history and must be rate-calibrated. The filesystem capacity gauge describes the backing volume visible to that adapter, not a production quota guarantee. Production still requires database-pool saturation, broker/provider internals, durable object-store quota/retention metrics, load calibration, and outage exercises.
+
+### ADR-021 — Immutable Supply-Chain Inputs with Independent Evidence
+
+**Decision.** Use Linux x86-64/Python 3.14 as the canonical lock platform because it matches the digest-pinned official Python 3.14.6/Alpine 3.24 runtime container; retain Python 3.12 as the tested minimum. Commit separate runtime and development dependency graphs, including build requirements, with SHA-256 hashes. Retain the canonical regenerated pair before enforcing byte-for-byte drift. Install the application without dependency re-resolution. Pin the runtime base image by manifest digest and every third-party workflow action by full commit SHA. Run history/secret, dependency, source, and image analysis in a dedicated least-privilege workflow; retain CycloneDX Python and image SBOMs; fail the image job for high or critical known vulnerabilities except for an exact, documented, owned, and time-bounded exception; and use Dependabot only to propose reviewed updates.
+
+**Rationale.** Version ranges and mutable tags make two nominally identical builds capable of consuming different code. Immutable inputs reduce that ambiguity, while multiple scanners and machine-readable inventories provide complementary evidence at repository, package, source, and image boundaries. Separating security analysis from application integration keeps evidence and permissions explicit.
+
+**Consequences.** Every dependency change must regenerate and review both locks. Digest and SHA pins trade automatic mutation for explicit update pull requests. Advisory databases may produce false positives or newly disclose findings in unchanged inputs, so exceptions require a documented owner, reachability assessment, compensating control, review date, and expiry. Release signing, provenance attestation, long-term SBOM retention, and managed build credentials remain production work.
 
 ## 5. Technology Stack and Rationale
 
@@ -725,6 +736,9 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | CORE-F-070 | Readiness shall publish bounded PostgreSQL, Redis, and RabbitMQ duration/result/current-state metrics. | Health boundary and API Prometheus registry | OBS-025, OBS-027 |
 | CORE-F-071 | The replaceable artifact-store boundary shall publish operation, latency, byte, and optional capacity metrics without identifiers. | Instrumentation decorator and filesystem capacity provider | OBS-026, OBS-027 |
 | CORE-F-072 | Dependency unavailability, artifact-store errors, and low capacity shall raise runbook-linked alerts. | Three Prometheus alert rules | OBS-028 |
+| CORE-F-073 | Runtime and development dependency graphs, including build requirements, shall be committed with SHA-256 hashes. | `requirements.lock`, `requirements-dev.lock`, and lock drift gate | SECOPS-009 |
+| CORE-F-074 | Security CI shall scan history, Python dependencies, Python source, and the built image and retain CycloneDX SBOM evidence. | `.github/workflows/security.yml` | SECOPS-001 through SECOPS-004 |
+| CORE-F-075 | CI actions and the runtime base image shall use immutable identifiers with reviewed automated update proposals. | workflow/Docker policy and Dependabot | SECOPS-009 |
 
 ### 8.2 Non-Functional Requirements
 
@@ -769,6 +783,9 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | CORE-NF-039 | Dependency metric cardinality | Three fixed dependency labels and two fixed outcomes | OBS-025 |
 | CORE-NF-040 | Storage metric privacy | Fixed operation/outcome/direction values; no object or domain identifiers | OBS-026 |
 | CORE-NF-041 | Observability non-interference | Capacity refresh and metric recording cannot alter storage or readiness semantics | OBS-026, architecture review |
+| CORE-NF-042 | Build reproducibility | Canonical Linux x86-64/Python 3.14 locks, tested Python 3.12 minimum, hash verification, and no dependency re-resolution from reviewed manifests | SECOPS-002, SECOPS-009 |
+| CORE-NF-043 | CI least privilege | Read-only default permissions, job-scoped CodeQL publication permission, and full-SHA actions | SECOPS-003, SECOPS-009 |
+| CORE-NF-044 | Vulnerability evidence | Fourteen-day SBOM retention and a high/critical image gate with reviewed exceptions only | SECOPS-002, SECOPS-004 |
 
 ### 8.3 Definition of Done for an Increment
 
@@ -1079,14 +1096,15 @@ The fast local suite and repeated remote disposable CI runs prove clean-database
 | QLT-006 | Compare migration metadata against model metadata. | No uncommitted schema drift is detected. | Planned / P0 |
 | QLT-007 | Measure unit and branch coverage. | Agreed thresholds pass; uncovered critical paths are reviewed. | Planned / P1 |
 | QLT-008 | Mutation-test security and authorization rules. | Tests kill mutations that remove critical checks. | Planned / P1 |
-| SECOPS-001 | Scan the repository for secrets. | No credential or private key is detected. | Planned / P0 |
-| SECOPS-002 | Scan Python dependencies for known vulnerabilities. | No unaccepted critical/high vulnerability remains. | Planned / P0 |
-| SECOPS-003 | Run static application security analysis. | Findings are triaged with owner and due date. | Planned / P1 |
-| SECOPS-004 | Scan the container image and generate an SBOM. | Critical findings fail release; SBOM is retained with the artifact. | Planned / P0 |
+| SECOPS-001 | Scan repository history for secrets with Gitleaks. | No credential or private key is detected. | Automated in security CI / P0 |
+| SECOPS-002 | Audit the hash-locked Python runtime graph and emit a CycloneDX SBOM. | No known vulnerability remains unreviewed; SBOM is retained for 14 days. | Implemented; local audit passed / P0 |
+| SECOPS-003 | Run CodeQL `security-extended` analysis for Python. | Findings are published and triaged with owner and due date. | Automated in security CI / P1 |
+| SECOPS-004 | Generate a CycloneDX image SBOM and scan it with Grype. | High or critical findings fail CI unless an exact reviewed exception names the advisory, component, owner, review date, and expiry; SBOM is retained for 14 days. | Automated in security CI / P0 |
 | SECOPS-005 | Fuzz token and API input parsers. | Malformed input causes controlled 4xx responses and no crash. | Planned / P1 |
 | SECOPS-006 | Review CORS, documentation exposure, headers, and TLS policy. | Production configuration matches the approved threat model. | Planned / P0 |
 | SECOPS-007 | Attempt privilege escalation across RBAC boundaries. | No unauthorized operation or sensitive disclosure succeeds. | Planned / P0 |
 | SECOPS-008 | Rotate the JWT secret in a staged environment. | Rotation procedure behaves as documented, including expected token invalidation. | Planned / P1 |
+| SECOPS-009 | Verify dependency locks, immutable workflow/container inputs, and scanner-exception governance. | Locks cover direct dependencies with hashes and no index override; actions use full SHAs; the base uses a digest; Dependabot covers all three ecosystems; exceptions are exact, owned, and time-bounded. | Four automated policy tests passed / P0 |
 
 ### 11.9 Administrative Audit
 
@@ -1214,11 +1232,11 @@ Pipeline artifacts should include test reports, coverage, OpenAPI schema, migrat
 | Token theft or forgery | Signed short-lived access token, opaque hash-only refresh storage, rotation, and replay-family revocation | Add key identifiers, asymmetric keys or managed identity; consider access-token deny-listing for high-risk deployments |
 | Account enumeration | Generic errors, dummy password verification, and normalized-account rate limiting | Benchmark timing and monitor distributed guessing patterns |
 | Privilege escalation | Permission-based checks and normalized identity | Add administration audit trail, approval rules, and negative authorization suite |
-| Secret leakage | Environment-based secrets and ignored `.env` | Add secret manager, scanning, rotation runbooks, and log redaction tests |
-| SQL injection | SQLAlchemy expression API and parameterization | Maintain code review and SAST; test any raw SQL explicitly |
+| Secret leakage | Environment-based secrets, ignored `.env`, and automated history scanning | Add secret manager, rotation runbooks, and expanded log redaction tests |
+| SQL injection | SQLAlchemy expression API, parameterization, and CodeQL analysis | Maintain code review and test any raw SQL explicitly |
 | Event spoofing or tampering | Controlled exchange publication and message identity | Add broker TLS/mTLS, broker permissions, schema validation, and optional message signing |
 | Message replay | Unique event IDs and documented idempotency | Implement consumer inbox/deduplication and retention policy |
-| Dependency compromise | Version ranges and isolated image | Add lock file, SBOM, signature verification, and automated advisory scanning |
+| Dependency compromise | Hash-locked Python graphs, immutable build inputs, weekly updates, SBOMs, and dependency/image scanning | Add signature verification, provenance attestations, long-term release evidence, and supplier-response policy |
 | Denial of service | Bounded readiness timeouts and distributed versioned-API limits | Add body-size/pool limits, backpressure, proxy-aware attribution, and load evidence |
 
 ## 14. Risk and Technical Debt Register
@@ -1232,13 +1250,14 @@ Pipeline artifacts should include test reports, coverage, OpenAPI schema, migrat
 | R-005 | Audit search/export and the retention baseline are implemented, but immutable archive, restore, legal-hold, and disposition automation are not. | PostgreSQL storage will grow indefinitely and long-term restorability remains unproven. | Implement partition-aware archive automation, integrity manifests, restore drills, capacity alerts, and controlled disposition. | Medium |
 | R-006 | Health checks create direct dependency connections. | Probe volume may add avoidable load. | Benchmark and consider pooled/lightweight broker health strategy. | Medium |
 | R-007 | The global API error schema is not snapshot/version compatibility tested. | An accidental shape change may break clients. | Add OpenAPI snapshots and consumer contract checks. | Medium |
-| R-008 | Dependency versions use ranges without a committed lock file. | Builds may change over time. | Adopt deterministic dependency locking and update automation. | Medium |
+| R-008 | Dependency locks, immutable inputs, update automation, SBOMs, and scanning are implemented, but release signing and verifiable provenance are not. | A compromised authorised build or unsigned artifact may still be substituted downstream. | Add isolated release builders, signatures, attestations, verification policy, and long-term release evidence. | Medium |
 | R-009 | Bounded dependency and storage telemetry exists, but database-pool saturation, Redis/RabbitMQ provider internals, durable quota/retention signals, and asynchronous trace links remain incomplete. | Some saturation, capacity-policy, or cross-process failures may still require provider consoles and log-centric investigation. | Add provider exporters/pool metrics and OpenTelemetry links with load, outage, and cardinality evidence. | Medium |
 | R-010 | No formal backup/restore evidence. | Data recovery capability is unknown. | Define RPO/RTO, automated backups, restore drills, and evidence retention. | High |
 | R-011 | Rate limiting uses fixed windows and the direct network peer when no bearer credential is present. | Bursts near a window boundary may temporarily exceed the nominal rate; a shared reverse-proxy address may group unrelated clients. | Calibrate thresholds with load tests and implement a reviewed trusted-proxy attribution policy before public deployment. | High |
 | R-012 | Shared-secret workload authentication and application-process reconciliation are implemented, but mTLS, per-instance identity, and multi-replica scheduler ownership are not. | Credential theft could permit module impersonation, and operational behavior under multiple independently scheduled API replicas is not yet evidenced. | Add secret-manager delivery, mTLS or managed workload identity, instance leases, reconciliation metrics, and explicit leader/scheduler ownership before dynamic routing. | Medium |
 | R-013 | The development artifact adapter uses node-local filesystem storage and external object creation cannot share the PostgreSQL transaction. | Multiple replicas may not see the same content; a process crash between object promotion and metadata commit can leave an orphan; unscanned evidence can carry unsafe content. | Use shared encrypted S3-compatible storage in deployed environments; add orphan reconciliation, malware scanning, retention/legal-hold policy, quotas, signed internal retrieval, and lifecycle metrics. | High |
 | R-014 | Local Alertmanager routing exists, but Grafana remains anonymous, trace output is debug-only, management endpoints lack application authentication, and no production incident provider/owner is configured. | Deploying local defaults publicly could disclose operations; traces are non-durable; local webhook evidence cannot page an accountable responder. | Keep loopback/network isolation, disable anonymous access, require TLS/workload authentication, add durable traces and managed provider routing, validate escalation, delivery, cardinality, overhead, and thresholds before production. | High |
+| R-015 | Three Grype CPE findings affect the Python 3.14.6 binary and no stable fixed CPython release is available; their exact exceptions expire on 5 September 2026. | An unresolved upstream vulnerability may remain reachable before a stable update is released. | Match only the exact CVE/package/version/type, review updates weekly, remove each exception immediately when fixed, and permit no broader suppression. | High |
 
 ## 15. Roadmap and Increment Plan
 
@@ -1272,14 +1291,15 @@ Pipeline artifacts should include test reports, coverage, OpenAPI schema, migrat
 - persistent scheduler boundary and job lifecycle — implemented initial slice;
 - object-storage abstraction for test artifacts — implemented initial slice;
 - correlated traces, bounded domain/dependency/storage metrics, aggregate health/backlog, dashboards, recording rules, alerts, and local Alertmanager delivery — implemented; durable traces, provider-specific saturation, production routing, threshold calibration, and sustained SLO evidence remain hardening.
+- deterministic locks, immutable build inputs, secret/dependency/source/image scanning, CycloneDX SBOMs, and weekly update proposals — implemented; signing and provenance remain hardening.
 
 ### Increment 4 — Production Hardening
 
 - Kubernetes deployment and workload identity;
 - mTLS and secret-manager integration;
 - backup, restore, retention, and disaster-recovery exercises;
-- performance, resilience, and security baselines;
-- signed artifacts and controlled promotion across environments.
+- performance, resilience, and security-policy calibration;
+- signed artifacts, verifiable provenance, long-term release evidence, and controlled promotion across environments.
 
 ## 16. Engineering Review Worksheets
 
@@ -1415,8 +1435,9 @@ Application rollback is safe only when the previous version is compatible with t
 | Dependency and storage telemetry | `src/atep/api/health.py`, `src/atep/artifacts/storage.py`, `tests/test_dependency_storage_observability.py`, alert rules, and disposable scrape evidence |
 | Disposable integration topology and runner | `compose.integration.yaml` and `tools/run_integration_tests.ps1` |
 | Black-box integration scenario | `tests/integration/test_identity_flow.py` |
-| Continuous integration workflow | `.github/workflows/integration.yml` |
-| Automated tests | `tests/test_security.py`, `test_identity.py`, `test_user_administration.py`, `test_role_catalogue.py`, `test_audit_query.py`, `test_rate_limit.py`, `test_module_registry.py`, `test_module_health.py`, `test_vehicle_telemetry.py`, `test_vehicle_commands.py`, `test_test_runs.py`, `test_test_jobs.py`, `test_artifacts.py`, `test_observability.py`, `test_domain_observability.py`, `test_dependency_storage_observability.py`, `test_alert_delivery.py`, `test_observability_assets.py`, and `test_api_contract.py` |
+| Continuous integration workflows | `.github/workflows/integration.yml` and `.github/workflows/security.yml` |
+| Supply-chain controls and evidence | `requirements.lock`, `requirements-dev.lock`, `Dockerfile`, `.grype.yaml`, `.github/dependabot.yml`, `.github/workflows/security.yml`, `docs/software-supply-chain-security.md`, and `tests/test_supply_chain_security.py` |
+| Automated tests | `tests/test_security.py`, `test_identity.py`, `test_user_administration.py`, `test_role_catalogue.py`, `test_audit_query.py`, `test_rate_limit.py`, `test_module_registry.py`, `test_module_health.py`, `test_vehicle_telemetry.py`, `test_vehicle_commands.py`, `test_test_runs.py`, `test_test_jobs.py`, `test_artifacts.py`, `test_observability.py`, `test_domain_observability.py`, `test_dependency_storage_observability.py`, `test_alert_delivery.py`, `test_observability_assets.py`, `test_supply_chain_security.py`, and `test_api_contract.py` |
 | Architecture summary | `docs/architecture.md` |
 | Requirements baseline | `docs/requirements-volume-i.md` |
 | Delivery roadmap | `docs/roadmap-volume-i.md` |

@@ -42,13 +42,17 @@
 - outbox, scheduler, and WebSocket domain metrics with backlog/failure alerts (implemented initial slice; production capacity thresholds and notification routing remain hardening)
 - local Alertmanager grouping/inhibition and aggregate-only delivery receiver (implemented; production provider routing, ownership, escalation, and secret management remain hardening)
 - bounded dependency readiness and artifact-store operation/capacity metrics with alerts (implemented; database-pool and provider-specific saturation remain hardening)
+- deterministic dependency locks, immutable build inputs, secret/dependency/source/image scanning,
+  CycloneDX SBOM evidence, and automated update proposals (implemented supply-chain baseline;
+  signing and verifiable provenance remain hardening)
 
 ## Increment 4 — production hardening
 
 - Kubernetes manifests and secret-manager integration
 - mTLS and workload identity
 - backup, restore, retention, and disaster-recovery exercises
-- SLO threshold calibration, production incident-provider routing, load tests, and security scanning
+- SLO threshold calibration, production incident-provider routing, load tests, artifact signing,
+  provenance verification, and security-policy calibration
 - CI/CD promotion through development, staging, and production
 
 The Volume I exit criterion is a repeatable deployment that supports the first end-to-end
