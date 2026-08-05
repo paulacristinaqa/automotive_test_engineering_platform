@@ -76,6 +76,9 @@
 | CORE-F-070 | Readiness shall publish duration, result, and current-state metrics for PostgreSQL, Redis, and RabbitMQ using only reviewed dependency and outcome labels. | Unit, cardinality, readiness, and Docker integration tests |
 | CORE-F-071 | The artifact-store boundary shall report bounded operation outcomes, duration, bytes read/written, and optional capacity without exposing object keys or evidence identifiers. | Decorator, filesystem, cardinality, and integration tests |
 | CORE-F-072 | Prometheus shall raise runbook-linked alerts for persistent dependency unavailability, artifact-store operation failures, and low free capacity. | Alert contract and `promtool` CI validation |
+| CORE-F-073 | Runtime and development Python dependency graphs, including build requirements, shall be committed as deterministic manifests with SHA-256 hashes. | Lock regeneration and policy tests |
+| CORE-F-074 | Security CI shall scan repository history, Python dependencies, Python source, and the built container image and shall retain machine-readable CycloneDX SBOM evidence. | Gitleaks, pip-audit, CodeQL, Syft, and Grype workflow evidence |
+| CORE-F-075 | Third-party CI actions and the runtime base image shall use immutable identifiers, with reviewed weekly update proposals for Python, Actions, and Docker inputs. | Policy tests and Dependabot configuration review |
 
 ## Non-functional requirements
 
@@ -122,3 +125,6 @@
 | CORE-NF-039 | Dependency metric cardinality | dependency labels are restricted to postgres, redis, and rabbitmq; outcomes are ready or unavailable |
 | CORE-NF-040 | Storage metric privacy | operation labels are fixed; object keys, filenames, artifact/run identifiers, endpoints, and exception messages are forbidden |
 | CORE-NF-041 | Observability non-interference | capacity refresh and metric recording must not change object persistence, transaction success, or dependency readiness semantics |
+| CORE-NF-042 | Build reproducibility | identical reviewed manifests install the same dependency artifacts and reject absent or mismatched hashes |
+| CORE-NF-043 | CI least privilege | workflow permissions are read-only by default, elevated only per job, and third-party actions are pinned to full commit SHAs |
+| CORE-NF-044 | Vulnerability evidence | Python and image SBOMs are retained for 14 days; known high or critical image vulnerabilities fail CI unless a documented, time-bounded exception is reviewed |

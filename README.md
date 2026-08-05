@@ -1,6 +1,7 @@
 # ATEP — Automotive Test Engineering Platform
 
 [![CI](https://github.com/paulacristinaqa/automotive_test_engineering_platform/actions/workflows/integration.yml/badge.svg)](https://github.com/paulacristinaqa/automotive_test_engineering_platform/actions/workflows/integration.yml)
+[![Security](https://github.com/paulacristinaqa/automotive_test_engineering_platform/actions/workflows/security.yml/badge.svg)](https://github.com/paulacristinaqa/automotive_test_engineering_platform/actions/workflows/security.yml)
 [![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
@@ -63,6 +64,8 @@ An intended end-to-end scenario is:
 - bounded PostgreSQL, Redis, RabbitMQ, and artifact-store health/capacity metrics and alerts;
 - version-pinned Alertmanager with local grouping, inhibition, resolved delivery, and aggregate-only webhook evidence;
 - Docker Compose development and disposable integration environments;
+- hash-locked Python dependencies, immutable CI actions and a digest-pinned runtime base image;
+- automated secret, dependency, source and container scanning with retained CycloneDX SBOMs;
 - Ruff, strict mypy, pytest, and GitHub Actions quality gates.
 
 ## Architecture
@@ -177,8 +180,8 @@ PostgreSQL, Redis, and RabbitMQ include health checks used by the local topology
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -e ".[dev]"
+python -m pip install --require-hashes -r requirements-dev.lock
+python -m pip install --no-deps --no-build-isolation -e .
 ```
 
 Linux or macOS activation:
@@ -251,7 +254,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\run_integration_test
 
 The runner creates ephemeral credentials, uses isolated ports, applies every migration, and
 removes its containers, network, and volumes after execution. The latest local evidence records
-**94 fast tests plus one expanded Docker integration scenario** passing. The CarSystemUI
+**97 fast tests plus one expanded Docker integration scenario** passing. The CarSystemUI
 companion project also passes 27 unit tests, Android lint, and debug APK assembly for this slice.
 
 ## Engineering documentation
@@ -261,6 +264,7 @@ companion project also passes 27 unit tests, Android lint, and debug APK assembl
 - [Volume I delivery roadmap](docs/roadmap-volume-i.md)
 - [Audit retention baseline](docs/audit-retention-policy.md)
 - [Observability baseline and runbook](docs/observability.md)
+- [Software supply-chain security](docs/software-supply-chain-security.md)
 - [Engineering workbook — editable source](docs/workbook-volume-i.md)
 - [Engineering workbook — formatted document](docs/ATEP_Volume_I_Engineering_Workbook.docx)
 
@@ -306,8 +310,10 @@ hardening; local dependency/storage signals and Alertmanager delivery are implem
 ATEP is currently a development and portfolio platform, not a production vehicle-control system.
 Do not reuse example infrastructure credentials outside an isolated local environment. Production
 deployment still requires managed secrets, TLS/mTLS or managed workload identity, trusted-proxy
-configuration, deterministic dependency locking, backup/restore evidence, monitoring, security
-scanning, and reviewed operational policies.
+configuration, backup/restore evidence, artifact signing and provenance verification, production
+monitoring, and reviewed operational policies. The repository already enforces a development
+supply-chain baseline with deterministic dependency locks, immutable build inputs, SBOMs, secret
+scanning, dependency auditing, CodeQL, and high/critical container-vulnerability gates.
 
 ## Contributing
 
