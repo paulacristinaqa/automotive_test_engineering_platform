@@ -2,7 +2,7 @@
 
 **Subtitle:** Architecture, implementation record, verification strategy, and engineering evidence  
 **Project:** Automotive Test Engineering Platform (ATEP)  
-**Document version:** 0.26.0
+**Document version:** 0.27.0
 
 **Baseline date:** 4 August 2026
 
@@ -60,6 +60,7 @@ The document distinguishes three types of statements:
 | 0.24.0 | 5 August 2026 | Added pinned Alertmanager routing, critical/warning grouping intervals, same-service inhibition, firing/resolved delivery, a loopback-only aggregate webhook receiver, bounded delivery metrics, configuration tests, `amtool` validation, and synthetic end-to-end CI delivery | 92 fast Python tests plus the expanded Docker and live alert-delivery scenarios, Ruff, strict mypy, Compose validation, `promtool`, and `amtool` |
 | 0.25.0 | 5 August 2026 | Added bounded PostgreSQL/Redis/RabbitMQ readiness metrics, a replaceable artifact-store instrumentation decorator, operation latency/outcomes, transferred bytes, optional filesystem capacity, three runbook-linked alerts, and expanded Docker scrape evidence | 94 fast Python tests plus the expanded disposable integration scenario, Ruff, strict mypy, cardinality/privacy checks, and `promtool` validation |
 | 0.26.0 | 5 August 2026 | Added hash-locked runtime/development dependencies, digest/SHA-pinned build inputs, weekly update automation, history/secret scanning, Python dependency and CodeQL analysis, CycloneDX SBOMs, and a high/critical image vulnerability gate | 97 fast Python tests, Ruff, strict mypy, and lock-policy tests passed locally; deterministic lock regeneration, dependency audit, image scan, and CodeQL are enforced by remote CI |
+| 0.27.0 | 5 August 2026 | Migrated the runtime to official digest-pinned Python 3.14.6/Alpine 3.24 and governed three exact CPython scanner exceptions with owner, review date, expiry, and policy-as-code verification | 98 fast Python tests, Ruff, strict mypy, and four supply-chain policy tests; every other high/critical image finding remains blocking |
 
 ## How to Use This Workbook
 
@@ -137,7 +138,7 @@ The initial design deliberately starts as a modular monolith rather than a colle
 | Structured logging | Implemented | JSON logs with request correlation context |
 | Container environment | Implemented and locally executed | One-shot migration, API, worker, PostgreSQL, Redis, and RabbitMQ services verified with Docker Compose |
 | Software supply-chain security | Implemented baseline | Hash locks, immutable build inputs, Gitleaks, pip-audit, CodeQL, CycloneDX SBOMs, Grype image gate, and Dependabot |
-| Automated verification | Implemented | 97 fast tests plus expanded disposable black-box and live alert-delivery scenarios, 27 Android tests, Ruff, strict mypy, Android lint/build, and integration/security CI workflows |
+| Automated verification | Implemented | 98 fast tests plus expanded disposable black-box and live alert-delivery scenarios, 27 Android tests, Ruff, strict mypy, Android lint/build, and integration/security CI workflows |
 
 ## 2. Scope and Boundaries
 
@@ -377,7 +378,7 @@ External dashboards, test automation clients, and future ATEP modules call the C
 
 ### ADR-021 — Immutable Supply-Chain Inputs with Independent Evidence
 
-**Decision.** Use Linux x86-64/Python 3.14 as the canonical lock platform because it matches the digest-pinned official Python 3.14.6/Alpine 3.24 runtime container; retain Python 3.12 as the tested minimum. Commit separate runtime and development dependency graphs, including build requirements, with SHA-256 hashes. Retain the canonical regenerated pair before enforcing byte-for-byte drift. Install the application without dependency re-resolution. Pin the runtime base image by manifest digest and every third-party workflow action by full commit SHA. Run history/secret, dependency, source, and image analysis in a dedicated least-privilege workflow; retain CycloneDX Python and image SBOMs; fail the image job for high or critical known vulnerabilities; and use Dependabot only to propose reviewed updates.
+**Decision.** Use Linux x86-64/Python 3.14 as the canonical lock platform because it matches the digest-pinned official Python 3.14.6/Alpine 3.24 runtime container; retain Python 3.12 as the tested minimum. Commit separate runtime and development dependency graphs, including build requirements, with SHA-256 hashes. Retain the canonical regenerated pair before enforcing byte-for-byte drift. Install the application without dependency re-resolution. Pin the runtime base image by manifest digest and every third-party workflow action by full commit SHA. Run history/secret, dependency, source, and image analysis in a dedicated least-privilege workflow; retain CycloneDX Python and image SBOMs; fail the image job for high or critical known vulnerabilities except for an exact, documented, owned, and time-bounded exception; and use Dependabot only to propose reviewed updates.
 
 **Rationale.** Version ranges and mutable tags make two nominally identical builds capable of consuming different code. Immutable inputs reduce that ambiguity, while multiple scanners and machine-readable inventories provide complementary evidence at repository, package, source, and image boundaries. Separating security analysis from application integration keeps evidence and permissions explicit.
 
@@ -1098,12 +1099,12 @@ The fast local suite and repeated remote disposable CI runs prove clean-database
 | SECOPS-001 | Scan repository history for secrets with Gitleaks. | No credential or private key is detected. | Automated in security CI / P0 |
 | SECOPS-002 | Audit the hash-locked Python runtime graph and emit a CycloneDX SBOM. | No known vulnerability remains unreviewed; SBOM is retained for 14 days. | Implemented; local audit passed / P0 |
 | SECOPS-003 | Run CodeQL `security-extended` analysis for Python. | Findings are published and triaged with owner and due date. | Automated in security CI / P1 |
-| SECOPS-004 | Generate a CycloneDX image SBOM and scan it with Grype. | High or critical findings fail CI; SBOM is retained for 14 days. | Automated in security CI / P0 |
+| SECOPS-004 | Generate a CycloneDX image SBOM and scan it with Grype. | High or critical findings fail CI unless an exact reviewed exception names the advisory, component, owner, review date, and expiry; SBOM is retained for 14 days. | Automated in security CI / P0 |
 | SECOPS-005 | Fuzz token and API input parsers. | Malformed input causes controlled 4xx responses and no crash. | Planned / P1 |
 | SECOPS-006 | Review CORS, documentation exposure, headers, and TLS policy. | Production configuration matches the approved threat model. | Planned / P0 |
 | SECOPS-007 | Attempt privilege escalation across RBAC boundaries. | No unauthorized operation or sensitive disclosure succeeds. | Planned / P0 |
 | SECOPS-008 | Rotate the JWT secret in a staged environment. | Rotation procedure behaves as documented, including expected token invalidation. | Planned / P1 |
-| SECOPS-009 | Verify dependency locks and immutable workflow/container inputs. | Locks cover direct dependencies with hashes and no index override; actions use full SHAs; the base uses a digest; Dependabot covers all three ecosystems. | Three automated policy tests passed / P0 |
+| SECOPS-009 | Verify dependency locks, immutable workflow/container inputs, and scanner-exception governance. | Locks cover direct dependencies with hashes and no index override; actions use full SHAs; the base uses a digest; Dependabot covers all three ecosystems; exceptions are exact, owned, and time-bounded. | Four automated policy tests passed / P0 |
 
 ### 11.9 Administrative Audit
 
@@ -1256,6 +1257,7 @@ Pipeline artifacts should include test reports, coverage, OpenAPI schema, migrat
 | R-012 | Shared-secret workload authentication and application-process reconciliation are implemented, but mTLS, per-instance identity, and multi-replica scheduler ownership are not. | Credential theft could permit module impersonation, and operational behavior under multiple independently scheduled API replicas is not yet evidenced. | Add secret-manager delivery, mTLS or managed workload identity, instance leases, reconciliation metrics, and explicit leader/scheduler ownership before dynamic routing. | Medium |
 | R-013 | The development artifact adapter uses node-local filesystem storage and external object creation cannot share the PostgreSQL transaction. | Multiple replicas may not see the same content; a process crash between object promotion and metadata commit can leave an orphan; unscanned evidence can carry unsafe content. | Use shared encrypted S3-compatible storage in deployed environments; add orphan reconciliation, malware scanning, retention/legal-hold policy, quotas, signed internal retrieval, and lifecycle metrics. | High |
 | R-014 | Local Alertmanager routing exists, but Grafana remains anonymous, trace output is debug-only, management endpoints lack application authentication, and no production incident provider/owner is configured. | Deploying local defaults publicly could disclose operations; traces are non-durable; local webhook evidence cannot page an accountable responder. | Keep loopback/network isolation, disable anonymous access, require TLS/workload authentication, add durable traces and managed provider routing, validate escalation, delivery, cardinality, overhead, and thresholds before production. | High |
+| R-015 | Three Grype CPE findings affect the Python 3.14.6 binary and no stable fixed CPython release is available; their exact exceptions expire on 5 September 2026. | An unresolved upstream vulnerability may remain reachable before a stable update is released. | Match only the exact CVE/package/version/type, review updates weekly, remove each exception immediately when fixed, and permit no broader suppression. | High |
 
 ## 15. Roadmap and Increment Plan
 
@@ -1434,7 +1436,7 @@ Application rollback is safe only when the previous version is compatible with t
 | Disposable integration topology and runner | `compose.integration.yaml` and `tools/run_integration_tests.ps1` |
 | Black-box integration scenario | `tests/integration/test_identity_flow.py` |
 | Continuous integration workflows | `.github/workflows/integration.yml` and `.github/workflows/security.yml` |
-| Supply-chain controls and evidence | `requirements.lock`, `requirements-dev.lock`, `Dockerfile`, `.github/dependabot.yml`, `.github/workflows/security.yml`, `docs/software-supply-chain-security.md`, and `tests/test_supply_chain_security.py` |
+| Supply-chain controls and evidence | `requirements.lock`, `requirements-dev.lock`, `Dockerfile`, `.grype.yaml`, `.github/dependabot.yml`, `.github/workflows/security.yml`, `docs/software-supply-chain-security.md`, and `tests/test_supply_chain_security.py` |
 | Automated tests | `tests/test_security.py`, `test_identity.py`, `test_user_administration.py`, `test_role_catalogue.py`, `test_audit_query.py`, `test_rate_limit.py`, `test_module_registry.py`, `test_module_health.py`, `test_vehicle_telemetry.py`, `test_vehicle_commands.py`, `test_test_runs.py`, `test_test_jobs.py`, `test_artifacts.py`, `test_observability.py`, `test_domain_observability.py`, `test_dependency_storage_observability.py`, `test_alert_delivery.py`, `test_observability_assets.py`, `test_supply_chain_security.py`, and `test_api_contract.py` |
 | Architecture summary | `docs/architecture.md` |
 | Requirements baseline | `docs/requirements-volume-i.md` |

@@ -254,7 +254,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\run_integration_test
 
 The runner creates ephemeral credentials, uses isolated ports, applies every migration, and
 removes its containers, network, and volumes after execution. The latest local evidence records
-**97 fast tests plus one expanded Docker integration scenario** passing. The CarSystemUI
+**98 fast tests plus one expanded Docker integration scenario** passing. The CarSystemUI
 companion project also passes 27 unit tests, Android lint, and debug APK assembly for this slice.
 
 ## Engineering documentation

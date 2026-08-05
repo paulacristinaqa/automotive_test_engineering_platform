@@ -69,6 +69,24 @@ runtime image, and should be removed after a verified `pip-tools` update support
 5. Never include tokens, credentials, full environment dumps, or sensitive source excerpts in an
    exception or uploaded artifact.
 
+## Active time-bounded exception
+
+As of 5 August 2026, Grype reports the following findings against the CPython binary in the
+official Python 3.14.6/Alpine 3.24 image. No stable fixed CPython release is available; the scanner
+identifies only Python 3.15 pre-release or future versions as fixed. The exception is encoded in
+`.grype.yaml` and cannot match another package name, version, package type, or advisory.
+
+| Advisory | Exact component | Owner | Review and expiry | Compensating controls |
+|---|---|---|---|---|
+| CVE-2026-11940 | `python` 3.14.6, `binary` | ATEP maintainers | 5 September 2026 | Digest-pinned minimal official image, independent source/dependency analysis, weekly update review |
+| CVE-2026-15308 | `python` 3.14.6, `binary` | ATEP maintainers | 5 September 2026 | Digest-pinned minimal official image, independent source/dependency analysis, weekly update review |
+| CVE-2026-11972 | `python` 3.14.6, `binary` | ATEP maintainers | 5 September 2026 | Digest-pinned minimal official image, independent source/dependency analysis, weekly update review |
+
+A stable Python release that fixes any advisory triggers immediate image update, exception removal,
+SBOM regeneration, and retest. Any new high or critical finding remains blocking. Maintainers must
+remove or formally re-review these entries no later than the stated date; expiry is not automatic
+acceptance of continued risk.
+
 ## Remaining production work
 
 - sign release images and attest build provenance;

@@ -56,6 +56,7 @@ def test_workflows_pin_every_action_to_a_full_commit_and_define_security_gates()
     assert "anchore/scan-action" in workflows
     assert "pip_audit --require-hashes" in workflows
     assert "severity-cutoff: high" in workflows
+    assert "config: .grype.yaml" in workflows
     assert "persist-credentials: false" in workflows
     assert "contents: write" not in workflows
 
@@ -76,3 +77,22 @@ def test_image_and_update_policy_are_immutable_and_maintained() -> None:
     assert "USER atep" in dockerfile
     assert ecosystems == {"pip", "github-actions", "docker"}
     assert all(entry["schedule"]["interval"] == "weekly" for entry in dependabot["updates"])
+
+
+def test_grype_exceptions_are_exact_time_bounded_and_owned() -> None:
+    path = ROOT / ".grype.yaml"
+    content = path.read_text(encoding="utf-8")
+    configuration = yaml.safe_load(content)
+    exceptions = configuration["ignore"]
+
+    assert "Owner: ATEP maintainers" in content
+    assert "Review-by: 2026-09-05" in content
+    assert {entry["vulnerability"] for entry in exceptions} == {
+        "CVE-2026-11940",
+        "CVE-2026-15308",
+        "CVE-2026-11972",
+    }
+    assert all(
+        entry["package"] == {"name": "python", "version": "3.14.6", "type": "binary"}
+        for entry in exceptions
+    )
