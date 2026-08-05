@@ -1,0 +1,112 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atep-api
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: atep-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: atep-api
+        app.kubernetes.io/part-of: atep
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: /metrics
+    spec:
+      serviceAccountName: atep-api
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          image: atep-core
+          imagePullPolicy: IfNotPresent
+          args: ["uvicorn", "atep.main:app", "--host", "0.0.0.0", "--port", "8000"]
+          envFrom:
+            - configMapRef:
+                name: atep-runtime-config
+            - secretRef:
+                name: atep-runtime-secrets
+          ports:
+            - name: http
+              containerPort: 8000
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 5
+            failureThreshold: 24
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 7
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 192Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: artifacts
+              mountPath: /var/lib/atep/artifacts
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: artifacts
+          persistentVolumeClaim:
+            claimName: atep-artifacts
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: atep-api
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: atep-api
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: atep-api
+spec:
+  maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: atep-api

@@ -26,6 +26,11 @@ jobs:
           python -m pytest
           python -m ruff check .
           python -m mypy src tests
+      - name: Render Kubernetes deployment targets
+        run: |
+          kubectl kustomize deploy/kubernetes/foundation > /dev/null
+          kubectl kustomize deploy/kubernetes/migration > /dev/null
+          kubectl kustomize deploy/kubernetes/workloads > /dev/null
       - name: Generate ephemeral integration credentials
         shell: bash
         run: |

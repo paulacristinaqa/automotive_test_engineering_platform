@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: atep
+resources:
+  - api.yaml
+  - worker.yaml
+images:
+  - name: atep-core
+    newName: ghcr.io/paulacristinaqa/automotive_test_engineering_platform
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000

@@ -2,7 +2,7 @@
 
 **Subtitle:** Architecture, implementation record, verification strategy, and engineering evidence  
 **Project:** Automotive Test Engineering Platform (ATEP)  
-**Document version:** 0.27.0
+**Document version:** 0.28.0
 
 **Baseline date:** 4 August 2026
 
@@ -61,6 +61,7 @@ The document distinguishes three types of statements:
 | 0.25.0 | 5 August 2026 | Added bounded PostgreSQL/Redis/RabbitMQ readiness metrics, a replaceable artifact-store instrumentation decorator, operation latency/outcomes, transferred bytes, optional filesystem capacity, three runbook-linked alerts, and expanded Docker scrape evidence | 94 fast Python tests plus the expanded disposable integration scenario, Ruff, strict mypy, cardinality/privacy checks, and `promtool` validation |
 | 0.26.0 | 5 August 2026 | Added hash-locked runtime/development dependencies, digest/SHA-pinned build inputs, weekly update automation, history/secret scanning, Python dependency and CodeQL analysis, CycloneDX SBOMs, and a high/critical image vulnerability gate | 97 fast Python tests, Ruff, strict mypy, and lock-policy tests passed locally; deterministic lock regeneration, dependency audit, image scan, and CodeQL are enforced by remote CI |
 | 0.27.0 | 5 August 2026 | Migrated the runtime to official digest-pinned Python 3.14.6/Alpine 3.24 and governed three exact CPython scanner exceptions with owner, review date, expiry, and policy-as-code verification | 98 fast Python tests, Ruff, strict mypy, and four supply-chain policy tests; every other high/critical image finding remains blocking |
+| 0.28.0 | 5 August 2026 | Added phased Kubernetes/Kustomize targets for foundation, migration, and workloads; a vendor-neutral external Secret contract; Restricted pod controls; default-deny networking; probes, storage, and resource bounds; and fail-closed image substitution | 103 fast Python tests, five Kubernetes policy tests, three successful local Kustomize renders, Ruff, strict mypy, and remote render enforcement |
 
 ## How to Use This Workbook
 
@@ -138,7 +139,8 @@ The initial design deliberately starts as a modular monolith rather than a colle
 | Structured logging | Implemented | JSON logs with request correlation context |
 | Container environment | Implemented and locally executed | One-shot migration, API, worker, PostgreSQL, Redis, and RabbitMQ services verified with Docker Compose |
 | Software supply-chain security | Implemented baseline | Hash locks, immutable build inputs, Gitleaks, pip-audit, CodeQL, CycloneDX SBOMs, Grype image gate, and Dependabot |
-| Automated verification | Implemented | 98 fast tests plus expanded disposable black-box and live alert-delivery scenarios, 27 Android tests, Ruff, strict mypy, Android lint/build, and integration/security CI workflows |
+| Kubernetes deployment | Implemented initial hardening slice | Independently renderable foundation/migration/workload targets, external Secret contract, Restricted controls, default deny, probes, resource bounds, and fail-closed digest placeholder |
+| Automated verification | Implemented | 103 fast tests plus expanded disposable black-box and live alert-delivery scenarios, 27 Android tests, Ruff, strict mypy, Android lint/build, Kustomize rendering, and integration/security CI workflows |
 
 ## 2. Scope and Boundaries
 
@@ -162,7 +164,7 @@ The initial design deliberately starts as a modular monolith rather than a colle
 - automated immutable audit archival, restore verification, legal-hold workflow, and disposition tooling;
 - proxy-aware client attribution and production rate-limit tuning;
 - production trace retention, authenticated telemetry transport, calibrated alert routing, and additional domain-specific metrics;
-- Kubernetes deployment and workload identity;
+- live Kubernetes provider binding, ingress/TLS, immutable release digest, workload identity, and rollout evidence;
 - secret-manager integration and service-to-service mTLS;
 - vehicle, ECU, CAN, diagnostics, test execution, AI, and dashboard domain behavior.
 
@@ -384,6 +386,14 @@ External dashboards, test automation clients, and future ATEP modules call the C
 
 **Consequences.** Every dependency change must regenerate and review both locks. Digest and SHA pins trade automatic mutation for explicit update pull requests. Advisory databases may produce false positives or newly disclose findings in unchanged inputs, so exceptions require a documented owner, reachability assessment, compensating control, review date, and expiry. Release signing, provenance attestation, long-term SBOM retention, and managed build credentials remain production work.
 
+### ADR-022 — Phase Kubernetes Migration before Singleton Workloads
+
+**Decision.** Render foundation, migration, and workloads as separate Kustomize targets. Require an externally materialized `atep-runtime-secrets` object and the same reviewed image digest for the migration Job and application Deployments. Keep API and outbox worker at one replica with `Recreate`; the API owns scheduler and registry-reconciliation loops and must not overlap during rollout. Enforce the Restricted Pod Security profile, non-root execution, RuntimeDefault seccomp, read-only root filesystems, dropped capabilities, tokenless ServiceAccounts, bounded resources, explicit probes, a persistent artifact claim, and default-deny network policy.
+
+**Rationale.** Kubernetes does not order unrelated resources merely because they appear in one manifest set. An explicit migration gate preserves schema/application ordering and evidence. Fail-closed image and Secret inputs prevent a demonstration manifest from silently becoming a weak production deployment. Singleton rollout preserves current ownership assumptions until leader election or separately deployed controllers exist.
+
+**Consequences.** The initial rollout accepts brief API unavailability during replacement and cannot scale horizontally. A policy-capable CNI, external dependencies, approved secret provider, release overlay, ingress/TLS, shared object storage, and operator evidence are required. Database rollback remains a separately reviewed recovery action; it is never automated by workload rollback.
+
 ## 5. Technology Stack and Rationale
 
 | Technology | Role | Why it was selected | Engineering consideration |
@@ -405,6 +415,7 @@ External dashboards, test automation clients, and future ATEP modules call the C
 | Prometheus client | Bounded service metrics | Standard counters, gauges, histograms, and scrape format | Labels must remain low-cardinality and free of domain identifiers |
 | Grafana | Versioned operational views | Provisioned dashboards and PromQL visualization | Anonymous local access is forbidden in deployed environments |
 | Docker / Compose | Local topology | Repeatable development services and dependency health ordering | Production hardening requires image scanning and orchestration policies |
+| Kubernetes / Kustomize | Phased deployment baseline | Native declarative composition, renderable targets, runtime policy, and provider-neutral overlays | Real clusters require an approved digest, secret provider, CNI, ingress/TLS, storage class, and staged evidence |
 | pytest | Automated tests | Concise unit/integration testing and fixture ecosystem | Integration suites should use disposable infrastructure |
 | Ruff | Static quality gate | Fast linting and consistent formatting | The rule set should evolve without disabling meaningful findings globally |
 | mypy | Static type analysis | Detects interface and async/type errors before runtime | Strict mode is the baseline for application code |
@@ -428,6 +439,7 @@ External dashboards, test automation clients, and future ATEP modules call the C
 | `tests/` | Automated unit tests |
 | `docs/` | Architecture, requirements, roadmap, and this workbook |
 | `compose.yaml` | Local service topology |
+| `deploy/kubernetes/` | Phased Kubernetes manifests, external Secret contract, and rollout runbook |
 | `Dockerfile` | Unprivileged runtime image for API and worker |
 | `pyproject.toml` | Package metadata, dependencies, and tool configuration |
 
@@ -739,6 +751,9 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | CORE-F-073 | Runtime and development dependency graphs, including build requirements, shall be committed with SHA-256 hashes. | `requirements.lock`, `requirements-dev.lock`, and lock drift gate | SECOPS-009 |
 | CORE-F-074 | Security CI shall scan history, Python dependencies, Python source, and the built image and retain CycloneDX SBOM evidence. | `.github/workflows/security.yml` | SECOPS-001 through SECOPS-004 |
 | CORE-F-075 | CI actions and the runtime base image shall use immutable identifiers with reviewed automated update proposals. | workflow/Docker policy and Dependabot | SECOPS-009 |
+| CORE-F-076 | Kubernetes foundation, migration, and workload targets shall render independently so migration completes before application rollout. | `deploy/kubernetes/` phased Kustomize targets | K8S-001, K8S-005 |
+| CORE-F-077 | Kubernetes workloads shall consume non-sensitive configuration from a ConfigMap and credentials only from an externally materialized named Secret. | ConfigMap plus `atep-runtime-secrets` contract; no Secret manifest | K8S-002, K8S-003 |
+| CORE-F-078 | The Kubernetes API and outbox worker shall expose bounded probes and use explicit resource, storage, identity, and network controls. | Deployment, PVC, Service, and NetworkPolicy manifests | K8S-002 through K8S-004 |
 
 ### 8.2 Non-Functional Requirements
 
@@ -786,6 +801,11 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | CORE-NF-042 | Build reproducibility | Canonical Linux x86-64/Python 3.14 locks, tested Python 3.12 minimum, hash verification, and no dependency re-resolution from reviewed manifests | SECOPS-002, SECOPS-009 |
 | CORE-NF-043 | CI least privilege | Read-only default permissions, job-scoped CodeQL publication permission, and full-SHA actions | SECOPS-003, SECOPS-009 |
 | CORE-NF-044 | Vulnerability evidence | Fourteen-day SBOM retention and a high/critical image gate with reviewed exceptions only | SECOPS-002, SECOPS-004 |
+| CORE-NF-045 | Kubernetes least privilege | Restricted namespace, non-root containers, RuntimeDefault seccomp, dropped capabilities, read-only root filesystems, no privilege escalation, and tokenless ServiceAccounts | K8S-002, K8S-003 |
+| CORE-NF-046 | Deployment secret isolation | No committed Secret values; `atep-runtime-secrets` is externally materialized and bootstrap credentials are removed after first use | K8S-002, K8S-005 |
+| CORE-NF-047 | Deployment immutability | Migration and workloads use one reviewed manifest digest; the committed zero digest prevents accidental deployment | K8S-001, K8S-005 |
+| CORE-NF-048 | Deployment ordering | A bounded migration Job completes before singleton workloads; database downgrade is never automatic | K8S-003, K8S-005 |
+| CORE-NF-049 | Kubernetes network isolation | Default-deny plus explicit DNS, dependency-port, approved API-client, and approved metrics-client access on a policy-capable CNI | K8S-002, K8S-004 |
 
 ### 8.3 Definition of Done for an Increment
 
@@ -1209,6 +1229,16 @@ The fast local suite and repeated remote disposable CI runs prove clean-database
 | ART-006 | Download stored evidence and compare headers/body with metadata. | Media type, safe filename, content length, ETag, SHA-256, and bytes match the immutable record. | Disposable Docker download evidence / P0 |
 | ART-007 | Inspect metadata, audit, and outbox rows after one successful upload and exact retry. | One metadata row, one immutable audit row, and one `atep.test_artifact.stored.v1` event exist. | Service assertions and disposable database integration evidence / P0 |
 
+### 11.13 Kubernetes Deployment
+
+| ID | Test and objective | Expected result | Status / priority |
+|---|---|---|---|
+| K8S-001 | Render foundation, migration, and workload Kustomize targets and inspect their resource references. | All targets render independently; every referenced local resource exists; migration and workloads retain the explicit digest transformer. | Three local renders plus CI and policy test / P0 |
+| K8S-002 | Inspect namespace, ServiceAccounts, ConfigMap, and network policy. | Restricted admission is requested; no Secret is committed; tokens are not mounted; configuration is non-sensitive; ingress and egress are denied unless explicitly allowed. | Automated policy test / P0 |
+| K8S-003 | Inspect every application and migration container security boundary. | Non-root identity, RuntimeDefault seccomp, read-only root, no privilege escalation, all capabilities dropped, resource requests/limits, and external Secret reference are present. | Automated policy test / P0 |
+| K8S-004 | Inspect API/worker probes, internal Service, and artifact storage. | Liveness remains process-only; readiness checks dependencies; worker process evidence uses its metrics socket; API is ClusterIP; artifacts mount the named PVC. | Automated policy test / P0 |
+| K8S-005 | Execute a staged rollout with approved digest and external Secret, retain migration evidence, and exercise rollback. | Zero digest cannot deploy; migration completes before workloads; smoke probes pass; previous workload digest can be restored without automatic database downgrade. | Manifest/runbook implemented; live cluster exercise planned / P0 |
+
 ## 12. Suggested CI/CD Quality Pipeline
 
 1. **Source checks:** secret scan, license policy, dependency lock review.
@@ -1258,6 +1288,7 @@ Pipeline artifacts should include test reports, coverage, OpenAPI schema, migrat
 | R-013 | The development artifact adapter uses node-local filesystem storage and external object creation cannot share the PostgreSQL transaction. | Multiple replicas may not see the same content; a process crash between object promotion and metadata commit can leave an orphan; unscanned evidence can carry unsafe content. | Use shared encrypted S3-compatible storage in deployed environments; add orphan reconciliation, malware scanning, retention/legal-hold policy, quotas, signed internal retrieval, and lifecycle metrics. | High |
 | R-014 | Local Alertmanager routing exists, but Grafana remains anonymous, trace output is debug-only, management endpoints lack application authentication, and no production incident provider/owner is configured. | Deploying local defaults publicly could disclose operations; traces are non-durable; local webhook evidence cannot page an accountable responder. | Keep loopback/network isolation, disable anonymous access, require TLS/workload authentication, add durable traces and managed provider routing, validate escalation, delivery, cardinality, overhead, and thresholds before production. | High |
 | R-015 | Three Grype CPE findings affect the Python 3.14.6 binary and no stable fixed CPython release is available; their exact exceptions expire on 5 September 2026. | An unresolved upstream vulnerability may remain reachable before a stable update is released. | Match only the exact CVE/package/version/type, review updates weekly, remove each exception immediately when fixed, and permit no broader suppression. | High |
+| R-016 | Kubernetes manifests are rendered and policy-tested but have not been exercised against a live cluster or bound to a real image digest, secret provider, CNI, ingress, TLS policy, or shared object store. | Provider behavior, rollout timing, network reachability, storage permissions, and recovery may differ from static evidence. | Execute a staged cluster exercise with approved overlays, retain migration/smoke/rollback evidence, and resolve singleton leadership before horizontal scaling. | High |
 
 ## 15. Roadmap and Increment Plan
 
@@ -1295,8 +1326,10 @@ Pipeline artifacts should include test reports, coverage, OpenAPI schema, migrat
 
 ### Increment 4 — Production Hardening
 
-- Kubernetes deployment and workload identity;
-- mTLS and secret-manager integration;
+- phased Kubernetes manifests and a vendor-neutral external Secret contract — implemented initial
+  baseline; approved digest overlays, provider binding, ingress/TLS, live evidence, shared storage,
+  and multi-replica leadership remain;
+- workload identity and mTLS;
 - backup, restore, retention, and disaster-recovery exercises;
 - performance, resilience, and security-policy calibration;
 - signed artifacts, verifiable provenance, long-term release evidence, and controlled promotion across environments.
@@ -1437,7 +1470,8 @@ Application rollback is safe only when the previous version is compatible with t
 | Black-box integration scenario | `tests/integration/test_identity_flow.py` |
 | Continuous integration workflows | `.github/workflows/integration.yml` and `.github/workflows/security.yml` |
 | Supply-chain controls and evidence | `requirements.lock`, `requirements-dev.lock`, `Dockerfile`, `.grype.yaml`, `.github/dependabot.yml`, `.github/workflows/security.yml`, `docs/software-supply-chain-security.md`, and `tests/test_supply_chain_security.py` |
-| Automated tests | `tests/test_security.py`, `test_identity.py`, `test_user_administration.py`, `test_role_catalogue.py`, `test_audit_query.py`, `test_rate_limit.py`, `test_module_registry.py`, `test_module_health.py`, `test_vehicle_telemetry.py`, `test_vehicle_commands.py`, `test_test_runs.py`, `test_test_jobs.py`, `test_artifacts.py`, `test_observability.py`, `test_domain_observability.py`, `test_dependency_storage_observability.py`, `test_alert_delivery.py`, `test_observability_assets.py`, `test_supply_chain_security.py`, and `test_api_contract.py` |
+| Kubernetes deployment baseline | `deploy/kubernetes/`, `deploy/kubernetes/README.md`, and `tests/test_kubernetes_manifests.py` |
+| Automated tests | `tests/test_security.py`, `test_identity.py`, `test_user_administration.py`, `test_role_catalogue.py`, `test_audit_query.py`, `test_rate_limit.py`, `test_module_registry.py`, `test_module_health.py`, `test_vehicle_telemetry.py`, `test_vehicle_commands.py`, `test_test_runs.py`, `test_test_jobs.py`, `test_artifacts.py`, `test_observability.py`, `test_domain_observability.py`, `test_dependency_storage_observability.py`, `test_alert_delivery.py`, `test_observability_assets.py`, `test_supply_chain_security.py`, `test_kubernetes_manifests.py`, and `test_api_contract.py` |
 | Architecture summary | `docs/architecture.md` |
 | Requirements baseline | `docs/requirements-volume-i.md` |
 | Delivery roadmap | `docs/roadmap-volume-i.md` |
