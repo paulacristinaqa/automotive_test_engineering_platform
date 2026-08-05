@@ -6,8 +6,10 @@ This baseline makes ATEP builds reviewable, repeatable, and independently eviden
 the development pipeline; it does not claim production certification or eliminate the need to
 review findings.
 
-Linux x86-64 with Python 3.12 is the canonical lock platform because it matches the container and
-hosted CI runtime. The security workflow retains its regenerated lock pair for seven days before
+Linux x86-64 with Python 3.14 is the canonical lock platform because it matches the container and
+hosted CI runtime. The runtime uses the digest-pinned official Python 3.14.6 Alpine 3.24 image,
+while integration CI continues to test the supported Python 3.12 minimum. The security workflow
+retains its regenerated lock pair for seven days before
 enforcing a byte-for-byte drift check. Windows developers install the committed Linux-compatible
 graph; dependency updates are accepted only from the canonical workflow evidence.
 
@@ -17,7 +19,7 @@ graph; dependency updates are accepted only from the canonical workflow evidence
 |---|---|---|
 | Python runtime | `requirements.lock` includes resolved runtime and build dependencies with SHA-256 hashes | lock drift test and `pip-audit` |
 | Python development | `requirements-dev.lock` includes the complete quality/security toolchain with hashes | lock drift test and quality jobs |
-| Container base | `Dockerfile` selects the Python base by manifest digest and installs the runtime lock with `--require-hashes` | policy test and image build |
+| Container base | `Dockerfile` selects official Python 3.14.6/Alpine 3.24 by manifest digest and installs the runtime lock with `--require-hashes` | policy test and image build |
 | Workflow dependencies | Every third-party action reference is a full 40-character commit SHA with a readable version comment | policy test |
 | Repository history | Gitleaks scans the checked-out history without publishing PR comments or raw findings | security workflow result |
 | Application source | CodeQL analyses Python with the `security-extended` query suite | GitHub code-scanning result |

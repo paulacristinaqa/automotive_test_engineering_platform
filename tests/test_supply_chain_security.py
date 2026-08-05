@@ -66,12 +66,13 @@ def test_image_and_update_policy_are_immutable_and_maintained() -> None:
     ecosystems = {entry["package-ecosystem"] for entry in dependabot["updates"]}
 
     assert re.search(
-        r"^FROM python:3\.12-slim@sha256:[0-9a-f]{64} AS runtime$",
+        r"^FROM python:3\.14\.6-alpine3\.24@sha256:[0-9a-f]{64} AS runtime$",
         dockerfile,
         flags=re.MULTILINE,
     )
     assert "pip install --no-cache-dir --require-hashes -r requirements.lock" in dockerfile
     assert "pip install --no-cache-dir --no-deps --no-build-isolation ." in dockerfile
+    assert "addgroup -S atep && adduser -S -G atep -h /home/atep atep" in dockerfile
     assert "USER atep" in dockerfile
     assert ecosystems == {"pip", "github-actions", "docker"}
     assert all(entry["schedule"]["interval"] == "weekly" for entry in dependabot["updates"])
