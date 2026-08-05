@@ -2,11 +2,11 @@
 
 **Subtitle:** Architecture, implementation record, verification strategy, and engineering evidence  
 **Project:** Automotive Test Engineering Platform (ATEP)  
-**Document version:** 0.19.0
+**Document version:** 0.20.0
 
 **Baseline date:** 4 August 2026
 
-**Status:** Living engineering document — persistent test-job scheduler implemented
+**Status:** Living engineering document — immutable test-artifact storage boundary implemented
 **Language:** English
 
 ## Document Purpose
@@ -53,6 +53,7 @@ The document distinguishes three types of statements:
 | 0.17.0 | 4 August 2026 | Added persistent vehicle-scoped test runs, idempotent creation, row-locked optimistic transitions, audit/outbox evidence, Redis Pub/Sub, authenticated WebSocket snapshots and updates, and a reconnecting CarSystemUI live-status card | 60 Python tests and 27 Android tests passed; Ruff, strict mypy, Android lint and debug APK passed; the disposable PostgreSQL/Redis/RabbitMQ/WebSocket scenario passed |
 | 0.18.0 | 5 August 2026 | Added immutable environment profiles for electric, hybrid, and autonomous test contexts, independent read/manage RBAC, bounded configuration, auditable lifecycle events, migration `0010`, and versioned TestRun snapshots | 64 Python tests passed; Ruff and strict mypy passed; the monitored suite peaked at 163.9 MiB Python working memory with no Gradle, Docker, emulator, or LibreOffice workload |
 | 0.19.0 | 5 August 2026 | Added persistent scheduled test jobs, independent read/manage RBAC, idempotent creation, optimistic cancellation, bounded multi-instance-safe due selection, atomic TestRun dispatch, migration `0011`, audit, and outbox evidence | 69 fast Python tests, Ruff, and strict mypy passed locally; the monitored suite completed in 1.77 seconds with 2.72 CPU-seconds and 169.6 MiB peak Python memory; disposable Docker integration is delegated to CI |
+| 0.20.0 | 5 August 2026 | Added immutable TestRun artifacts, a replaceable object-store protocol, atomic filesystem promotion, bounded multipart upload, SHA-256 integrity, independent read/write RBAC, protected download, migration `0012`, audit, and outbox evidence | 74 fast Python tests, Ruff, and strict mypy passed locally; the monitored suite completed in 1.79 seconds with 2.91 CPU-seconds and 171.1 MiB peak Python memory; disposable upload/download integration is delegated to CI |
 
 ## How to Use This Workbook
 
@@ -110,7 +111,7 @@ The initial design deliberately starts as a modular monolith rather than a colle
 | RBAC data model | Implemented | User, role, permission, and association tables |
 | User administration | Implemented | Create, list, inspect, status, role assignment, and role removal routes |
 | Role catalogue administration | Implemented | Permission listing; role create, page, inspect, update, grant, revoke, and safe delete routes |
-| PostgreSQL persistence | Implemented | SQLAlchemy models and Alembic revisions `0001` through `0011` |
+| PostgreSQL persistence | Implemented | SQLAlchemy models and Alembic revisions `0001` through `0012` |
 | Module registry | Implemented | Persistent metadata, capability catalogue, hash-only workload credentials, heartbeat leases, and automatic reconciliation |
 | Vehicle integration boundary | Implemented initial slice | Vehicle catalogue, lifecycle state, gateway capability authorization, idempotent telemetry, and outbox contract |
 | Android Vehicle Gateway | Implemented initial slice | Changed-property mapping, persistent queue, stable retry identity, bounded rejection storage, HTTP transport, and status UI in the CarSystemUI showcase |
@@ -121,13 +122,14 @@ The initial design deliberately starts as a modular monolith rather than a colle
 | Test-run orchestration and live status | Implemented initial slice | Persistent lifecycle, independent RBAC, idempotency, optimistic locking, audit/outbox evidence, Redis Pub/Sub, authenticated WebSocket, and CarSystemUI live card |
 | Environment profiles | Implemented initial slice | Immutable EV/hybrid/autonomous context, simulator/AAOS source, bounded configuration, lifecycle RBAC, audit/outbox, and TestRun snapshot |
 | Test-job scheduler | Implemented initial slice | Persistent idempotent schedule, bounded queries, optimistic cancellation, `SKIP LOCKED` due selection, atomic TestRun dispatch, audit, and outbox |
+| Test-artifact storage | Implemented initial slice | Immutable metadata, replaceable object-store interface, streaming filesystem adapter, SHA-256, bounded multipart upload, independent RBAC, audit, outbox, and protected download |
 | Administrative audit | Implemented | Immutable evidence, indexed bounded search, individual inspection, audited CSV export, and retention baseline |
 | API error contract | Implemented | Application, HTTP, validation, and unexpected-error handlers |
 | Reliable event publication | Implemented | Transactional outbox, resilient RabbitMQ startup, and publisher worker |
 | Redis integration | Implemented | Readiness plus atomic expiring authentication and versioned-API rate-limit counters |
 | Structured logging | Implemented | JSON logs with request correlation context |
 | Container environment | Implemented and locally executed | One-shot migration, API, worker, PostgreSQL, Redis, and RabbitMQ services verified with Docker Compose |
-| Automated verification | Implemented | 69 fast tests plus one expanded disposable black-box integration scenario, 27 Android tests, Ruff, strict mypy, Android lint/build, and CI workflow |
+| Automated verification | Implemented | 74 fast tests plus one expanded disposable black-box integration scenario, 27 Android tests, Ruff, strict mypy, Android lint/build, and CI workflow |
 
 ## 2. Scope and Boundaries
 
@@ -315,6 +317,14 @@ External dashboards, test automation clients, and future ATEP modules call the C
 **Rationale.** In-memory timers disappear on restart and can execute twice when the API scales horizontally. Durable state plus non-blocking row ownership permits safe recovery and concurrent replicas while retaining the existing transaction and evidence model.
 
 **Consequences.** Polling introduces bounded dispatch latency configured from one to 300 seconds. Clock synchronization, scheduler lag metrics, concurrent multi-replica stress evidence, priority, recurrence, and misfire policies remain production-hardening work. The current lifecycle intentionally supports one-shot jobs only.
+
+### ADR-015 — Separate Artifact Metadata from Binary Object Storage
+
+**Decision.** Keep artifact identity, TestRun ownership, media metadata, size, and SHA-256 in PostgreSQL while storing binary content through an `ArtifactObjectStore` protocol. The development adapter streams to a temporary filesystem object and atomically promotes it under an internally generated key. The public API treats the client filename only as validated metadata and never discloses the object key.
+
+**Rationale.** Database large objects would couple evidence volume to transactional storage, while direct filesystem or S3 access from clients would bypass RBAC and audit. A narrow adapter preserves the API and domain when the local implementation is replaced by S3/MinIO or managed cloud object storage.
+
+**Consequences.** The metadata/audit/outbox transaction starts only after object creation succeeds and removes the new object on a detected database failure. A process crash inside that small boundary can leave an unreferenced object, so production requires orphan reconciliation. Multi-replica deployment also requires shared durable object storage, encryption, retention/lifecycle rules, malware scanning, quotas, and proxy-level request bounds; the local filesystem adapter is a development and disposable-integration implementation.
 
 ## 5. Technology Stack and Rationale
 
@@ -642,6 +652,10 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | CORE-F-047 | Scheduled jobs shall support optimistic, idempotent pre-dispatch cancellation and reject terminal changes. | Locked cancellation route and stable state/version conflicts | JOB-003, JOB-004 |
 | CORE-F-048 | Scheduler replicas shall claim bounded due work without duplicate dispatch and atomically create one queued TestRun. | Oldest-first `FOR UPDATE SKIP LOCKED` selection and shared transaction | JOB-005, JOB-006 |
 | CORE-F-049 | Effective job lifecycle changes shall append immutable audit and versioned outbox evidence atomically. | Audit recorder, transactional outbox, and scheduler unit of work | JOB-002, JOB-006 |
+| CORE-F-050 | Authorized operators shall upload bounded immutable evidence to an existing TestRun and independently retrieve metadata/content. | Artifact router, object-store boundary, model, and RBAC | ART-001, ART-005 |
+| CORE-F-051 | Exact artifact retries shall be idempotent and changed reuse of an identifier shall fail stably. | SHA-256/metadata comparison and scoped uniqueness | ART-002 |
+| CORE-F-052 | Stored artifact metadata shall atomically append audit and outbox evidence after object creation. | SQLAlchemy unit of work and best-effort object rollback | ART-003, ART-007 |
+| CORE-F-053 | Downloads shall retain safe filename/media metadata and expose integrity without leaking object keys. | Protected streaming response, ETag, SHA-256 header, and response schema | ART-004, ART-006 |
 
 ### 8.2 Non-Functional Requirements
 
@@ -669,6 +683,8 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | CORE-NF-022 | Live test-run consistency | PostgreSQL/outbox authority, row-locked optimistic transitions, best-effort Redis projection, authenticated subscription, monotonic client deduplication | VEH-024 through VEH-030 |
 | CORE-NF-023 | Test reproducibility | Immutable profile identity, 16 KiB JSON bound, active-only use, and versioned TestRun snapshot independent of archival | ENV-001 through ENV-006 |
 | CORE-NF-024 | Scheduler consistency | Bounded oldest-first batches, row ownership with `SKIP LOCKED`, and atomic job/run/evidence state | JOB-005, JOB-006 |
+| CORE-NF-025 | Artifact integrity | Configurable size bound, streaming SHA-256, immutable identifiers, and verified download metadata | ART-001 through ART-004 |
+| CORE-NF-026 | Storage isolation | Generated object keys, root-escape rejection, no public key disclosure, and independent RBAC | ART-004 through ART-006 |
 
 ### 8.3 Definition of Done for an Increment
 
@@ -1055,6 +1071,13 @@ The automated local run proves clean-database repeatability and the happy-path i
 | JOB-004 | Cancel with a stale version or after dispatch. | Stable version/state conflict is returned and persisted state remains unchanged. | Focused negative tests / P0 |
 | JOB-005 | Run two scheduler replicas against the same due batch. | Row locking with `SKIP LOCKED` assigns each job to at most one transaction and preserves oldest-first bounded selection. | Query design implemented; concurrent stress expansion planned / P0 |
 | JOB-006 | Dispatch due work and inspect the generated run, job, audit, and outbox rows. | Exactly one queued TestRun is linked; job becomes dispatched; all state and evidence commit atomically. | Focused unit and disposable Docker integration evidence / P0 |
+| ART-001 | Upload non-empty log, report, trace, image, video, binary, and other evidence within the configured bound. | Content is streamed to the object adapter; canonical metadata, byte size, and SHA-256 are returned. | Filesystem adapter and multipart Docker scenario implemented / P0 |
+| ART-002 | Repeat exact upload and reuse the same run/artifact identifier with changed bytes or metadata. | Exact retry returns HTTP 200 and the original record without new evidence; changed reuse returns `test_artifact_conflict`. | Focused service and Docker API evidence / P0 |
+| ART-003 | Interrupt object writing or fail metadata persistence after storage. | Temporary/failed objects are removed when detected and no partial metadata is committed. | Oversize cleanup test passed; database-failure injection planned / P0 |
+| ART-004 | Submit empty, oversized, path-like filename, root-escaping key, and missing-content cases. | Stable bounded errors are returned; no unsafe path or partial object remains; internal keys are absent from responses. | Schema, adapter, size, and OpenAPI tests passed / P0 |
+| ART-005 | List, inspect, upload, or download without the independent permission. | Unauthorized access receives HTTP 403 before metadata or content is disclosed. | RBAC dependency and disposable Docker denial evidence / P0 |
+| ART-006 | Download stored evidence and compare headers/body with metadata. | Media type, safe filename, content length, ETag, SHA-256, and bytes match the immutable record. | Disposable Docker download evidence / P0 |
+| ART-007 | Inspect metadata, audit, and outbox rows after one successful upload and exact retry. | One metadata row, one immutable audit row, and one `atep.test_artifact.stored.v1` event exist. | Service assertions and disposable database integration evidence / P0 |
 
 ## 12. Suggested CI/CD Quality Pipeline
 
@@ -1102,6 +1125,7 @@ Pipeline artifacts should include test reports, coverage, OpenAPI schema, migrat
 | R-010 | No formal backup/restore evidence. | Data recovery capability is unknown. | Define RPO/RTO, automated backups, restore drills, and evidence retention. | High |
 | R-011 | Rate limiting uses fixed windows and the direct network peer when no bearer credential is present. | Bursts near a window boundary may temporarily exceed the nominal rate; a shared reverse-proxy address may group unrelated clients. | Calibrate thresholds with load tests and implement a reviewed trusted-proxy attribution policy before public deployment. | High |
 | R-012 | Shared-secret workload authentication and application-process reconciliation are implemented, but mTLS, per-instance identity, and multi-replica scheduler ownership are not. | Credential theft could permit module impersonation, and operational behavior under multiple independently scheduled API replicas is not yet evidenced. | Add secret-manager delivery, mTLS or managed workload identity, instance leases, reconciliation metrics, and explicit leader/scheduler ownership before dynamic routing. | Medium |
+| R-013 | The development artifact adapter uses node-local filesystem storage and external object creation cannot share the PostgreSQL transaction. | Multiple replicas may not see the same content; a process crash between object promotion and metadata commit can leave an orphan; unscanned evidence can carry unsafe content. | Use shared encrypted S3-compatible storage in deployed environments; add orphan reconciliation, malware scanning, retention/legal-hold policy, quotas, signed internal retrieval, and lifecycle metrics. | High |
 
 ## 15. Roadmap and Increment Plan
 
@@ -1133,7 +1157,7 @@ Pipeline artifacts should include test reports, coverage, OpenAPI schema, migrat
 - production WebSocket connection limits, revocation fan-out, metrics, and resume-from-version replay;
 - vehicle/test configuration profiles;
 - persistent scheduler boundary and job lifecycle — implemented initial slice;
-- object-storage abstraction for test artifacts;
+- object-storage abstraction for test artifacts — implemented initial slice;
 - OpenTelemetry traces, Prometheus metrics, alerts, and dashboards.
 
 ### Increment 4 — Production Hardening
@@ -1267,16 +1291,17 @@ Application rollback is safe only when the previous version is compatible with t
 | Test-run lifecycle and live updates | `src/atep/test_runs/`, migration `0009_test_runs.py`, `tests/test_test_runs.py`, and the WebSocket path in `tests/integration/test_identity_flow.py` |
 | Environment profiles and TestRun snapshots | `src/atep/environment_profiles/`, migration `0010_environment_profiles.py`, and `tests/test_environment_profiles.py` |
 | Persistent test-job scheduling | `src/atep/test_jobs/`, migration `0011_test_jobs.py`, `tests/test_test_jobs.py`, and the disposable integration scenario |
+| Immutable test-artifact storage | `src/atep/artifacts/`, migration `0012_test_artifacts.py`, `tests/test_artifacts.py`, and multipart upload/download integration evidence |
 | Android Vehicle Gateway, property sources, retry worker, operator evidence, and command executor | `CarSystemUI_android/showcase/app/.../gateway/`, `showcase/app/.../vehicle/`, Android unit tests, `docs/ATEP_VEHICLE_GATEWAY.md`, and `docs/TEST_CASE_CT_SHOW_006.md` through `docs/TEST_CASE_CT_SHOW_010.md` in the companion repository |
 | Immutable audit model, query/export APIs, and recorder | `src/atep/audit/` |
 | Event outbox and worker | `src/atep/events/` |
-| Database migrations | `migrations/versions/0001_core_platform.py` through `0011_test_jobs.py` |
+| Database migrations | `migrations/versions/0001_core_platform.py` through `0012_test_artifacts.py` |
 | Refresh-session implementation | `src/atep/identity/sessions.py`, identity models, schemas, and router |
 | Local service topology | `compose.yaml` and `Dockerfile` |
 | Disposable integration topology and runner | `compose.integration.yaml` and `tools/run_integration_tests.ps1` |
 | Black-box integration scenario | `tests/integration/test_identity_flow.py` |
 | Continuous integration workflow | `.github/workflows/integration.yml` |
-| Automated tests | `tests/test_security.py`, `test_identity.py`, `test_user_administration.py`, `test_role_catalogue.py`, `test_audit_query.py`, `test_rate_limit.py`, `test_module_registry.py`, `test_vehicle_telemetry.py`, `test_vehicle_commands.py`, and `test_api_contract.py` |
+| Automated tests | `tests/test_security.py`, `test_identity.py`, `test_user_administration.py`, `test_role_catalogue.py`, `test_audit_query.py`, `test_rate_limit.py`, `test_module_registry.py`, `test_vehicle_telemetry.py`, `test_vehicle_commands.py`, `test_test_runs.py`, `test_test_jobs.py`, `test_artifacts.py`, and `test_api_contract.py` |
 | Architecture summary | `docs/architecture.md` |
 | Requirements baseline | `docs/requirements-volume-i.md` |
 | Delivery roadmap | `docs/roadmap-volume-i.md` |

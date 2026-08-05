@@ -397,6 +397,96 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             assert test_run_page.json()["total"] == 1
             assert test_run_page.json()["items"][0]["run_id"] == test_run_id
 
+            artifact_id = uuid4().hex
+            artifact_content = b'{"result":"passed","temperature_celsius":47.8}'
+            artifact_upload = await client.post(
+                f"/api/v1/test-runs/{test_run_id}/artifacts",
+                headers=admin_headers,
+                data={"artifact_id": artifact_id, "kind": "report"},
+                files={
+                    "file": (
+                        "battery-report.json",
+                        artifact_content,
+                        "application/json",
+                    )
+                },
+            )
+            assert artifact_upload.status_code == 201, artifact_upload.text
+            artifact = artifact_upload.json()
+            artifact_uuid = artifact["id"]
+            assert artifact["size_bytes"] == len(artifact_content)
+            assert len(artifact["sha256"]) == 64
+            assert "object_key" not in artifact
+
+            duplicate_artifact = await client.post(
+                f"/api/v1/test-runs/{test_run_id}/artifacts",
+                headers=admin_headers,
+                data={"artifact_id": artifact_id, "kind": "report"},
+                files={"file": ("battery-report.json", artifact_content, "application/json")},
+            )
+            assert duplicate_artifact.status_code == 200, duplicate_artifact.text
+            assert duplicate_artifact.json()["id"] == artifact_uuid
+
+            artifact_conflict = await expected_error(
+                client,
+                "POST",
+                f"/api/v1/test-runs/{test_run_id}/artifacts",
+                409,
+                headers=admin_headers,
+                data={"artifact_id": artifact_id, "kind": "report"},
+                files={"file": ("battery-report.json", b"different", "application/json")},
+            )
+            assert artifact_conflict["code"] == "test_artifact_conflict"
+
+            oversized_artifact = await expected_error(
+                client,
+                "POST",
+                f"/api/v1/test-runs/{test_run_id}/artifacts",
+                413,
+                headers=admin_headers,
+                data={"artifact_id": uuid4().hex, "kind": "binary"},
+                files={"file": ("bounded.bin", b"x" * 1025, "application/octet-stream")},
+            )
+            assert oversized_artifact["code"] == "test_artifact_too_large"
+            assert oversized_artifact["details"] == {"max_bytes": 1024}
+
+            empty_artifact = await expected_error(
+                client,
+                "POST",
+                f"/api/v1/test-runs/{test_run_id}/artifacts",
+                422,
+                headers=admin_headers,
+                data={"artifact_id": uuid4().hex, "kind": "log"},
+                files={"file": ("empty.log", b"", "text/plain")},
+            )
+            assert empty_artifact["code"] == "empty_test_artifact"
+
+            unsafe_filename = await expected_error(
+                client,
+                "POST",
+                f"/api/v1/test-runs/{test_run_id}/artifacts",
+                422,
+                headers=admin_headers,
+                data={"artifact_id": uuid4().hex, "kind": "report"},
+                files={"file": ("../unsafe.json", b"{}", "application/json")},
+            )
+            assert unsafe_filename["code"] == "validation_error"
+
+            artifact_page = await client.get(
+                f"/api/v1/test-runs/{test_run_id}/artifacts",
+                headers=admin_headers,
+                params={"kind": "report"},
+            )
+            assert artifact_page.status_code == 200, artifact_page.text
+            assert artifact_page.json()["total"] == 1
+            artifact_download = await client.get(
+                f"/api/v1/test-runs/{test_run_id}/artifacts/{artifact_id}/content",
+                headers=admin_headers,
+            )
+            assert artifact_download.status_code == 200, artifact_download.text
+            assert artifact_download.content == artifact_content
+            assert artifact_download.headers["x-content-sha256"] == artifact["sha256"]
+
             scheduled_job_id = uuid4().hex
             scheduled_run_id = uuid4().hex
             scheduled_payload = {
@@ -895,6 +985,14 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                 client, "GET", "/api/v1/test-jobs", 403, headers=user_headers
             )
             assert jobs_denied["code"] == "permission_denied"
+            artifacts_denied = await expected_error(
+                client,
+                "GET",
+                f"/api/v1/test-runs/{test_run_id}/artifacts",
+                403,
+                headers=user_headers,
+            )
+            assert artifacts_denied["code"] == "permission_denied"
 
             refresh_rows = await database.fetch(
                 "SELECT token_hash FROM refresh_tokens WHERE user_id = $1::uuid", user_id
@@ -1107,6 +1205,24 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                 dispatched_job_uuid,
             )
             == 2
+        )
+        assert (
+            await database.fetchval(
+                "SELECT count(*) FROM test_artifacts WHERE id = $1::uuid", artifact_uuid
+            )
+            == 1
+        )
+        assert (
+            await database.fetchval(
+                "SELECT count(*) FROM outbox_events WHERE aggregate_id = $1::uuid", artifact_uuid
+            )
+            == 1
+        )
+        assert (
+            await database.fetchval(
+                "SELECT count(*) FROM audit_records WHERE resource_id = $1::uuid", artifact_uuid
+            )
+            == 1
         )
         audit_id = await database.fetchval(
             "SELECT id FROM audit_records WHERE resource_id = $1::uuid LIMIT 1", user_id

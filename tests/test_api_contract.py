@@ -191,3 +191,18 @@ def test_test_job_scheduler_contracts_and_safe_pagination_are_published() -> Non
     assert parameters["offset"]["maximum"] == 1_000_000
     assert "status" in parameters
     assert "vehicle_id" in parameters
+
+
+def test_test_artifact_contracts_and_safe_pagination_are_published() -> None:
+    paths = core_app.openapi()["paths"]
+    collection = paths["/api/v1/test-runs/{run_id}/artifacts"]
+    assert {"get", "post"} <= set(collection)
+    detail = "/api/v1/test-runs/{run_id}/artifacts/{artifact_id}"
+    assert "get" in paths[detail]
+    assert "get" in paths[f"{detail}/content"]
+    upload_content = collection["post"]["requestBody"]["content"]
+    assert "multipart/form-data" in upload_content
+    parameters = {item["name"]: item["schema"] for item in collection["get"]["parameters"]}
+    assert parameters["limit"]["maximum"] == 200
+    assert parameters["offset"]["maximum"] == 1_000_000
+    assert "kind" in parameters

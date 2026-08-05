@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import EmailStr, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -28,6 +29,8 @@ class Settings(BaseSettings):
     test_scheduler_enabled: bool = True
     test_scheduler_interval_seconds: int = Field(default=5, ge=1, le=300)
     test_scheduler_batch_size: int = Field(default=20, ge=1, le=200)
+    test_artifact_storage_path: Path = Path(".atep/artifacts")
+    test_artifact_max_bytes: int = Field(default=25 * 1024 * 1024, ge=1, le=1024 * 1024 * 1024)
     bootstrap_admin_email: EmailStr | None = None
     bootstrap_admin_password: SecretStr | None = None
 

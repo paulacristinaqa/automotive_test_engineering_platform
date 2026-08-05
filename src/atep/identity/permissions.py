@@ -20,6 +20,8 @@ class PermissionName(StrEnum):
     ENVIRONMENT_PROFILES_MANAGE = "environment_profiles:manage"
     TEST_JOBS_READ = "test_jobs:read"
     TEST_JOBS_MANAGE = "test_jobs:manage"
+    TEST_ARTIFACTS_READ = "test_artifacts:read"
+    TEST_ARTIFACTS_WRITE = "test_artifacts:write"
     PLATFORM_ADMIN = "platform:admin"
 
 

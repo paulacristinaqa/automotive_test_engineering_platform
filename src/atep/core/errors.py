@@ -199,6 +199,43 @@ class TestJobStateError(ApplicationError):
         )
 
 
+class TestArtifactConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="test_artifact_conflict",
+            message="The artifact identifier was already used for different evidence.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class TestArtifactTooLargeError(ApplicationError):
+    def __init__(self, *, max_bytes: int) -> None:
+        super().__init__(
+            code="test_artifact_too_large",
+            message="The test artifact exceeds the configured size limit.",
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            details={"max_bytes": max_bytes},
+        )
+
+
+class EmptyTestArtifactError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="empty_test_artifact",
+            message="A test artifact must contain at least one byte.",
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        )
+
+
+class TestArtifactUnavailableError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="test_artifact_unavailable",
+            message="The artifact metadata exists but its content is temporarily unavailable.",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+
 class InvalidCommandClaimError(ApplicationError):
     def __init__(self) -> None:
         super().__init__(

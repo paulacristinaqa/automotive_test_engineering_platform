@@ -8,6 +8,8 @@ import structlog
 from fastapi import Depends, FastAPI, Request
 
 from atep.api.health import router as health_router
+from atep.artifacts.router import router as artifacts_router
+from atep.artifacts.storage import FilesystemArtifactStore
 from atep.audit.router import router as audit_router
 from atep.core.config import get_settings
 from atep.core.errors import install_exception_handlers
@@ -40,6 +42,9 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         log.info("bootstrap_administrator_created")
     redis_client = redis.from_url(settings.redis_url)  # type: ignore[no-untyped-call]
     application.state.redis = redis_client
+    artifact_store = FilesystemArtifactStore(settings.test_artifact_storage_path)
+    await artifact_store.ensure_ready()
+    application.state.artifact_store = artifact_store
     reconciler_stop = asyncio.Event()
     reconciler_task: asyncio.Task[None] | None = None
     scheduler_task: asyncio.Task[None] | None = None
@@ -75,6 +80,7 @@ app.include_router(vehicles_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(test_runs_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(environment_profiles_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(test_jobs_router, prefix="/api/v1", dependencies=rate_limited)
+app.include_router(artifacts_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(test_runs_websocket_router, prefix="/api/v1")
 install_exception_handlers(app)
 
