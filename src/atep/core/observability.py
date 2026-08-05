@@ -68,6 +68,43 @@ class Observability:
             ("method", "route", "exception_type"),
             registry=self.registry,
         )
+        self.module_heartbeats = Counter(
+            "atep_module_heartbeats_total",
+            "Authenticated ATEP module heartbeats.",
+            ("status",),
+            registry=self.registry,
+        )
+        self.module_lease_expirations = Counter(
+            "atep_module_lease_expirations_total",
+            "ATEP module leases reconciled as expired.",
+            registry=self.registry,
+        )
+        self.module_reconciliation_errors = Counter(
+            "atep_module_reconciliation_errors_total",
+            "Failures while reconciling ATEP module leases.",
+            registry=self.registry,
+        )
+        self.registered_modules = Gauge(
+            "atep_registered_modules",
+            "Monitored ATEP modules by current registry status.",
+            ("status",),
+            registry=self.registry,
+        )
+        self.monitored_modules = Gauge(
+            "atep_registry_monitored_modules",
+            "ATEP modules with an issued workload credential.",
+            registry=self.registry,
+        )
+        self.module_availability_ratio = Gauge(
+            "atep_module_availability_ratio",
+            "Current ratio of active modules to monitored modules.",
+            registry=self.registry,
+        )
+        self.module_at_risk_leases = Gauge(
+            "atep_module_at_risk_leases",
+            "Active or degraded module leases inside the warning window.",
+            registry=self.registry,
+        )
         info = Gauge(
             "atep_build_info",
             "ATEP service build and environment information.",
@@ -81,6 +118,20 @@ class Observability:
 
     def render_metrics(self) -> tuple[bytes, str]:
         return generate_latest(self.registry), CONTENT_TYPE_LATEST
+
+    def update_module_health(
+        self,
+        *,
+        counts: dict[str, int],
+        monitored_modules: int,
+        availability_ratio: float | None,
+        at_risk_leases: int,
+    ) -> None:
+        for status in ("registered", "active", "degraded", "inactive"):
+            self.registered_modules.labels(status).set(counts.get(status, 0))
+        self.monitored_modules.set(monitored_modules)
+        self.module_availability_ratio.set(availability_ratio or 0.0)
+        self.module_at_risk_leases.set(at_risk_leases)
 
     def shutdown(self) -> None:
         self.tracer_provider.shutdown()

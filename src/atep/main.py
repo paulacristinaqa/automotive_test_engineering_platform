@@ -55,7 +55,9 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     reconciler_task: asyncio.Task[None] | None = None
     scheduler_task: asyncio.Task[None] | None = None
     if settings.module_reconciliation_enabled:
-        reconciler_task = asyncio.create_task(run_registry_reconciler(reconciler_stop, settings))
+        reconciler_task = asyncio.create_task(
+            run_registry_reconciler(reconciler_stop, settings, observability)
+        )
     if settings.test_scheduler_enabled:
         scheduler_task = asyncio.create_task(run_test_scheduler(reconciler_stop, settings))
     try:

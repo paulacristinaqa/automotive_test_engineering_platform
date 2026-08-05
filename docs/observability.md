@@ -19,6 +19,8 @@ labels. It combines three replaceable signals:
 | `ATEP_OTEL_SERVICE_NAME` | `atep-core` | Stable OpenTelemetry service identity |
 | `ATEP_OTEL_EXPORTER_OTLP_ENDPOINT` | unset | Collector HTTP traces endpoint, including `/v1/traces` |
 | `ATEP_OTEL_TRACE_SAMPLE_RATIO` | `1.0` | Parent-based root sampling ratio from `0.0` to `1.0` |
+| `ATEP_MODULE_AVAILABILITY_SLO_TARGET` | `0.99` | Active/credentialed module snapshot objective |
+| `ATEP_MODULE_LEASE_WARNING_SECONDS` | `30` | Remaining-lease window reported as operational risk |
 
 Tracing-disabled requests still receive a valid `X-Trace-ID` for cross-signal correlation, but
 their local spans are non-recording and nothing is exported. A caller-provided valid W3C
@@ -33,9 +35,34 @@ their local spans are non-recording and nothing is exported. A caller-provided v
 | `atep_http_requests_in_progress` | Gauge | method | Saturation and stuck-request detection |
 | `atep_http_request_exceptions_total` | Counter | method, route template, exception type | Unhandled-failure diagnosis |
 | `atep_build_info` | Gauge | service, version, environment | Deployment identity |
+| `atep_module_heartbeats_total` | Counter | reported status | Authenticated workload activity |
+| `atep_module_lease_expirations_total` | Counter | none | Lease-expiry reconciliation evidence |
+| `atep_module_reconciliation_errors_total` | Counter | none | Registry monitoring failures |
+| `atep_registered_modules` | Gauge | bounded status | Credentialed module state distribution |
+| `atep_registry_monitored_modules` | Gauge | none | Modules included in availability monitoring |
+| `atep_module_availability_ratio` | Gauge | none | Current active/monitored snapshot ratio |
+| `atep_module_at_risk_leases` | Gauge | none | Operational leases inside the warning window |
 
 The route label is the FastAPI template, such as `/api/v1/test-runs/{run_id}`, never the raw
 request path. Unmatched requests use the bounded label `unmatched`.
+
+## Reliability Objectives and Rules
+
+`deploy/observability/alerts.yml` versions the initial reliability policy. The API availability
+objective is 99.9%; HTTP 5xx responses are failures and all completed HTTP responses are valid
+events. Recording rules calculate 5-minute, 1-hour, 6-hour, and 3-day error ratios, the 5-minute
+success ratio, and global 5-minute p95 latency. Fast and slow multi-window burn-rate alerts reduce
+noise compared with a single threshold.
+
+The module objective is a current operational snapshot, not a historical uptime claim. Only
+modules with an issued workload credential are monitored. `active` satisfies the objective;
+`registered`, `degraded`, and `inactive` do not. `GET /api/v1/modules/health-summary` requires
+`modules:read`, returns constant-size aggregate counts, and never returns module identifiers or
+credential material.
+
+The initial latency alert uses 500 ms to detect broad operational degradation. The formal
+non-functional target remains p95 below 250 ms for defined production workloads and must be
+calibrated through load evidence before release.
 
 ## Useful PromQL
 
@@ -87,6 +114,21 @@ The versioned Grafana dashboard is provisioned automatically as **ATEP Core Plat
 The development Collector writes basic trace summaries to its own logs; it is not a durable trace
 backend.
 
+## Alert Response
+
+| Alert | First response |
+|---|---|
+| `AtepApiFastErrorBudgetBurn` | Treat as critical: correlate recent 5xx spans/logs, inspect readiness and dependency health, and stop risky promotion |
+| `AtepApiSlowErrorBudgetBurn` | Review persistent failure routes, deployments, capacity, and dependency error trends |
+| `AtepApiLatencyP95High` | Inspect route latency, in-progress requests, database pool, Redis, RabbitMQ, and host saturation |
+| `AtepModuleUnavailable` | Inspect lease expiry, module process/network health, and credential rotation history before restarting |
+| `AtepModuleDegraded` | Inspect the module's own diagnostic logs and declared degraded reason; do not mask it with a synthetic active heartbeat |
+| `AtepModuleLeaseAtRisk` | Confirm heartbeat cadence, clock synchronization, network latency, and reconciler health |
+
+Prometheus currently evaluates alerts but no Alertmanager is provisioned. Operators must inspect
+the Prometheus alerts page in the local topology. Production deployment requires reviewed routing,
+ownership, escalation, inhibition, silences, and notification-delivery tests.
+
 ## Security and Production Hardening
 
 - Restrict `/metrics`, Prometheus, Grafana, and OTLP ports to an internal management network.
@@ -97,7 +139,7 @@ backend.
 - Never attach credentials, request bodies, raw paths, VINs, email addresses, artifact names, or
   unrestricted exception messages as metric labels or span attributes.
 - Replace the debug trace exporter with a durable backend and define retention, tenant isolation,
-  access audit, alert rules, SLO burn-rate windows, and capacity limits.
+  access audit, calibrated SLO thresholds, and capacity limits.
 - Add WebSocket, background scheduler, outbox, database-pool, Redis, RabbitMQ, and artifact-store
   domain metrics in subsequent hardening slices.
 
@@ -109,4 +151,7 @@ backend.
 4. Confirm unhandled exceptions increment the exception counter and mark the span as error.
 5. Confirm Prometheus scrapes `api:8000/metrics` and all dashboard panels return data.
 6. Confirm tracing disabled produces no OTLP traffic and tracing enabled reaches the Collector.
-7. Load-test histogram and label cardinality before setting production SLO thresholds.
+7. Validate Prometheus configuration and rules with `promtool` in CI.
+8. Confirm the health summary denies callers without `modules:read` and has constant-size output.
+9. Trigger each alert with synthetic test traffic in an isolated environment and verify its runbook.
+10. Load-test histogram/cardinality and calibrate production SLO and latency thresholds.

@@ -50,6 +50,7 @@ An intended end-to-end scenario is:
 - raw-once, hash-only module workload credentials;
 - authenticated module heartbeats with bounded availability leases;
 - automatic reconciliation of expired modules to `inactive`;
+- permission-protected aggregate module health with configurable availability objective;
 - versioned vehicle catalogue with independent read/manage permissions;
 - capability-protected Android Automotive telemetry ingestion with idempotent retry handling;
 - persistent vehicle-scoped test runs with controlled, optimistic lifecycle transitions;
@@ -57,6 +58,7 @@ An intended end-to-end scenario is:
 - immutable EV, hybrid, and autonomous environment profiles with reproducible TestRun snapshots;
 - structured JSON logging and request correlation IDs;
 - liveness and dependency-readiness endpoints;
+- versioned Prometheus SLO recording rules, burn-rate alerts, registry alerts, and runbooks;
 - Docker Compose development and disposable integration environments;
 - Ruff, strict mypy, pytest, and GitHub Actions quality gates.
 
@@ -193,6 +195,7 @@ source .venv/bin/activate
 | Registry | `/api/v1/modules` and capability operations | `modules:read`, `modules:manage` |
 | Workload identity | module credential issuance and rotation | `modules:manage` |
 | Heartbeat | `POST /api/v1/modules/{id}/heartbeat` | `X-ATEP-Module-Token` |
+| Module health | `GET /api/v1/modules/health-summary` | `modules:read` |
 | Vehicles | `/api/v1/vehicles` and status operations | `vehicles:read`, `vehicles:manage` |
 | Telemetry ingest | `POST /api/v1/vehicles/{vehicle_id}/telemetry` | Gateway module identity + `vehicle.telemetry.publish` capability |
 | Telemetry query | `GET /api/v1/vehicles/{vehicle_id}/telemetry` | `telemetry:read` |
@@ -245,7 +248,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\run_integration_test
 
 The runner creates ephemeral credentials, uses isolated ports, applies every migration, and
 removes its containers, network, and volumes after execution. The latest local evidence records
-**80 fast tests plus one expanded Docker integration scenario** passing. The CarSystemUI
+**86 fast tests plus one expanded Docker integration scenario** passing. The CarSystemUI
 companion project also passes 27 unit tests, Android lint, and debug APK assembly for this slice.
 
 ## Engineering documentation
@@ -289,8 +292,9 @@ Authorized test commands now use an idempotent request, capability-scoped target
 hash-only claim token, safe Android property allowlist, and terminal acknowledgement. The next
 slices add area-aware properties and live test-run updates.
 Versioned test configuration profiles, scheduler boundaries, artifact storage, and the initial
-OpenTelemetry/Prometheus/Grafana observability slice are implemented. Production SLOs, alerting,
-durable trace retention, and domain-specific metrics remain in the Volume I hardening roadmap.
+OpenTelemetry/Prometheus/Grafana observability, aggregate module health, recording rules, and
+initial SLO/registry alerts are implemented. Production Alertmanager routing, threshold/load
+calibration, durable trace retention, and additional domain metrics remain in hardening.
 
 ## Security and production status
 

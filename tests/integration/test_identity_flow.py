@@ -218,6 +218,21 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             assert heartbeat_module["lease_expires_at"]
             assert heartbeat_module["lease_duration_seconds"] == 5
 
+            health_response = await client.get(
+                "/api/v1/modules/health-summary", headers=admin_headers
+            )
+            assert health_response.status_code == 200, health_response.text
+            health = health_response.json()
+            assert health["status"] == "unavailable"
+            assert health["objective_met"] is False
+            assert health["monitored_modules"] == 1
+            assert health["counts"] == {
+                "registered": 0,
+                "active": 0,
+                "degraded": 1,
+                "inactive": 0,
+            }
+
             capability_response = await client.put(
                 f"/api/v1/modules/{module_id}/capabilities/can.frames.consume",
                 headers=admin_headers,
@@ -993,6 +1008,10 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                 client, "GET", "/api/v1/modules", 403, headers=user_headers
             )
             assert modules_denied["code"] == "permission_denied"
+            module_health_denied = await expected_error(
+                client, "GET", "/api/v1/modules/health-summary", 403, headers=user_headers
+            )
+            assert module_health_denied["code"] == "permission_denied"
             jobs_denied = await expected_error(
                 client, "GET", "/api/v1/test-jobs", 403, headers=user_headers
             )

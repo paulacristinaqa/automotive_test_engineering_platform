@@ -19,11 +19,76 @@ from atep.registry.schemas import (
     CapabilityUpdate,
     ModuleCreate,
     ModuleCredentialCommand,
+    ModuleHealthStatus,
+    ModuleHealthSummary,
     ModuleHeartbeat,
     ModuleStatus,
+    ModuleStatusCounts,
     ModuleUpdate,
     normalize_capability_name,
 )
+
+
+async def summarize_module_health(
+    session: AsyncSession,
+    *,
+    availability_target: float,
+    lease_warning_seconds: int,
+    now: datetime | None = None,
+) -> ModuleHealthSummary:
+    observed_at = now or datetime.now(UTC)
+    monitored = PlatformModule.heartbeat_token_hash.is_not(None)
+    at_risk = (
+        monitored
+        & PlatformModule.status.in_([ModuleStatus.ACTIVE.value, ModuleStatus.DEGRADED.value])
+        & PlatformModule.lease_expires_at.is_not(None)
+        & (
+            PlatformModule.lease_expires_at
+            <= observed_at + timedelta(seconds=lease_warning_seconds)
+        )
+    )
+    result = await session.execute(
+        select(
+            func.count().filter(monitored),
+            func.count().filter(
+                monitored & (PlatformModule.status == ModuleStatus.REGISTERED.value)
+            ),
+            func.count().filter(monitored & (PlatformModule.status == ModuleStatus.ACTIVE.value)),
+            func.count().filter(monitored & (PlatformModule.status == ModuleStatus.DEGRADED.value)),
+            func.count().filter(monitored & (PlatformModule.status == ModuleStatus.INACTIVE.value)),
+            func.count().filter(at_risk),
+        )
+    )
+    monitored_count, registered, active, degraded, inactive, at_risk_leases = result.one()
+    counts = ModuleStatusCounts(
+        registered=int(registered),
+        active=int(active),
+        degraded=int(degraded),
+        inactive=int(inactive),
+    )
+    monitored_count = int(monitored_count)
+    availability_ratio = active / monitored_count if monitored_count else None
+    objective_met = (
+        availability_ratio >= availability_target if availability_ratio is not None else None
+    )
+    if monitored_count == 0:
+        health_status = ModuleHealthStatus.UNMONITORED
+    elif active == 0:
+        health_status = ModuleHealthStatus.UNAVAILABLE
+    elif objective_met and degraded == 0 and inactive == 0 and registered == 0:
+        health_status = ModuleHealthStatus.HEALTHY
+    else:
+        health_status = ModuleHealthStatus.DEGRADED
+    return ModuleHealthSummary(
+        generated_at=observed_at,
+        status=health_status,
+        availability_target=availability_target,
+        availability_ratio=availability_ratio,
+        objective_met=objective_met,
+        monitored_modules=monitored_count,
+        at_risk_leases=int(at_risk_leases),
+        counts=counts,
+    )
 
 
 async def list_modules(

@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, Path, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from atep.core.config import Settings, get_settings
 from atep.db.session import get_session
 from atep.identity.dependencies import require_permissions
 from atep.identity.models import User
@@ -17,6 +18,7 @@ from atep.registry.schemas import (
     ModuleCreate,
     ModuleCredentialCommand,
     ModuleCredentialResponse,
+    ModuleHealthSummary,
     ModuleHeartbeat,
     ModulePage,
     ModuleResponse,
@@ -31,6 +33,7 @@ from atep.registry.service import (
     list_modules,
     remove_capability,
     require_module,
+    summarize_module_health,
     update_module,
 )
 
@@ -124,6 +127,7 @@ async def heartbeat_module_endpoint(
         correlation_id=request_correlation_id(request),
     )
     await session.commit()
+    request.app.state.observability.module_heartbeats.labels(module.status).inc()
     return module_response(module)
 
 
@@ -149,6 +153,27 @@ async def list_modules_endpoint(
         limit=limit,
         offset=offset,
     )
+
+
+@router.get("/health-summary", response_model=ModuleHealthSummary)
+async def module_health_summary_endpoint(
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(modules_read)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> ModuleHealthSummary:
+    summary = await summarize_module_health(
+        session,
+        availability_target=settings.module_availability_slo_target,
+        lease_warning_seconds=settings.module_lease_warning_seconds,
+    )
+    request.app.state.observability.update_module_health(
+        counts=summary.counts.model_dump(),
+        monitored_modules=summary.monitored_modules,
+        availability_ratio=summary.availability_ratio,
+        at_risk_leases=summary.at_risk_leases,
+    )
+    return summary
 
 
 @router.get("/{module_id}", response_model=ModuleResponse)

@@ -122,6 +122,7 @@ def test_module_registry_contracts_and_safe_pagination_are_published() -> None:
     assert {"put", "delete"} <= set(paths[capability_path])
     assert "/api/v1/modules/{module_id}/credentials" in paths
     assert "/api/v1/modules/{module_id}/heartbeat" in paths
+    assert "/api/v1/modules/health-summary" in paths
     heartbeat = paths["/api/v1/modules/{module_id}/heartbeat"]["post"]
     heartbeat_headers = {
         item["name"]: item for item in heartbeat["parameters"] if item["in"] == "header"

@@ -62,6 +62,10 @@
 | CORE-F-056 | Structured request logs and server spans shall carry the ATEP correlation identifier, trace identifier, and span identifier without recording credentials or request bodies. | Unit test and structured-log inspection |
 | CORE-F-057 | Operators shall configure trace recording, parent-based sample ratio, service identity, and OTLP/HTTP export exclusively through validated environment settings. | Configuration and exporter tests |
 | CORE-F-058 | The repository shall provide an optional, version-pinned Collector, Prometheus, and Grafana topology with provisioned datasource and dashboard assets. | Compose validation and dashboard contract tests |
+| CORE-F-059 | An authorized operator shall retrieve a bounded aggregate health summary for credentialed modules without exposing workload credentials or unbounded module identifiers. | Service, RBAC, OpenAPI, and integration tests |
+| CORE-F-060 | The registry reconciler shall publish bounded module status, availability, lease-risk, heartbeat, expiry, and reconciliation-failure metrics. | Unit and metrics contract tests |
+| CORE-F-061 | Prometheus shall evaluate versioned recording rules for API availability, error ratios, and p95 latency. | Rule asset test and `promtool` CI validation |
+| CORE-F-062 | Prometheus shall raise severity-labelled, runbook-linked alerts for fast/slow error-budget burn, excessive latency, unavailable/degraded modules, and leases at risk. | Alert contract test and `promtool` CI validation |
 
 ## Non-functional requirements
 
@@ -96,3 +100,6 @@
 | CORE-NF-027 | Metric cardinality | HTTP labels use bounded method, route-template, status, and exception-type values; raw paths, query strings, vehicle/user IDs, emails, filenames, and credentials are forbidden |
 | CORE-NF-028 | Observability isolation | metrics, Grafana, Prometheus, Collector, and OTLP ports are internal-only deployment surfaces; production transport requires TLS and workload authentication |
 | CORE-NF-029 | Telemetry overhead | tracing can be disabled or sampled from 0.0 to 1.0; export is batched with bounded Collector memory; observability failures must not change authoritative business state |
+| CORE-NF-030 | SLO policy as code | API availability uses a 99.9% target, module snapshot availability uses a configurable target, and all recording/alert rules are versioned and CI-validated |
+| CORE-NF-031 | Alert safety | alerts use bounded labels, explicit severities, minimum persistence windows, and a runbook reference; they never include credentials or domain identifiers |
+| CORE-NF-032 | Health aggregation | module health queries use database aggregation with constant-size responses and consider only modules issued a workload credential |
