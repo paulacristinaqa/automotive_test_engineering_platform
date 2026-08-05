@@ -53,6 +53,10 @@
 | CORE-F-047 | A scheduled job may be cancelled exactly once before dispatch using optimistic version control; dispatched jobs shall reject cancellation with a stable state conflict. | Lifecycle, idempotency, stale-version, and negative tests |
 | CORE-F-048 | The scheduler shall atomically claim due jobs using row locks that skip work owned by another instance, create one queued TestRun, and mark the job dispatched. | Service query review and multi-instance database integration test |
 | CORE-F-049 | Scheduling, cancellation, and dispatch shall append versioned transactional outbox events and immutable audit evidence in the same unit of work as their state changes. | Unit and automated Docker integration test |
+| CORE-F-050 | An operator with `test_artifacts:write` shall upload a bounded immutable artifact to an existing TestRun, while `test_artifacts:read` independently protects metadata and content retrieval. | Service, RBAC, multipart API, and Docker integration tests |
+| CORE-F-051 | Repeating an artifact upload with the same run, identifier, metadata, size, and SHA-256 shall return the original record without duplicate evidence; conflicting reuse shall return a stable error. | Idempotency, conflict, and database uniqueness tests |
+| CORE-F-052 | Artifact metadata, `atep.test_artifact.stored.v1`, and immutable audit evidence shall be committed atomically after object storage succeeds. | Unit and automated Docker integration test |
+| CORE-F-053 | Artifact downloads shall preserve the stored media type and filename and expose authoritative size, ETag, and SHA-256 integrity metadata without disclosing the internal object key. | Contract, security, and download integration tests |
 
 ## Non-functional requirements
 
@@ -82,3 +86,5 @@
 | CORE-NF-022 | Live test-run consistency | PostgreSQL and the transactional outbox remain authoritative; row-locked optimistic transitions prevent lost updates; Redis Pub/Sub is a best-effort projection; clients deduplicate by monotonically increasing version |
 | CORE-NF-023 | Test reproducibility | environment configurations are JSON-compatible and limited to 16 KiB; active profiles are immutable; every associated test run retains a versioned configuration snapshot independent of later archival |
 | CORE-NF-024 | Scheduler consistency | due work is selected oldest-first in bounded batches with `FOR UPDATE SKIP LOCKED`; job state, generated TestRun, audit, and outbox evidence commit or roll back together |
+| CORE-NF-025 | Artifact integrity | content is streamed through a configurable 1-byte to 1-GiB bound, hashed with SHA-256, stored under an internally generated key, and treated as immutable |
+| CORE-NF-026 | Storage isolation | client filenames never become filesystem paths; storage adapters reject root escape; object keys remain absent from public API, audit, and event contracts |

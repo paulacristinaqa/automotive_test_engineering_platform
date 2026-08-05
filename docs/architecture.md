@@ -112,6 +112,13 @@ flowchart LR
    `FOR UPDATE SKIP LOCKED`; the generated queued TestRun, dispatched job state, system audit, and
    both outbox events share one transaction. Cancellation locks the job row and uses an expected
    version so it cannot race silently with dispatch.
+23. **Artifact metadata and binary objects have separate authorities.** PostgreSQL owns the
+   TestRun association, external artifact identity, media metadata, size, and SHA-256 evidence;
+   an `ArtifactObjectStore` owns binary content. The development adapter streams to a temporary
+   file and atomically promotes it under an internally generated key. Public contracts never
+   expose that key or derive a path from the client filename. A failed metadata transaction
+   triggers best-effort object cleanup. Production uses the same interface with durable S3-style
+   object storage, lifecycle policy, encryption, malware scanning, and orphan reconciliation.
 
 ## Initial bounded contexts
 
@@ -126,6 +133,7 @@ flowchart LR
 | Test runs | vehicle-scoped execution lifecycle, progress, result summary, audit, and live projections | PostgreSQL + Redis Pub/Sub |
 | Environment profiles | immutable, versioned vehicle/test baselines and reproducibility inputs | PostgreSQL |
 | Test jobs | durable scheduling, cancellation, due-work ownership, and TestRun dispatch | PostgreSQL |
+| Test artifacts | immutable TestRun evidence metadata, integrity, and binary-object abstraction | PostgreSQL + object storage |
 
 Future volumes add contexts without importing another context's persistence models. Shared
 contracts live under an explicit version and remain backward compatible during migration.
@@ -166,5 +174,8 @@ contracts live under an explicit version and remain backward compatible during m
   JSON-compatible, bounded to 16 KiB, and excluded from secret storage by design.
 - Test-job discovery and mutation use independent `test_jobs:read` and `test_jobs:manage`
   permissions. The application scheduler never grants a client direct database or broker access.
+- Artifact upload and retrieval use independent `test_artifacts:write` and
+  `test_artifacts:read` permissions. Uploads are bounded, filenames are portable metadata only,
+  and downloads disclose integrity headers rather than internal storage locations.
 - Production follow-ups include proxy-aware client attribution, capacity tuning,
   secret-manager integration, and TLS/mTLS between workloads.

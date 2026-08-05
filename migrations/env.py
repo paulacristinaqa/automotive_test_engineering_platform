@@ -5,6 +5,7 @@ from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+from atep.artifacts import models as artifact_models  # noqa: F401
 from atep.audit import models as audit_models  # noqa: F401
 from atep.core.config import get_settings
 from atep.db.base import Base
