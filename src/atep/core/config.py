@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     api_rate_limit_window_seconds: int = Field(default=60, ge=1, le=86_400)
     module_reconciliation_enabled: bool = True
     module_reconciliation_interval_seconds: int = Field(default=15, ge=1, le=300)
+    module_availability_slo_target: float = Field(default=0.99, gt=0.0, le=1.0)
+    module_lease_warning_seconds: int = Field(default=30, ge=1, le=3600)
     test_scheduler_enabled: bool = True
     test_scheduler_interval_seconds: int = Field(default=5, ge=1, le=300)
     test_scheduler_batch_size: int = Field(default=20, ge=1, le=200)

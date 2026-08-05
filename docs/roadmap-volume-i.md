@@ -38,13 +38,14 @@
 - scheduler boundary and job lifecycle (implemented initial slice: persistent idempotent jobs, independent RBAC, optimistic cancellation, bounded multi-instance-safe due selection, atomic TestRun dispatch, audit, and outbox)
 - object storage abstraction for test artefacts (implemented initial slice: immutable TestRun evidence, streaming filesystem adapter, replaceable store interface, SHA-256 integrity, independent RBAC, bounded multipart upload, download, audit, and outbox)
 - OpenTelemetry traces, Prometheus metrics, and dashboards (implemented initial slice: W3C trace propagation, correlated IDs, bounded HTTP metrics, OTLP/HTTP export, optional Collector/Prometheus/Grafana topology, and versioned overview dashboard)
+- module health aggregation, SLO recording rules, and burn-rate/registry alerts (implemented initial slice; production notification routing, load evidence, and threshold calibration remain hardening)
 
 ## Increment 4 — production hardening
 
 - Kubernetes manifests and secret-manager integration
 - mTLS and workload identity
 - backup, restore, retention, and disaster-recovery exercises
-- SLOs, alerts, load tests, and security scanning
+- SLO threshold calibration, Alertmanager/incident routing, load tests, and security scanning
 - CI/CD promotion through development, staging, and production
 
 The Volume I exit criterion is a repeatable deployment that supports the first end-to-end

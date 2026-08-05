@@ -44,6 +44,11 @@ jobs:
           echo "ATEP_INTEGRATION_RABBITMQ_URL=amqp://${ATEP_INTEGRATION_RABBITMQ_USER}:${ATEP_INTEGRATION_RABBITMQ_PASSWORD}@localhost:15673/" >> "$GITHUB_ENV"
       - name: Validate optional observability topology
         run: docker compose -f compose.integration.yaml -f compose.observability.yaml --profile observability config --quiet
+      - name: Validate Prometheus configuration and alert rules
+        run: |
+          docker run --rm --entrypoint promtool \
+            -v "$PWD/deploy/observability:/etc/prometheus:ro" \
+            prom/prometheus:v3.13.2 check config /etc/prometheus/prometheus.yml
       - name: Start disposable stack
         shell: bash
         run: |

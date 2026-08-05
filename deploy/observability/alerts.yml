@@ -1,0 +1,73 @@
+groups:
+  - name: atep-slo-recording
+    interval: 30s
+    rules:
+      - record: atep:sli_http_error_ratio:rate5m
+        expr: sum(rate(atep_http_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(atep_http_requests_total[5m])), 0.000001)
+      - record: atep:sli_http_error_ratio:rate1h
+        expr: sum(rate(atep_http_requests_total{status=~"5.."}[1h])) / clamp_min(sum(rate(atep_http_requests_total[1h])), 0.000001)
+      - record: atep:sli_http_error_ratio:rate6h
+        expr: sum(rate(atep_http_requests_total{status=~"5.."}[6h])) / clamp_min(sum(rate(atep_http_requests_total[6h])), 0.000001)
+      - record: atep:sli_http_error_ratio:rate3d
+        expr: sum(rate(atep_http_requests_total{status=~"5.."}[3d])) / clamp_min(sum(rate(atep_http_requests_total[3d])), 0.000001)
+      - record: atep:sli_http_success_ratio:rate5m
+        expr: 1 - atep:sli_http_error_ratio:rate5m
+      - record: atep:sli_http_latency_p95_seconds:rate5m
+        expr: histogram_quantile(0.95, sum by (le) (rate(atep_http_request_duration_seconds_bucket[5m])))
+
+  - name: atep-alerts
+    rules:
+      - alert: AtepApiFastErrorBudgetBurn
+        expr: atep:sli_http_error_ratio:rate5m > (14.4 * 0.001) and atep:sli_http_error_ratio:rate1h > (14.4 * 0.001)
+        for: 5m
+        labels:
+          severity: critical
+          service: atep-core
+        annotations:
+          summary: ATEP API is consuming its 99.9% availability error budget rapidly
+          runbook_url: docs/observability.md#alert-response
+      - alert: AtepApiSlowErrorBudgetBurn
+        expr: atep:sli_http_error_ratio:rate6h > (1.0 * 0.001) and atep:sli_http_error_ratio:rate3d > (1.0 * 0.001)
+        for: 30m
+        labels:
+          severity: warning
+          service: atep-core
+        annotations:
+          summary: ATEP API is persistently consuming its 99.9% availability error budget
+          runbook_url: docs/observability.md#alert-response
+      - alert: AtepApiLatencyP95High
+        expr: atep:sli_http_latency_p95_seconds:rate5m > 0.5
+        for: 10m
+        labels:
+          severity: warning
+          service: atep-core
+        annotations:
+          summary: ATEP API p95 latency is above the 500 ms objective
+          runbook_url: docs/observability.md#alert-response
+      - alert: AtepModuleUnavailable
+        expr: atep_registered_modules{status="inactive"} > 0
+        for: 2m
+        labels:
+          severity: critical
+          service: atep-registry
+        annotations:
+          summary: One or more monitored ATEP modules are inactive
+          runbook_url: docs/observability.md#alert-response
+      - alert: AtepModuleDegraded
+        expr: atep_registered_modules{status="degraded"} > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: atep-registry
+        annotations:
+          summary: One or more monitored ATEP modules report degraded health
+          runbook_url: docs/observability.md#alert-response
+      - alert: AtepModuleLeaseAtRisk
+        expr: atep_module_at_risk_leases > 0
+        for: 1m
+        labels:
+          severity: warning
+          service: atep-registry
+        annotations:
+          summary: One or more ATEP module leases are near expiry
+          runbook_url: docs/observability.md#alert-response

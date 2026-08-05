@@ -17,6 +17,13 @@ class ModuleStatus(StrEnum):
     INACTIVE = "inactive"
 
 
+class ModuleHealthStatus(StrEnum):
+    HEALTHY = "healthy"
+    DEGRADED = "degraded"
+    UNAVAILABLE = "unavailable"
+    UNMONITORED = "unmonitored"
+
+
 def _validate_version(value: str) -> str:
     normalized = value.strip()
     if not VERSION_PATTERN.fullmatch(normalized):
@@ -185,3 +192,21 @@ class ModulePage(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class ModuleStatusCounts(BaseModel):
+    registered: int = Field(ge=0)
+    active: int = Field(ge=0)
+    degraded: int = Field(ge=0)
+    inactive: int = Field(ge=0)
+
+
+class ModuleHealthSummary(BaseModel):
+    generated_at: datetime
+    status: ModuleHealthStatus
+    availability_target: float = Field(gt=0.0, le=1.0)
+    availability_ratio: float | None = Field(default=None, ge=0.0, le=1.0)
+    objective_met: bool | None
+    monitored_modules: int = Field(ge=0)
+    at_risk_leases: int = Field(ge=0)
+    counts: ModuleStatusCounts

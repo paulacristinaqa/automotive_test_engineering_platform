@@ -46,6 +46,28 @@
       ],
       "title": "Requests in progress",
       "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "atep-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "id": 5,
+      "targets": [
+        {"expr": "atep:sli_http_success_ratio:rate5m", "legendFormat": "HTTP success ratio", "refId": "A"}
+      ],
+      "title": "API availability SLI (target 99.9%)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "atep-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "id": 6,
+      "targets": [
+        {"expr": "atep_registered_modules", "legendFormat": "{{status}}", "refId": "A"}
+      ],
+      "title": "Monitored module health",
+      "type": "timeseries"
     }
   ],
   "refresh": "15s",
@@ -56,5 +78,5 @@
   "timezone": "browser",
   "title": "ATEP Core Platform Overview",
   "uid": "atep-core-overview",
-  "version": 1
+  "version": 2
 }

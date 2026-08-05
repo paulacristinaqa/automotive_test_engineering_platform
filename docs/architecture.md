@@ -126,6 +126,12 @@ flowchart LR
    identifiers never enter labels. Trace recording and parent-based sampling are configurable,
    and OTLP export uses a replaceable Collector boundary. The provisioned Prometheus, Grafana,
    and Collector topology is optional and remains outside normal developer startup.
+25. **Reliability policy is versioned separately from authoritative state.** Prometheus recording
+   rules calculate HTTP availability/error and latency SLIs, while multi-window alerts express
+   the initial 99.9% API objective. Registry health is a constant-size PostgreSQL aggregate over
+   modules that have received workload credentials; it does not persist a second health model.
+   The reconciler refreshes bounded status gauges, and alert annotations link to the operational
+   runbook. Alert delivery remains an external Alertmanager/incident-management responsibility.
 
 ## Initial bounded contexts
 
@@ -141,7 +147,7 @@ flowchart LR
 | Environment profiles | immutable, versioned vehicle/test baselines and reproducibility inputs | PostgreSQL |
 | Test jobs | durable scheduling, cancellation, due-work ownership, and TestRun dispatch | PostgreSQL |
 | Test artifacts | immutable TestRun evidence metadata, integrity, and binary-object abstraction | PostgreSQL + object storage |
-| Observability | bounded HTTP metrics, trace propagation/export, cross-signal correlation, and dashboards | Prometheus + OpenTelemetry Collector + Grafana |
+| Observability | bounded HTTP/module metrics, trace propagation/export, SLO recording rules, alerts, cross-signal correlation, and dashboards | PostgreSQL aggregate + Prometheus + OpenTelemetry Collector + Grafana |
 
 Future volumes add contexts without importing another context's persistence models. Shared
 contracts live under an explicit version and remain backward compatible during migration.

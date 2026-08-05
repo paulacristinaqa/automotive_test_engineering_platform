@@ -86,3 +86,22 @@ def test_unhandled_exception_is_counted_and_marks_span_error() -> None:
     )
     span = exporter.get_finished_spans()[0]
     assert span.status.status_code.name == "ERROR"
+
+
+def test_module_health_metrics_have_only_bounded_status_labels() -> None:
+    _, observability, _ = instrumented_app()
+    observability.update_module_health(
+        counts={"registered": 1, "active": 2, "degraded": 1, "inactive": 0},
+        monitored_modules=4,
+        availability_ratio=0.5,
+        at_risk_leases=1,
+    )
+    observability.module_heartbeats.labels("active").inc()
+    metrics = observability.render_metrics()[0].decode()
+
+    assert 'atep_registered_modules{status="active"} 2.0' in metrics
+    assert 'atep_registered_modules{status="degraded"} 1.0' in metrics
+    assert "atep_registry_monitored_modules 4.0" in metrics
+    assert "atep_module_availability_ratio 0.5" in metrics
+    assert "atep_module_at_risk_leases 1.0" in metrics
+    assert 'atep_module_heartbeats_total{status="active"} 1.0' in metrics
