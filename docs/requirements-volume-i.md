@@ -40,6 +40,11 @@
 | CORE-F-034 | An operator with `vehicle_commands:write` shall idempotently request a bounded `set_property` command for one vehicle and one capability-authorized target module. | Service, RBAC, validation, API contract, and automated Docker integration test |
 | CORE-F-035 | An authenticated module declaring `vehicle.commands.consume` shall atomically claim one available command under a bounded lease and acknowledge it using a claim token whose digest is the only persisted representation. | Service, negative claim, lease-expiry, and automated Docker integration test |
 | CORE-F-036 | The Android Vehicle Gateway shall execute only allowlisted simulator properties, reject invalid or unsafe state transitions, refuse mutation of a read-only AAOS source, and return a terminal acknowledgement to ATEP. | Android command-executor/coordinator tests and manual end-to-end test `CT-SHOW-010` |
+| CORE-F-037 | An operator with `test_runs:write` shall create an idempotent, vehicle-scoped test run and retrieve it through bounded, permission-protected queries. | Service tests and automated Docker integration test |
+| CORE-F-038 | Test-run creation and each effective status transition shall atomically persist immutable audit evidence and a versioned transactional outbox event. | Service and automated Docker integration test |
+| CORE-F-039 | Test runs shall follow the controlled `queued` to `running` to terminal lifecycle and reject stale versions or illegal transitions with stable conflicts. | Validation, transition, idempotency, and automated Docker integration tests |
+| CORE-F-040 | An active user with `test_runs:read` shall receive an authoritative snapshot and versioned live updates over an authenticated WebSocket without direct infrastructure access. | Authenticated Redis/WebSocket Docker integration test |
+| CORE-F-041 | CarSystemUI shall display the configured test run, connection state, progress, summary, and version; ignore duplicate or out-of-order updates; and reconnect with bounded backoff. | Android unit tests, lint, and debug build |
 
 ## Non-functional requirements
 
@@ -66,3 +71,4 @@
 | CORE-NF-019 | Background delivery control | retry work is unique per vehicle, persists beyond the activity lifecycle, requires connectivity, remains inactive for disabled configuration, and stops after eight worker attempts |
 | CORE-NF-020 | Telemetry disposition safety | exhausted work does not restart silently; retry preserves event identity; discard affects only the selected rejected record; credentials never enter operator evidence |
 | CORE-NF-021 | Command-delivery safety | commands are target-scoped, leased, idempotent, allowlisted, bounded by vehicle-state invariants, and acknowledged without persisting raw claim tokens |
+| CORE-NF-022 | Live test-run consistency | PostgreSQL and the transactional outbox remain authoritative; row-locked optimistic transitions prevent lost updates; Redis Pub/Sub is a best-effort projection; clients deduplicate by monotonically increasing version |

@@ -93,6 +93,13 @@ flowchart LR
    explicit property allowlist, validates type/range and vehicle-state invariants, and refuses to
    mutate a read-only AAOS source. Lease expiry makes an unacknowledged idempotent property command
    available for recovery without granting Android direct infrastructure access.
+20. **Test-run state is durable; live delivery is a replaceable projection.** PostgreSQL owns
+   the canonical test-run lifecycle and the transactional outbox owns durable integration
+   events. Creation is idempotent by external `run_id`. Status changes lock the row, require an
+   expected version, and allow only reviewed transitions. Redis Pub/Sub fans committed snapshots
+   to authenticated WebSocket clients across API replicas, but a Redis publication failure never
+   rolls back authoritative state. Every message carries a monotonically increasing version so
+   CarSystemUI can ignore duplicates and out-of-order delivery.
 
 ## Initial bounded contexts
 
@@ -104,6 +111,7 @@ flowchart LR
 | Audit | immutable evidence, controlled search, and export | PostgreSQL |
 | Registry | platform modules, workload credentials, availability leases, and capability declarations | PostgreSQL |
 | Vehicles | vehicle catalogue, lifecycle state, immutable observations, and gateway integration contracts | PostgreSQL |
+| Test runs | vehicle-scoped execution lifecycle, progress, result summary, audit, and live projections | PostgreSQL + Redis Pub/Sub |
 
 Future volumes add contexts without importing another context's persistence models. Shared
 contracts live under an explicit version and remain backward compatible during migration.
@@ -137,5 +145,7 @@ contracts live under an explicit version and remain backward compatible during m
 - Vehicle command claim and acknowledgement require the `vehicle.commands.consume` capability;
   raw claim tokens are returned only with a successful claim and are stored only as SHA-256
   digests. Android executes only the reviewed `set_property` allowlist.
+- Test-run REST mutations require `test_runs:write`; queries and WebSocket subscriptions require
+  `test_runs:read`. WebSocket authentication revalidates active user state and never exposes Redis.
 - Production follow-ups include proxy-aware client attribution, capacity tuning,
   secret-manager integration, and TLS/mTLS between workloads.

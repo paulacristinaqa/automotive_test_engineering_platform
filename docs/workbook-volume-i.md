@@ -50,6 +50,7 @@ The document distinguishes three types of statements:
 | 0.14.0 | 4 August 2026 | Added persistent rejected-event inspection, unchanged-identity retry, selective discard, observable background-attempt exhaustion, explicit recovery, and operator scenario `CT-SHOW-009` | Android dependency resolution, debug APK assembly, 18 tests, and lint completed; live operator evidence remains pending |
 | 0.15.0 | 4 August 2026 | Added idempotent vehicle-command requests, capability-targeted claim, hash-only lease tokens, terminal acknowledgements, safe Android property execution, and scenario `CT-SHOW-010` | 55 Python tests and 24 Android tests passed; APK and lint completed; live emulator-to-ATEP command evidence remains pending |
 | 0.16.0 | 4 August 2026 | Executed `CT-SHOW-010` against a live Android Automotive emulator and disposable ATEP stack, including safe mutation, validation and safety rejection, capability denial, lease recovery, telemetry, audit, outbox, and explicit AAOS read-only behavior | All ten scenario steps passed; seven commands reached terminal state (four succeeded and three rejected), the recovery command completed on attempt two, and 25 telemetry observations were retained |
+| 0.17.0 | 4 August 2026 | Added persistent vehicle-scoped test runs, idempotent creation, row-locked optimistic transitions, audit/outbox evidence, Redis Pub/Sub, authenticated WebSocket snapshots and updates, and a reconnecting CarSystemUI live-status card | 60 Python tests and 27 Android tests passed; Ruff, strict mypy, Android lint and debug APK passed; the disposable PostgreSQL/Redis/RabbitMQ/WebSocket scenario passed |
 
 ## How to Use This Workbook
 
@@ -92,6 +93,8 @@ The operator-evidence slice makes permanent rejection and retry exhaustion actio
 
 The command-delivery slice closes the first authorized control loop from ATEP to the Android simulator. An operator with `vehicle_commands:write` creates an idempotent `set_property` request for one vehicle and a module declaring `vehicle.commands.consume`. The gateway atomically claims the oldest available request under a bounded lease; the raw claim token is returned only to that claim and only its SHA-256 digest is stored. Success, validation rejection, and unsafe-state rejection become terminal acknowledgements and versioned outbox evidence. CarSystemUI polls while workload configuration is enabled, accepts a reviewed property allowlist, enforces value and vehicle-state invariants, and refuses to mutate an explicit read-only AAOS source. Six focused Android tests raise that suite to 24; 55 Python tests cover the backend contract. Live `CT-SHOW-010` execution on the `ATEP_AAOS_API35` emulator passed all ten steps: four commands succeeded, three were safely rejected, capability denial returned the stable error, and an abandoned lease recovered on attempt two without creating a duplicate logical command.
 
+The live test-run slice adds an authoritative execution record around that control loop. An operator with `test_runs:write` creates a vehicle-scoped run whose external identifier is idempotent. The lifecycle accepts only queued-to-running-to-terminal transitions. Each mutation locks the row, checks the expected version, and commits status, immutable audit evidence, and a versioned outbox event together. After commit, Redis Pub/Sub projects the update to authenticated WebSocket subscribers; PostgreSQL and the outbox remain authoritative if that projection fails. CarSystemUI uses a separately injected development operator token, receives a snapshot, ignores non-increasing versions, reconnects with bounded exponential delay, and presents connection, suite, status, progress, summary, and version without displaying credentials.
+
 The initial design deliberately starts as a modular monolith rather than a collection of empty microservices. Clear package boundaries and versioned event contracts allow later extraction when scaling, ownership, availability, or release cadence provides a concrete reason. This reduces operational complexity while protecting the intended distributed architecture.
 
 ### Current Increment at a Glance
@@ -103,7 +106,7 @@ The initial design deliberately starts as a modular monolith rather than a colle
 | RBAC data model | Implemented | User, role, permission, and association tables |
 | User administration | Implemented | Create, list, inspect, status, role assignment, and role removal routes |
 | Role catalogue administration | Implemented | Permission listing; role create, page, inspect, update, grant, revoke, and safe delete routes |
-| PostgreSQL persistence | Implemented | SQLAlchemy models and Alembic revisions `0001` through `0008` |
+| PostgreSQL persistence | Implemented | SQLAlchemy models and Alembic revisions `0001` through `0009` |
 | Module registry | Implemented | Persistent metadata, capability catalogue, hash-only workload credentials, heartbeat leases, and automatic reconciliation |
 | Vehicle integration boundary | Implemented initial slice | Vehicle catalogue, lifecycle state, gateway capability authorization, idempotent telemetry, and outbox contract |
 | Android Vehicle Gateway | Implemented initial slice | Changed-property mapping, persistent queue, stable retry identity, bounded rejection storage, HTTP transport, and status UI in the CarSystemUI showcase |
@@ -111,13 +114,14 @@ The initial design deliberately starts as a modular monolith rather than a colle
 | Android background telemetry retry | Implemented and build verified | Unique per-vehicle WorkManager job, connected-network constraint, bounded exponential retry, lifecycle-independent queue flush, six policy tests, and manual process-death scenario |
 | Android telemetry operator evidence | Implemented and build verified | Persistent rejected-event details, unchanged-identity retry, selective discard, attempt/exhaustion state, explicit recovery, five focused tests, and `CT-SHOW-009` |
 | Vehicle command delivery | Implemented initial REST slice | RBAC request, target capability, atomic claim, bounded lease, hash-only claim token, idempotent acknowledgement, safe Android executor, and `CT-SHOW-010` |
+| Test-run orchestration and live status | Implemented initial slice | Persistent lifecycle, independent RBAC, idempotency, optimistic locking, audit/outbox evidence, Redis Pub/Sub, authenticated WebSocket, and CarSystemUI live card |
 | Administrative audit | Implemented | Immutable evidence, indexed bounded search, individual inspection, audited CSV export, and retention baseline |
 | API error contract | Implemented | Application, HTTP, validation, and unexpected-error handlers |
 | Reliable event publication | Implemented | Transactional outbox, resilient RabbitMQ startup, and publisher worker |
 | Redis integration | Implemented | Readiness plus atomic expiring authentication and versioned-API rate-limit counters |
 | Structured logging | Implemented | JSON logs with request correlation context |
 | Container environment | Implemented and locally executed | One-shot migration, API, worker, PostgreSQL, Redis, and RabbitMQ services verified with Docker Compose |
-| Automated verification | Implemented | 55 fast tests plus one expanded disposable black-box integration scenario, 24 Android tests, Ruff, strict mypy, Android lint/build, and CI workflow |
+| Automated verification | Implemented | 60 fast tests plus one expanded disposable black-box integration scenario, 27 Android tests, Ruff, strict mypy, Android lint/build, and CI workflow |
 
 ## 2. Scope and Boundaries
 
@@ -288,7 +292,7 @@ External dashboards, test automation clients, and future ATEP modules call the C
 
 **Rationale.** Android UI concerns, AOSP build cadence, and VHAL permissions differ fundamentally from control-plane persistence and orchestration. A stable public contract permits simulated, emulated, and physical vehicle sources without coupling Android code to backend infrastructure. It also creates a reusable testing boundary for electric, hybrid, and autonomous-vehicle scenarios.
 
-**Consequences.** The current shared module secret is a development-stage workload mechanism and must be protected on the Android side; managed OAuth2 workload tokens or mTLS remain production follow-ups. REST telemetry, command delivery, offline buffering, and CarPropertyManager integration now establish the baseline. WebSocket test-run updates and durable command-acknowledgement buffering remain subsequent slices.
+**Consequences.** The current shared module secret and injected development operator token must be protected on the Android side; managed OAuth2 workload tokens or mTLS remain production follow-ups. REST telemetry, command delivery, offline buffering, CarPropertyManager integration, and authenticated WebSocket test-run updates now establish the baseline. Durable command-acknowledgement buffering remains a subsequent slice.
 
 ### ADR-013 — Leased and Allowlisted Vehicle Commands
 
@@ -611,6 +615,11 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | CORE-F-034 | An operator with `vehicle_commands:write` shall idempotently request a bounded `set_property` command for one vehicle and one capability-authorized target module. | Command API, stable conflict, audit, and requested event | VEH-017 through VEH-019 |
 | CORE-F-035 | A module declaring `vehicle.commands.consume` shall atomically claim one available command under a bounded lease and acknowledge it with a hash-only claim token. | Locked claim query, attempt/lease state, digest verification, and completion event | VEH-020 through VEH-022 |
 | CORE-F-036 | The Android gateway shall execute only allowlisted simulator properties, reject invalid or unsafe transitions, and refuse mutation of a read-only AAOS source. | Android executor, coordinator, terminal acknowledgement, and event history | VEH-023, `CT-SHOW-010` |
+| CORE-F-037 | Authorized operators shall idempotently create and query bounded vehicle-scoped test runs. | Test-run router, service, model, schemas, and migration `0009` | VEH-024, VEH-025 |
+| CORE-F-038 | Test-run creation and effective transitions shall atomically append audit and outbox evidence. | SQLAlchemy unit of work, audit service, and transactional outbox | VEH-026 |
+| CORE-F-039 | Test runs shall enforce reviewed transitions and expected-version concurrency. | Row lock, transition map, stable version/state conflicts | VEH-027, VEH-028 |
+| CORE-F-040 | Authorized active users shall receive a snapshot and live versioned test-run updates over WebSocket. | Bearer revalidation, Redis Pub/Sub, snapshot/update envelope | VEH-029 |
+| CORE-F-041 | CarSystemUI shall display and safely reconcile live test-run state. | OkHttp client, version reducer, reconnect policy, and Compose card | VEH-030 |
 
 ### 8.2 Non-Functional Requirements
 
@@ -635,6 +644,7 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | CORE-NF-019 | Background delivery control | Unique work per vehicle, network constraint, queue-order retention, disabled-mode suppression, exponential backoff, and eight-attempt bound | VEH-015, `CT-SHOW-008` |
 | CORE-NF-020 | Telemetry disposition safety | No silent restart after exhaustion, unchanged identity on retry, item-scoped discard, persistent evidence, and no credential display | VEH-016, `CT-SHOW-009` |
 | CORE-NF-021 | Command-delivery safety | Target scope, capability check, atomic claim, bounded lease, hash-only token, idempotent terminal state, allowlist, and vehicle-state invariants | VEH-017 through VEH-023, `CT-SHOW-010` |
+| CORE-NF-022 | Live test-run consistency | PostgreSQL/outbox authority, row-locked optimistic transitions, best-effort Redis projection, authenticated subscription, monotonic client deduplication | VEH-024 through VEH-030 |
 
 ### 8.3 Definition of Done for an Increment
 
@@ -659,7 +669,7 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | Unit and API contract suite | Passed | 50 tests passed |
 | Ruff lint | Passed | No findings after corrections |
 | mypy strict analysis | Passed | Strict analysis passed for application and test modules |
-| Alembic migration chain | Passed | Revisions `0001` through `0008` applied successfully to a clean PostgreSQL database in the disposable Docker topology |
+| Alembic migration chain | Passed | Revisions `0001` through `0009` applied successfully to a clean PostgreSQL database in the disposable Docker topology |
 | Project metadata | Passed | `pyproject.toml` parsed successfully |
 | Compose syntax | Passed | YAML loaded successfully |
 | Application contract load | Passed | Authentication, health, identity, audit, registry, vehicle, telemetry, command request/claim/acknowledgement, bounded pagination, and gateway headers are present in OpenAPI |
@@ -676,7 +686,8 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | Module-registry integration | Passed | The disposable scenario verified migration `0005`, registration, duplicate conflict, capability filter, status/version update, capability declaration/removal, negative RBAC, four audit actions, and four outbox events |
 | Operational-registry integration | Passed | The disposable scenario verified migration `0006`, raw-once credential issuance, hash-only storage, invalid and valid heartbeat, lease renewal, background expiry, system audit, and availability outbox events |
 | Vehicle-gateway integration | Passed | The disposable scenario verified migration `0007`, vehicle registration/status, workload capability authorization, accepted telemetry, exact retry deduplication, conflicting retry rejection, bounded query, PostgreSQL state, audit, and outbox atomicity |
-| Vehicle-command integration | Passed | Disposable HTTP/PostgreSQL execution verified idempotent request/conflict, target capability, hash-only claim token, bounded lease, attempt count, authenticated terminal acknowledgement, duplicate acknowledgement, list query, and three outbox transitions; the same contracts are covered within the 55-test Python suite |
+| Vehicle-command integration | Passed | Disposable HTTP/PostgreSQL execution verified idempotent request/conflict, target capability, hash-only claim token, bounded lease, attempt count, authenticated terminal acknowledgement, duplicate acknowledgement, list query, and three outbox transitions; the current Python suite contains 60 tests |
+| Test-run live integration | Passed | Disposable HTTP/PostgreSQL/Redis execution verified migration `0009`, RBAC catalogue, idempotent creation/conflict, authenticated snapshot, live running/passed updates, exact retry, stale-version conflict, illegal terminal transition, bounded filtering, audit, and outbox publication |
 | Android Vehicle Gateway build | Passed | CarSystemUI `showcase` produced a debug APK with the ATEP transport, persistent queue, status UI, and debug-only cleartext emulator policy |
 | Android Vehicle Gateway and property-source unit suite | Passed | Nine tests verified gateway mapping/delivery plus simulator mutation, AAOS conversion, battery percentage, and unavailable-VHAL behavior |
 | Android AAOS source build and lint | Passed | The standalone APK compiled its runtime CarPropertyManager compatibility bridge, required permission declarations, source provenance UI, and read-only AAOS mode without lint findings |
@@ -1000,6 +1011,13 @@ The automated local run proves clean-database repeatability and the happy-path i
 | VEH-021 | Claim available or lease-expired work concurrently. | Locked oldest-first selection returns one command, increments attempt count, grants a 10–300-second lease, rotates the claim token, and stores only its SHA-256 digest. | Implemented service and migration evidence / P0 |
 | VEH-022 | Acknowledge success/rejection, retry the exact acknowledgement, and submit an invalid or expired claim token. | Terminal state and `atep.vehicle.command.completed.v1` are written once; exact retry is idempotent; invalid/expired claims return a stable conflict. | Implemented unit and successful/duplicate Docker transaction evidence / P0 |
 | VEH-023 | Apply allowed, out-of-range, unsafe, unknown, and read-only-source commands in CarSystemUI. | Allowed simulator state changes and emits telemetry; invalid/unsafe/unknown/AAOS mutations remain unchanged and receive a stable rejected acknowledgement. | Six Android tests and live `CT-SHOW-010` passed / P0 |
+| VEH-024 | Create, page, filter, and inspect a test run with independent read/write permissions. | Authorized requests return bounded canonical records; missing permission returns HTTP 403. | Service and Docker integration evidence passed / P0 |
+| VEH-025 | Repeat an exact test-run creation and reuse the `run_id` with changed input. | Exact retry returns the original record; changed input returns stable HTTP 409 `test_run_conflict`. | Unit and Docker integration evidence passed / P0 |
+| VEH-026 | Inspect creation and status transactions. | State, immutable audit, and `atep.test_run.created.v1` or `atep.test_run.status_changed.v1` share one commit. | Unit and disposable outbox integration evidence passed / P0 |
+| VEH-027 | Submit valid queued-to-running-to-passed/failed/cancelled transitions and invalid shortcuts or terminal changes. | Valid timestamps, progress, and version advance once; invalid transitions return `test_run_state_conflict`. | Unit, validation, and Docker integration evidence passed / P0 |
+| VEH-028 | Race or retry status changes with stale expected versions. | Row locking prevents lost updates; changed stale input returns `test_run_version_conflict`; exact retry remains idempotent. | Unit and Docker integration evidence passed / P0 |
+| VEH-029 | Subscribe with missing, invalid, inactive, unauthorized, and authorized bearer tokens. | Connections close with 4401/4403 as applicable; authorized clients receive snapshot, heartbeat, and committed updates without Redis access. | Auth implementation and successful Docker WebSocket evidence; focused negative handshake expansion planned / P0 |
+| VEH-030 | Deliver duplicate, out-of-order, heartbeat, disconnect, and reconnect events to CarSystemUI. | Non-increasing versions are ignored, heartbeat retains the latest state, and bounded reconnect preserves the visible snapshot. | Three Android unit tests, lint, and debug build passed / P0 |
 
 ## 12. Suggested CI/CD Quality Pipeline
 
@@ -1075,7 +1093,7 @@ Pipeline artifacts should include test reports, coverage, OpenAPI schema, migrat
 - immutable operator-decision evidence and live emulator/VHAL-to-ATEP execution — next;
 - area-aware door/seat mapping and typed `subscribePropertyEvents` in the AOSP platform build — planned;
 - authorized leased test-command delivery with safe Android execution — implemented and verified by live `CT-SHOW-010` emulator evidence;
-- WebSocket test-run updates — planned after REST command evidence;
+- production WebSocket connection limits, revocation fan-out, metrics, and resume-from-version replay;
 - vehicle/test configuration profiles;
 - scheduler boundary and job lifecycle;
 - object-storage abstraction for test artifacts;
@@ -1207,10 +1225,11 @@ Application rollback is safe only when the previous version is compatible with t
 | Distributed Redis rate limiting | `src/atep/core/rate_limit.py`, typed settings, and application dependencies |
 | Module registry, heartbeat, and reconciliation | `src/atep/registry/`, including `src/atep/registry/reconciler.py`; migrations `0005_module_registry.py` and `0006_module_heartbeat_leases.py`; and module API contracts |
 | Vehicle catalogue, telemetry, and leased commands | `src/atep/vehicles/`, migrations `0007_vehicle_telemetry.py` and `0008_vehicle_command_delivery.py`, API contracts, `tests/test_vehicle_telemetry.py`, and `tests/test_vehicle_commands.py` |
+| Test-run lifecycle and live updates | `src/atep/test_runs/`, migration `0009_test_runs.py`, `tests/test_test_runs.py`, and the WebSocket path in `tests/integration/test_identity_flow.py` |
 | Android Vehicle Gateway, property sources, retry worker, operator evidence, and command executor | `CarSystemUI_android/showcase/app/.../gateway/`, `showcase/app/.../vehicle/`, Android unit tests, `docs/ATEP_VEHICLE_GATEWAY.md`, and `docs/TEST_CASE_CT_SHOW_006.md` through `docs/TEST_CASE_CT_SHOW_010.md` in the companion repository |
 | Immutable audit model, query/export APIs, and recorder | `src/atep/audit/` |
 | Event outbox and worker | `src/atep/events/` |
-| Database migrations | `migrations/versions/0001_core_platform.py` through `0008_vehicle_command_delivery.py` |
+| Database migrations | `migrations/versions/0001_core_platform.py` through `0009_test_runs.py` |
 | Refresh-session implementation | `src/atep/identity/sessions.py`, identity models, schemas, and router |
 | Local service topology | `compose.yaml` and `Dockerfile` |
 | Disposable integration topology and runner | `compose.integration.yaml` and `tools/run_integration_tests.ps1` |

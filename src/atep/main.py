@@ -20,6 +20,8 @@ from atep.identity.router import router as identity_router
 from atep.identity.users_router import router as users_router
 from atep.registry.reconciler import run_registry_reconciler
 from atep.registry.router import router as registry_router
+from atep.test_runs.router import router as test_runs_router
+from atep.test_runs.router import websocket_router as test_runs_websocket_router
 from atep.vehicles.router import router as vehicles_router
 
 settings = get_settings()
@@ -62,6 +64,8 @@ app.include_router(roles_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(audit_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(registry_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(vehicles_router, prefix="/api/v1", dependencies=rate_limited)
+app.include_router(test_runs_router, prefix="/api/v1", dependencies=rate_limited)
+app.include_router(test_runs_websocket_router, prefix="/api/v1")
 install_exception_handlers(app)
 
 
