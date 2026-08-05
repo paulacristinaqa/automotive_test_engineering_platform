@@ -149,8 +149,9 @@ flowchart LR
    instruments the replaceable artifact-store protocol with fixed operation/outcome labels, byte
    counters, and optional capacity reporting. Keys, filenames, endpoints, exception messages, and
    domain identifiers never enter labels. Telemetry failure must not alter authoritative state.
-29. **Supply-chain inputs are immutable and independently evidenced.** Runtime and development
-   dependency graphs, including build requirements, are committed with SHA-256 hashes. The runtime
+29. **Supply-chain inputs are immutable and independently evidenced.** Linux x86-64/Python 3.12 is
+   the canonical dependency-lock platform because it matches the runtime container. Runtime and
+   development graphs, including build requirements, are committed with SHA-256 hashes. The runtime
    base image is digest-pinned and third-party workflow actions use full commit SHAs. Separate CI
    jobs scan repository history, Python dependencies, Python source, and the built image while
    retaining CycloneDX SBOM evidence. Dependabot proposes reviewed updates without weakening pins.

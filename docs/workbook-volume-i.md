@@ -377,7 +377,7 @@ External dashboards, test automation clients, and future ATEP modules call the C
 
 ### ADR-021 — Immutable Supply-Chain Inputs with Independent Evidence
 
-**Decision.** Commit separate runtime and development dependency graphs, including build requirements, with SHA-256 hashes. Install the application without dependency re-resolution. Pin the runtime base image by manifest digest and every third-party workflow action by full commit SHA. Run history/secret, dependency, source, and image analysis in a dedicated least-privilege workflow; retain CycloneDX Python and image SBOMs; fail the image job for high or critical known vulnerabilities; and use Dependabot only to propose reviewed updates.
+**Decision.** Use Linux x86-64/Python 3.12 as the canonical lock platform because it matches the runtime container. Commit separate runtime and development dependency graphs, including build requirements, with SHA-256 hashes. Retain the canonical regenerated pair before enforcing byte-for-byte drift. Install the application without dependency re-resolution. Pin the runtime base image by manifest digest and every third-party workflow action by full commit SHA. Run history/secret, dependency, source, and image analysis in a dedicated least-privilege workflow; retain CycloneDX Python and image SBOMs; fail the image job for high or critical known vulnerabilities; and use Dependabot only to propose reviewed updates.
 
 **Rationale.** Version ranges and mutable tags make two nominally identical builds capable of consuming different code. Immutable inputs reduce that ambiguity, while multiple scanners and machine-readable inventories provide complementary evidence at repository, package, source, and image boundaries. Separating security analysis from application integration keeps evidence and permissions explicit.
 
@@ -782,7 +782,7 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | CORE-NF-039 | Dependency metric cardinality | Three fixed dependency labels and two fixed outcomes | OBS-025 |
 | CORE-NF-040 | Storage metric privacy | Fixed operation/outcome/direction values; no object or domain identifiers | OBS-026 |
 | CORE-NF-041 | Observability non-interference | Capacity refresh and metric recording cannot alter storage or readiness semantics | OBS-026, architecture review |
-| CORE-NF-042 | Build reproducibility | Hash verification and no dependency re-resolution from reviewed manifests | SECOPS-002, SECOPS-009 |
+| CORE-NF-042 | Build reproducibility | Canonical Linux x86-64/Python 3.12 locks, hash verification, and no dependency re-resolution from reviewed manifests | SECOPS-002, SECOPS-009 |
 | CORE-NF-043 | CI least privilege | Read-only default permissions, job-scoped CodeQL publication permission, and full-SHA actions | SECOPS-003, SECOPS-009 |
 | CORE-NF-044 | Vulnerability evidence | Fourteen-day SBOM retention and a high/critical image gate with reviewed exceptions only | SECOPS-002, SECOPS-004 |
 

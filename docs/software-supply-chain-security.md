@@ -6,6 +6,11 @@ This baseline makes ATEP builds reviewable, repeatable, and independently eviden
 the development pipeline; it does not claim production certification or eliminate the need to
 review findings.
 
+Linux x86-64 with Python 3.12 is the canonical lock platform because it matches the container and
+hosted CI runtime. The security workflow retains its regenerated lock pair for seven days before
+enforcing a byte-for-byte drift check. Windows developers install the committed Linux-compatible
+graph; dependency updates are accepted only from the canonical workflow evidence.
+
 ## Enforced controls
 
 | Surface | Control | Evidence |

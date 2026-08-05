@@ -40,11 +40,21 @@ jobs:
         run: |
           python -m pip install --require-hashes -r requirements-dev.lock
           python -m pip install --no-deps --no-build-isolation -e .
-      - name: Verify committed locks are current
+      - name: Regenerate canonical Linux dependency locks
         run: |
           pip-compile --all-build-deps --allow-unsafe --generate-hashes --no-emit-index-url --no-emit-trusted-host --output-file=requirements.lock --strip-extras pyproject.toml
           pip-compile --all-build-deps --allow-unsafe --generate-hashes --no-emit-index-url --no-emit-trusted-host --extra=dev --output-file=requirements-dev.lock --strip-extras pyproject.toml
-          git diff --exit-code -- requirements.lock requirements-dev.lock
+      - name: Retain canonical Linux dependency locks
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: atep-canonical-linux-locks
+          path: |
+            requirements.lock
+            requirements-dev.lock
+          if-no-files-found: error
+          retention-days: 7
+      - name: Verify committed locks are current
+        run: git diff --exit-code -- requirements.lock requirements-dev.lock
       - name: Audit Python dependencies and generate CycloneDX SBOM
         run: python -m pip_audit --require-hashes --disable-pip -r requirements.lock --progress-spinner off --format cyclonedx-json --output atep-python.cdx.json
       - name: Retain Python dependency SBOM

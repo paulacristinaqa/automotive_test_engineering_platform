@@ -125,6 +125,6 @@
 | CORE-NF-039 | Dependency metric cardinality | dependency labels are restricted to postgres, redis, and rabbitmq; outcomes are ready or unavailable |
 | CORE-NF-040 | Storage metric privacy | operation labels are fixed; object keys, filenames, artifact/run identifiers, endpoints, and exception messages are forbidden |
 | CORE-NF-041 | Observability non-interference | capacity refresh and metric recording must not change object persistence, transaction success, or dependency readiness semantics |
-| CORE-NF-042 | Build reproducibility | identical reviewed manifests install the same dependency artifacts and reject absent or mismatched hashes |
+| CORE-NF-042 | Build reproducibility | Linux x86-64/Python 3.12 is the canonical lock platform; identical reviewed manifests install the same dependency artifacts and reject absent or mismatched hashes |
 | CORE-NF-043 | CI least privilege | workflow permissions are read-only by default, elevated only per job, and third-party actions are pinned to full commit SHAs |
 | CORE-NF-044 | Vulnerability evidence | Python and image SBOMs are retained for 14 days; known high or critical image vulnerabilities fail CI unless a documented, time-bounded exception is reviewed |
