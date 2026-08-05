@@ -119,6 +119,13 @@ flowchart LR
    expose that key or derive a path from the client filename. A failed metadata transaction
    triggers best-effort object cleanup. Production uses the same interface with durable S3-style
    object storage, lifecycle policy, encryption, malware scanning, and orphan reconciliation.
+24. **Observability is correlated, bounded, and operationally isolated.** Every HTTP request
+   receives a trace context and retains a caller's valid W3C parent. Structured logs, spans, and
+   response headers share trace/correlation identifiers. Prometheus metrics label only the HTTP
+   method, FastAPI route template, status, and bounded exception type; concrete paths and domain
+   identifiers never enter labels. Trace recording and parent-based sampling are configurable,
+   and OTLP export uses a replaceable Collector boundary. The provisioned Prometheus, Grafana,
+   and Collector topology is optional and remains outside normal developer startup.
 
 ## Initial bounded contexts
 
@@ -134,6 +141,7 @@ flowchart LR
 | Environment profiles | immutable, versioned vehicle/test baselines and reproducibility inputs | PostgreSQL |
 | Test jobs | durable scheduling, cancellation, due-work ownership, and TestRun dispatch | PostgreSQL |
 | Test artifacts | immutable TestRun evidence metadata, integrity, and binary-object abstraction | PostgreSQL + object storage |
+| Observability | bounded HTTP metrics, trace propagation/export, cross-signal correlation, and dashboards | Prometheus + OpenTelemetry Collector + Grafana |
 
 Future volumes add contexts without importing another context's persistence models. Shared
 contracts live under an explicit version and remain backward compatible during migration.
@@ -177,5 +185,8 @@ contracts live under an explicit version and remain backward compatible during m
 - Artifact upload and retrieval use independent `test_artifacts:write` and
   `test_artifacts:read` permissions. Uploads are bounded, filenames are portable metadata only,
   and downloads disclose integrity headers rather than internal storage locations.
+- `/metrics`, Prometheus, Grafana, Collector, and OTLP are management-plane surfaces. Local
+  anonymous Grafana access is disposable-only; production requires network isolation, TLS,
+  workload authentication, access audit, and retention controls.
 - Production follow-ups include proxy-aware client attribution, capacity tuning,
   secret-manager integration, and TLS/mTLS between workloads.

@@ -88,6 +88,18 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
         await queue.bind(exchange, routing_key="atep.identity.user.created.v1")
 
         async with httpx.AsyncClient(base_url=api_url, timeout=10) as client:
+            propagated_trace_id = "11111111111111111111111111111111"
+            live_response = await client.get(
+                "/health/live",
+                headers={"traceparent": f"00-{propagated_trace_id}-2222222222222222-01"},
+            )
+            assert live_response.status_code == 200, live_response.text
+            assert live_response.headers["x-trace-id"] == propagated_trace_id
+            metrics_response = await client.get("/metrics")
+            assert metrics_response.status_code == 200, metrics_response.text
+            assert "atep_http_requests_total" in metrics_response.text
+            assert 'route="/health/live"' in metrics_response.text
+
             token_response = await client.post(
                 "/api/v1/auth/token",
                 data={"username": admin_email, "password": admin_password},

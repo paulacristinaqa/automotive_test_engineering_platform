@@ -1,0 +1,46 @@
+services:
+  api:
+    environment:
+      ATEP_TRACING_ENABLED: "true"
+      ATEP_OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+      ATEP_OTEL_TRACE_SAMPLE_RATIO: "1.0"
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  prometheus:
+    image: prom/prometheus:v3.13.2
+    profiles: [observability]
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    volumes:
+      - ./deploy/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      api:
+        condition: service_started
+
+  grafana:
+    image: grafana/grafana:13.1.2
+    profiles: [observability]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./deploy/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      prometheus:
+        condition: service_started
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.158.0
+    profiles: [observability]
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./deploy/observability/otel-collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "4318:4318"

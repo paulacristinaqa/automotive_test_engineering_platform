@@ -2,11 +2,11 @@
 
 **Subtitle:** Architecture, implementation record, verification strategy, and engineering evidence  
 **Project:** Automotive Test Engineering Platform (ATEP)  
-**Document version:** 0.20.0
+**Document version:** 0.21.0
 
 **Baseline date:** 4 August 2026
 
-**Status:** Living engineering document — immutable test-artifact storage boundary implemented
+**Status:** Living engineering document — correlated OpenTelemetry and Prometheus baseline implemented
 **Language:** English
 
 ## Document Purpose
@@ -54,6 +54,7 @@ The document distinguishes three types of statements:
 | 0.18.0 | 5 August 2026 | Added immutable environment profiles for electric, hybrid, and autonomous test contexts, independent read/manage RBAC, bounded configuration, auditable lifecycle events, migration `0010`, and versioned TestRun snapshots | 64 Python tests passed; Ruff and strict mypy passed; the monitored suite peaked at 163.9 MiB Python working memory with no Gradle, Docker, emulator, or LibreOffice workload |
 | 0.19.0 | 5 August 2026 | Added persistent scheduled test jobs, independent read/manage RBAC, idempotent creation, optimistic cancellation, bounded multi-instance-safe due selection, atomic TestRun dispatch, migration `0011`, audit, and outbox evidence | 69 fast Python tests, Ruff, and strict mypy passed locally; the monitored suite completed in 1.77 seconds with 2.72 CPU-seconds and 169.6 MiB peak Python memory; disposable Docker integration is delegated to CI |
 | 0.20.0 | 5 August 2026 | Added immutable TestRun artifacts, a replaceable object-store protocol, atomic filesystem promotion, bounded multipart upload, SHA-256 integrity, independent read/write RBAC, protected download, migration `0012`, audit, and outbox evidence | 74 fast Python tests, Ruff, and strict mypy passed locally; the monitored suite completed in 1.79 seconds with 2.91 CPU-seconds and 171.1 MiB peak Python memory; disposable upload/download integration is delegated to CI |
+| 0.21.0 | 5 August 2026 | Added bounded Prometheus HTTP metrics, OpenTelemetry server spans, W3C trace propagation, correlated log/response identifiers, configurable parent-based sampling and OTLP/HTTP export, an optional pinned Collector/Prometheus/Grafana topology, and a provisioned overview dashboard | 80 fast Python tests, Ruff, strict mypy, focused propagation/cardinality tests, and Compose validation passed locally; the monitored suite completed in 1.96 seconds with 2.98 CPU-seconds and 178.0 MiB peak Python memory; Docker scrape evidence is delegated to CI |
 
 ## How to Use This Workbook
 
@@ -123,13 +124,14 @@ The initial design deliberately starts as a modular monolith rather than a colle
 | Environment profiles | Implemented initial slice | Immutable EV/hybrid/autonomous context, simulator/AAOS source, bounded configuration, lifecycle RBAC, audit/outbox, and TestRun snapshot |
 | Test-job scheduler | Implemented initial slice | Persistent idempotent schedule, bounded queries, optimistic cancellation, `SKIP LOCKED` due selection, atomic TestRun dispatch, audit, and outbox |
 | Test-artifact storage | Implemented initial slice | Immutable metadata, replaceable object-store interface, streaming filesystem adapter, SHA-256, bounded multipart upload, independent RBAC, audit, outbox, and protected download |
+| Platform observability | Implemented initial slice | Route-template HTTP metrics, W3C trace context, trace/correlation response and log context, OTLP/HTTP export, optional Collector/Prometheus/Grafana stack, and versioned dashboard |
 | Administrative audit | Implemented | Immutable evidence, indexed bounded search, individual inspection, audited CSV export, and retention baseline |
 | API error contract | Implemented | Application, HTTP, validation, and unexpected-error handlers |
 | Reliable event publication | Implemented | Transactional outbox, resilient RabbitMQ startup, and publisher worker |
 | Redis integration | Implemented | Readiness plus atomic expiring authentication and versioned-API rate-limit counters |
 | Structured logging | Implemented | JSON logs with request correlation context |
 | Container environment | Implemented and locally executed | One-shot migration, API, worker, PostgreSQL, Redis, and RabbitMQ services verified with Docker Compose |
-| Automated verification | Implemented | 74 fast tests plus one expanded disposable black-box integration scenario, 27 Android tests, Ruff, strict mypy, Android lint/build, and CI workflow |
+| Automated verification | Implemented | 80 fast tests plus one expanded disposable black-box integration scenario, 27 Android tests, Ruff, strict mypy, Android lint/build, and CI workflow |
 
 ## 2. Scope and Boundaries
 
@@ -143,6 +145,7 @@ The initial design deliberately starts as a modular monolith rather than a colle
 - message broker and event contracts;
 - transactional event publication;
 - structured logs and correlation identifiers;
+- bounded Prometheus metrics, W3C trace propagation, configurable OTLP export, and versioned dashboards;
 - liveness and readiness probes;
 - local container orchestration;
 - engineering quality gates and verification evidence.
@@ -151,7 +154,7 @@ The initial design deliberately starts as a modular monolith rather than a colle
 
 - automated immutable audit archival, restore verification, legal-hold workflow, and disposition tooling;
 - proxy-aware client attribution and production rate-limit tuning;
-- OpenTelemetry traces and Prometheus metrics;
+- production trace retention, authenticated telemetry transport, SLO alerts, and domain-specific metrics;
 - Kubernetes deployment and workload identity;
 - secret-manager integration and service-to-service mTLS;
 - vehicle, ECU, CAN, diagnostics, test execution, AI, and dashboard domain behavior.
@@ -180,7 +183,7 @@ External dashboards, test automation clients, and future ATEP modules call the C
 | Event outbox | Atomic recording of integration events | PostgreSQL |
 | Outbox worker | Ordered batch selection and durable broker publication | RabbitMQ, aio-pika |
 | Ephemeral services | Atomic rate limits plus future cache, locks, and coordination | Redis |
-| Observability foundation | Structured logs and correlation propagation | structlog |
+| Observability foundation | Structured logs, W3C trace propagation, OTLP export, bounded metrics, and dashboards | structlog + OpenTelemetry + Prometheus + Grafana |
 | Local platform | Repeatable service topology and dependency health | Docker Compose |
 
 ### 3.3 Request and Event Flow
@@ -326,6 +329,14 @@ External dashboards, test automation clients, and future ATEP modules call the C
 
 **Consequences.** The metadata/audit/outbox transaction starts only after object creation succeeds and removes the new object on a detected database failure. A process crash inside that small boundary can leave an unreferenced object, so production requires orphan reconciliation. Multi-replica deployment also requires shared durable object storage, encryption, retention/lifecycle rules, malware scanning, quotas, and proxy-level request bounds; the local filesystem adapter is a development and disposable-integration implementation.
 
+### ADR-016 — Correlated Signals with Bounded Metric Cardinality
+
+**Decision.** Instrument HTTP centrally with OpenTelemetry server spans and a dedicated Prometheus registry. Accept valid W3C `traceparent`, return `X-Trace-ID`, and bind trace/span IDs alongside the existing correlation ID. Metric labels use only HTTP method, FastAPI route template, status, and bounded exception type. Tracing uses parent-based ratio sampling and exports through configurable OTLP/HTTP; the normal Compose topology does not start observability services.
+
+**Rationale.** Logs alone do not quantify latency, traffic, saturation, or error rates, while raw paths and domain identifiers in metric labels create unbounded series and privacy risk. Standard propagation and export keep the backend replaceable and allow CarSystemUI, gateways, API, workers, and future simulators to share one trace model.
+
+**Consequences.** `/metrics` and the local Grafana/Prometheus/Collector ports must be isolated as management-plane surfaces. The development Collector debug exporter is non-durable. Production still requires authenticated TLS, a trace backend, retention/access policy, alert rules, SLO burn-rate windows, capacity tests, and domain metrics for WebSockets, scheduler, outbox, dependencies, and artifact storage.
+
 ## 5. Technology Stack and Rationale
 
 | Technology | Role | Why it was selected | Engineering consideration |
@@ -343,6 +354,9 @@ External dashboards, test automation clients, and future ATEP modules call the C
 | PyJWT | Token implementation | Standards-based JWT encode/decode support | Algorithms must be allow-listed; claims and secrets require rotation strategy |
 | pwdlib / Argon2 | Credential hashing | Modern password-hashing defaults and safe verification API | Parameters should be benchmarked and rehashed as policy evolves |
 | structlog | Structured logging | Machine-readable JSON and context binding | Sensitive values must never be logged |
+| OpenTelemetry | Distributed tracing | Standard W3C context, sampling, resource identity, and replaceable OTLP export | Export must be authenticated, sampled, and failure-isolated in production |
+| Prometheus client | Bounded service metrics | Standard counters, gauges, histograms, and scrape format | Labels must remain low-cardinality and free of domain identifiers |
+| Grafana | Versioned operational views | Provisioned dashboards and PromQL visualization | Anonymous local access is forbidden in deployed environments |
 | Docker / Compose | Local topology | Repeatable development services and dependency health ordering | Production hardening requires image scanning and orchestration policies |
 | pytest | Automated tests | Concise unit/integration testing and fixture ecosystem | Integration suites should use disposable infrastructure |
 | Ruff | Static quality gate | Fast linting and consistent formatting | The rule set should evolve without disabling meaningful findings globally |
@@ -656,6 +670,11 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | CORE-F-051 | Exact artifact retries shall be idempotent and changed reuse of an identifier shall fail stably. | SHA-256/metadata comparison and scoped uniqueness | ART-002 |
 | CORE-F-052 | Stored artifact metadata shall atomically append audit and outbox evidence after object creation. | SQLAlchemy unit of work and best-effort object rollback | ART-003, ART-007 |
 | CORE-F-053 | Downloads shall retain safe filename/media metadata and expose integrity without leaking object keys. | Protected streaming response, ETag, SHA-256 header, and response schema | ART-004, ART-006 |
+| CORE-F-054 | Enabled deployments shall expose bounded Prometheus HTTP, process, and build metrics. | Dedicated registry, middleware, and internal scrape endpoint | OBS-006, OBS-009 |
+| CORE-F-055 | HTTP tracing shall honor W3C parents and return the effective trace ID. | OpenTelemetry server span and propagation middleware | OBS-007 |
+| CORE-F-056 | Logs, spans, and responses shall share safe correlation, trace, and span identifiers. | Structlog context binding and span attributes | OBS-002, OBS-003, OBS-007 |
+| CORE-F-057 | Trace recording, sampling, service identity, and OTLP/HTTP export shall be environment-configured. | Typed settings, parent-based sampler, and batch exporter | OBS-008 |
+| CORE-F-058 | A pinned optional Collector/Prometheus/Grafana topology and dashboard shall be versioned and validated. | Compose overlay, provisioning, dashboard JSON, and CI config gate | OBS-009, OBS-010 |
 
 ### 8.2 Non-Functional Requirements
 
@@ -685,6 +704,9 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | CORE-NF-024 | Scheduler consistency | Bounded oldest-first batches, row ownership with `SKIP LOCKED`, and atomic job/run/evidence state | JOB-005, JOB-006 |
 | CORE-NF-025 | Artifact integrity | Configurable size bound, streaming SHA-256, immutable identifiers, and verified download metadata | ART-001 through ART-004 |
 | CORE-NF-026 | Storage isolation | Generated object keys, root-escape rejection, no public key disclosure, and independent RBAC | ART-004 through ART-006 |
+| CORE-NF-027 | Metric cardinality | Route templates and bounded protocol labels; no raw paths, domain IDs, email, filename, query, body, or credential labels | OBS-006 |
+| CORE-NF-028 | Observability isolation | Metrics, dashboards, scrape and OTLP surfaces remain on authenticated internal management networks | Architecture/security review and OBS-009 |
+| CORE-NF-029 | Telemetry overhead | Disabled/non-recording mode, parent-based ratio sampling, batch export, Collector memory bound, and no business-state dependency | OBS-008, performance hardening |
 
 ### 8.3 Definition of Done for an Increment
 
@@ -780,10 +802,15 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | Module registration atomicity | Confirm registration stages one module, initial capabilities, one audit record, and `atep.platform.module.registered.v1` in one unit of work | Passed |
 | Capability catalogue lifecycle | Confirm declaration and removal update the module and append the corresponding audit and outbox evidence | Passed |
 | Module registry RBAC and API contract | Confirm independent read/manage denial and bounded discovery contracts in OpenAPI | Passed |
+| HTTP metric cardinality | Confirm concrete resource identifiers never appear in labels and route templates remain bounded | Passed |
+| W3C trace propagation | Confirm valid parent trace/span linkage and `X-Trace-ID` response correlation | Passed |
+| Exception observability | Confirm an unhandled exception increments its counter and marks the server span as error | Passed |
+| Observability assets | Confirm dashboard JSON, PromQL signals, internal targets, and Collector memory limiter are versioned | Passed |
+| Optional topology validation | Confirm the merged Compose model is valid without starting or pulling observability containers | Passed with a non-blocking local Docker-config access warning |
 
 ### 9.3 Evidence Limitations
 
-The automated local run proves clean-database repeatability and the happy-path interaction among PostgreSQL, Redis, RabbitMQ, migrations, API, and publisher worker on one developer workstation. The CI workflow is defined but has not yet produced remote execution evidence. Broker/database outage recovery, sustained retry behavior, multi-replica limiter concurrency, production availability, latency objectives, security certification, and safety compliance remain unproven.
+The fast local suite and repeated remote disposable CI runs prove clean-database repeatability and the happy-path interaction among PostgreSQL, Redis, RabbitMQ, migrations, API, publisher worker, metrics scrape, artifact storage, and trace propagation. The optional Prometheus/Grafana/Collector images were configuration-validated but deliberately not started on the resource-constrained workstation. Live dashboard inspection, durable trace storage, telemetry failure injection, sustained load/cardinality, broker/database outage recovery, multi-replica concurrency, production availability, SLOs, security certification, and safety compliance remain unproven.
 
 ## 10. Test Strategy
 
@@ -949,11 +976,16 @@ The automated local run proves clean-database repeatability and the happy-path i
 | RES-002 | Introduce network latency to each dependency. | Readiness timeouts remain bounded and request threads are not exhausted. | Planned / P1 |
 | RES-003 | Exhaust the database connection pool. | Controlled failures occur, logs identify saturation, and service recovers. | Planned / P1 |
 | RES-004 | Fill the broker or reject publications. | Worker retains unpublished rows and emits actionable diagnostics. | Planned / P1 |
-| OBS-001 | Validate structured log format. | Every log line is valid JSON with timestamp and level. | Planned / P1 |
-| OBS-002 | Trace one correlation ID across request and outbox message. | The same ID is discoverable in API logs, database event, and broker envelope. | Planned / P0 |
-| OBS-003 | Trigger an application exception. | Error is logged with safe context and correlation ID, without secrets. | Planned / P0 |
+| OBS-001 | Validate structured log format. | Every application log line is valid JSON with timestamp and level. | Structlog JSON configuration implemented; capture assertion expansion planned / P1 |
+| OBS-002 | Trace one correlation ID across request and outbox message. | The same ID is discoverable in API logs, span attributes, database event, and broker envelope. | Correlation propagation and span attribute implemented; broker-to-trace linking expansion planned / P0 |
+| OBS-003 | Trigger an application exception. | Error is counted, span-marked, and logged with safe correlation/trace context without secrets. | Exception counter and span-error test passed; log capture expansion planned / P0 |
 | OBS-004 | Detect an aging outbox backlog. | Metric or query crosses threshold and raises an alert. | Planned after metrics / P1 |
 | OBS-005 | Validate readiness logging during dependency outage. | State change is diagnosable without excessive repetitive noise. | Planned / P2 |
+| OBS-006 | Request concrete resource IDs and inspect Prometheus series. | Labels contain route templates and bounded method/status values; concrete IDs never appear. | Focused cardinality test passed / P0 |
+| OBS-007 | Send no parent and a valid W3C `traceparent`. | A server span and 32-character `X-Trace-ID` are created; valid parent trace/span linkage is preserved. | Unit and Docker propagation evidence / P0 |
+| OBS-008 | Configure tracing off, sample ratios, missing exporter, and OTLP endpoint. | Disabled mode exports nothing; bounds are validated; enabled export batches to the configured Collector without changing requests. | Typed settings and implementation passed; collector failure injection planned / P1 |
+| OBS-009 | Scrape `/metrics` directly and through provisioned Prometheus. | Standard content is returned; Prometheus target is healthy; management endpoint remains outside public OpenAPI. | Unit, Docker direct-scrape, asset, and Compose validation evidence / P0 |
+| OBS-010 | Load the provisioned Grafana dashboard and inspect all panels. | Request rate, p95, 5xx ratio, and in-progress panels query the pinned Prometheus datasource without raw-path labels. | Dashboard JSON contract passed; live UI inspection pending / P1 |
 
 ### 11.8 Quality and Security Operations
 
@@ -1126,6 +1158,7 @@ Pipeline artifacts should include test reports, coverage, OpenAPI schema, migrat
 | R-011 | Rate limiting uses fixed windows and the direct network peer when no bearer credential is present. | Bursts near a window boundary may temporarily exceed the nominal rate; a shared reverse-proxy address may group unrelated clients. | Calibrate thresholds with load tests and implement a reviewed trusted-proxy attribution policy before public deployment. | High |
 | R-012 | Shared-secret workload authentication and application-process reconciliation are implemented, but mTLS, per-instance identity, and multi-replica scheduler ownership are not. | Credential theft could permit module impersonation, and operational behavior under multiple independently scheduled API replicas is not yet evidenced. | Add secret-manager delivery, mTLS or managed workload identity, instance leases, reconciliation metrics, and explicit leader/scheduler ownership before dynamic routing. | Medium |
 | R-013 | The development artifact adapter uses node-local filesystem storage and external object creation cannot share the PostgreSQL transaction. | Multiple replicas may not see the same content; a process crash between object promotion and metadata commit can leave an orphan; unscanned evidence can carry unsafe content. | Use shared encrypted S3-compatible storage in deployed environments; add orphan reconciliation, malware scanning, retention/legal-hold policy, quotas, signed internal retrieval, and lifecycle metrics. | High |
+| R-014 | The optional local observability topology exposes anonymous Grafana and debug-only trace output, while `/metrics` has no application-level authentication. | Deploying local defaults on a public network could disclose operational behavior; debug traces are non-durable and alerts/SLOs are absent. | Isolate management endpoints, disable anonymous access, require TLS/workload authentication, add durable trace storage and retention, validate cardinality/overhead, and define reviewed SLO alerts before production. | High |
 
 ## 15. Roadmap and Increment Plan
 
@@ -1158,7 +1191,7 @@ Pipeline artifacts should include test reports, coverage, OpenAPI schema, migrat
 - vehicle/test configuration profiles;
 - persistent scheduler boundary and job lifecycle — implemented initial slice;
 - object-storage abstraction for test artifacts — implemented initial slice;
-- OpenTelemetry traces, Prometheus metrics, alerts, and dashboards.
+- correlated OpenTelemetry traces, bounded Prometheus metrics, and provisioned dashboard — implemented initial slice; durable trace storage, domain metrics, alert rules, and SLO evidence remain production hardening.
 
 ### Increment 4 — Production Hardening
 
@@ -1298,10 +1331,11 @@ Application rollback is safe only when the previous version is compatible with t
 | Database migrations | `migrations/versions/0001_core_platform.py` through `0012_test_artifacts.py` |
 | Refresh-session implementation | `src/atep/identity/sessions.py`, identity models, schemas, and router |
 | Local service topology | `compose.yaml` and `Dockerfile` |
+| Optional observability topology | `compose.observability.yaml`, `deploy/observability/`, `src/atep/core/observability.py`, and `docs/observability.md` |
 | Disposable integration topology and runner | `compose.integration.yaml` and `tools/run_integration_tests.ps1` |
 | Black-box integration scenario | `tests/integration/test_identity_flow.py` |
 | Continuous integration workflow | `.github/workflows/integration.yml` |
-| Automated tests | `tests/test_security.py`, `test_identity.py`, `test_user_administration.py`, `test_role_catalogue.py`, `test_audit_query.py`, `test_rate_limit.py`, `test_module_registry.py`, `test_vehicle_telemetry.py`, `test_vehicle_commands.py`, `test_test_runs.py`, `test_test_jobs.py`, `test_artifacts.py`, and `test_api_contract.py` |
+| Automated tests | `tests/test_security.py`, `test_identity.py`, `test_user_administration.py`, `test_role_catalogue.py`, `test_audit_query.py`, `test_rate_limit.py`, `test_module_registry.py`, `test_vehicle_telemetry.py`, `test_vehicle_commands.py`, `test_test_runs.py`, `test_test_jobs.py`, `test_artifacts.py`, `test_observability.py`, `test_observability_assets.py`, and `test_api_contract.py` |
 | Architecture summary | `docs/architecture.md` |
 | Requirements baseline | `docs/requirements-volume-i.md` |
 | Delivery roadmap | `docs/roadmap-volume-i.md` |

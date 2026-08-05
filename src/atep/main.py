@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 
 import redis.asyncio as redis
 import structlog
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, Request, Response
 
 from atep.api.health import router as health_router
 from atep.artifacts.router import router as artifacts_router
@@ -14,6 +14,11 @@ from atep.audit.router import router as audit_router
 from atep.core.config import get_settings
 from atep.core.errors import install_exception_handlers
 from atep.core.logging import configure_logging
+from atep.core.observability import (
+    Observability,
+    ObservabilityMiddleware,
+    current_trace_context,
+)
 from atep.core.rate_limit import api_rate_limit
 from atep.db.session import session_factory
 from atep.environment_profiles.router import router as environment_profiles_router
@@ -32,6 +37,7 @@ from atep.vehicles.router import router as vehicles_router
 settings = get_settings()
 configure_logging(settings.log_level)
 log = structlog.get_logger()
+observability = Observability(settings)
 
 
 @asynccontextmanager
@@ -61,6 +67,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         if scheduler_task is not None:
             await scheduler_task
         await redis_client.aclose()
+        observability.shutdown()
 
 
 app = FastAPI(
@@ -69,6 +76,16 @@ app = FastAPI(
     description="Control plane for the Automotive Test Engineering Platform.",
     lifespan=lifespan,
 )
+app.state.observability = observability
+
+if settings.metrics_enabled:
+
+    @app.get("/metrics", include_in_schema=False)
+    async def prometheus_metrics() -> Response:
+        content, media_type = observability.render_metrics()
+        return Response(content=content, media_type=media_type)
+
+
 app.include_router(health_router)
 rate_limited = [Depends(api_rate_limit)]
 app.include_router(identity_router, prefix="/api/v1", dependencies=rate_limited)
@@ -100,7 +117,11 @@ async def correlation_id_middleware(request: Request, call_next):  # type: ignor
         correlation_id=str(correlation_id),
         method=request.method,
         path=request.url.path,
+        **current_trace_context(),
     )
     response = await call_next(request)
     response.headers["X-Correlation-ID"] = str(correlation_id)
     return response
+
+
+app.add_middleware(ObservabilityMiddleware, observability=observability)

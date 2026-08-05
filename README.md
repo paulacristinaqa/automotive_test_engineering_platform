@@ -107,7 +107,7 @@ idempotent and deduplicate by event ID.
 | Security | PyJWT, Argon2 via pwdlib, RBAC, hashed workload credentials |
 | Quality | pytest, Ruff, strict mypy |
 | Runtime | Docker and Docker Compose |
-| Observability foundation | structlog, correlation IDs, health probes |
+| Observability foundation | structlog, correlation/trace IDs, OpenTelemetry OTLP, Prometheus, Grafana, health probes |
 
 ## Repository structure
 
@@ -245,7 +245,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\run_integration_test
 
 The runner creates ephemeral credentials, uses isolated ports, applies every migration, and
 removes its containers, network, and volumes after execution. The latest local evidence records
-**74 fast tests plus one expanded Docker integration scenario** passing. The CarSystemUI
+**80 fast tests plus one expanded Docker integration scenario** passing. The CarSystemUI
 companion project also passes 27 unit tests, Android lint, and debug APK assembly for this slice.
 
 ## Engineering documentation
@@ -254,6 +254,7 @@ companion project also passes 27 unit tests, Android lint, and debug APK assembl
 - [Volume I requirements](docs/requirements-volume-i.md)
 - [Volume I delivery roadmap](docs/roadmap-volume-i.md)
 - [Audit retention baseline](docs/audit-retention-policy.md)
+- [Observability baseline and runbook](docs/observability.md)
 - [Engineering workbook — editable source](docs/workbook-volume-i.md)
 - [Engineering workbook — formatted document](docs/ATEP_Volume_I_Engineering_Workbook.docx)
 
@@ -287,8 +288,9 @@ or selectively discarded, while exhausted retry work remains visible until expli
 Authorized test commands now use an idempotent request, capability-scoped target, bounded lease,
 hash-only claim token, safe Android property allowlist, and terminal acknowledgement. The next
 slices add area-aware properties and live test-run updates.
-Versioned test configuration profiles, scheduler boundaries, artifact storage, and richer
-observability remain in the Volume I roadmap.
+Versioned test configuration profiles, scheduler boundaries, artifact storage, and the initial
+OpenTelemetry/Prometheus/Grafana observability slice are implemented. Production SLOs, alerting,
+durable trace retention, and domain-specific metrics remain in the Volume I hardening roadmap.
 
 ## Security and production status
 
