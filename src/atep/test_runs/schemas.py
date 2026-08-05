@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from atep.test_runs.models import TestRun
 
 RUN_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{7,63}$")
+ENVIRONMENT_PROFILE_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{7,63}$")
 
 
 class TestSuite(StrEnum):
@@ -32,6 +33,7 @@ class TestRunStatus(StrEnum):
 class TestRunCreate(BaseModel):
     run_id: str = Field(min_length=8, max_length=64)
     vehicle_id: str = Field(min_length=3, max_length=80)
+    environment_profile_id: str | None = Field(default=None, min_length=8, max_length=64)
     name: str = Field(min_length=1, max_length=160)
     suite: TestSuite
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -48,6 +50,16 @@ class TestRunCreate(BaseModel):
     @classmethod
     def strip_text(cls, value: str) -> str:
         return value.strip()
+
+    @field_validator("environment_profile_id")
+    @classmethod
+    def normalize_profile_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().casefold()
+        if not ENVIRONMENT_PROFILE_ID_PATTERN.fullmatch(normalized):
+            raise ValueError("environment profile IDs must be lowercase URL-safe slugs")
+        return normalized
 
 
 class TestRunStatusUpdate(BaseModel):
@@ -79,6 +91,9 @@ class TestRunResponse(BaseModel):
     run_id: str
     vehicle_id: str
     requested_by_user_id: UUID
+    environment_profile_id: str | None
+    environment_profile_version: int | None
+    environment_snapshot: dict[str, Any] | None
     name: str
     suite: TestSuite
     metadata: dict[str, Any]
@@ -105,12 +120,21 @@ class TestRunStreamEvent(BaseModel):
     occurred_at: datetime
 
 
-def test_run_response(test_run: "TestRun", vehicle_identifier: str) -> TestRunResponse:
+def test_run_response(
+    test_run: "TestRun", vehicle_identifier: str, environment_profile_identifier: str | None = None
+) -> TestRunResponse:
+    profile_id = environment_profile_identifier
+    if profile_id is None and test_run.environment_snapshot is not None:
+        snapshot_profile_id = test_run.environment_snapshot.get("profile_id")
+        profile_id = str(snapshot_profile_id) if snapshot_profile_id is not None else None
     return TestRunResponse(
         id=test_run.id,
         run_id=test_run.run_id,
         vehicle_id=vehicle_identifier,
         requested_by_user_id=test_run.requested_by_user_id,
+        environment_profile_id=profile_id,
+        environment_profile_version=test_run.environment_profile_version,
+        environment_snapshot=test_run.environment_snapshot,
         name=test_run.name,
         suite=test_run.suite,
         metadata=test_run.metadata_,

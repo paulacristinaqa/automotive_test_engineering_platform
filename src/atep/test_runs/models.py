@@ -20,6 +20,14 @@ class TestRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     requested_by_user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
     )
+    environment_profile_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("environment_profiles.id", ondelete="RESTRICT"),
+        index=True,
+        default=None,
+    )
+    environment_profile_version: Mapped[int | None] = mapped_column(Integer, default=None)
+    environment_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
     name: Mapped[str] = mapped_column(String(160))
     suite: Mapped[str] = mapped_column(String(24), index=True)
     metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)

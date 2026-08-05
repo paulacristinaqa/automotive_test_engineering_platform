@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Path, Query, Request, Response, WebSocke
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atep.db.session import get_session
+from atep.environment_profiles.service import require_active_environment_profile
 from atep.identity.dependencies import require_permissions
 from atep.identity.models import User
 from atep.identity.permissions import PermissionName
@@ -43,10 +44,16 @@ async def create_test_run_endpoint(
     actor: Annotated[User, Depends(test_runs_write)],
 ) -> TestRunResponse:
     vehicle = await require_vehicle(session, command.vehicle_id)
+    environment_profile = (
+        await require_active_environment_profile(session, command.environment_profile_id)
+        if command.environment_profile_id is not None
+        else None
+    )
     test_run, duplicate = await create_test_run(
         session,
         command=command,
         vehicle=vehicle,
+        environment_profile=environment_profile,
         actor_user_id=actor.id,
         correlation_id=request_correlation_id(request),
     )

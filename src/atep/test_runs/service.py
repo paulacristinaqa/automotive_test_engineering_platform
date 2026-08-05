@@ -12,6 +12,7 @@ from atep.core.errors import (
     TestRunStateError,
     TestRunVersionConflictError,
 )
+from atep.environment_profiles.models import EnvironmentProfile
 from atep.events.outbox import enqueue_event
 from atep.test_runs.models import TestRun
 from atep.test_runs.schemas import TestRunCreate, TestRunStatus, TestRunStatusUpdate
@@ -38,10 +39,11 @@ async def create_test_run(
     actor_user_id: UUID,
     correlation_id: UUID | None,
     now: datetime | None = None,
+    environment_profile: EnvironmentProfile | None = None,
 ) -> tuple[TestRun, bool]:
     existing = await session.scalar(select(TestRun).where(TestRun.run_id == command.run_id))
     if existing is not None:
-        if not _same_creation(existing, command, vehicle, actor_user_id):
+        if not _same_creation(existing, command, vehicle, environment_profile, actor_user_id):
             raise TestRunConflictError()
         return existing, True
 
@@ -50,6 +52,19 @@ async def create_test_run(
         run_id=command.run_id,
         vehicle_id=vehicle.id,
         requested_by_user_id=actor_user_id,
+        environment_profile_id=environment_profile.id if environment_profile else None,
+        environment_profile_version=environment_profile.version if environment_profile else None,
+        environment_snapshot=(
+            {
+                "profile_id": environment_profile.profile_id,
+                "name": environment_profile.name,
+                "vehicle_kind": environment_profile.vehicle_kind,
+                "property_source": environment_profile.property_source,
+                "configuration": environment_profile.configuration,
+            }
+            if environment_profile
+            else None
+        ),
         name=command.name,
         suite=command.suite.value,
         metadata_=command.metadata,
@@ -191,6 +206,13 @@ def test_run_event_payload(test_run: TestRun, vehicle_identifier: str) -> dict[s
         "run_id": test_run.run_id,
         "vehicle_id": vehicle_identifier,
         "requested_by_user_id": str(test_run.requested_by_user_id),
+        "environment_profile_id": (
+            test_run.environment_snapshot.get("profile_id")
+            if test_run.environment_snapshot is not None
+            else None
+        ),
+        "environment_profile_version": test_run.environment_profile_version,
+        "environment_snapshot": test_run.environment_snapshot,
         "name": test_run.name,
         "suite": test_run.suite,
         "metadata": test_run.metadata_,
@@ -206,10 +228,16 @@ def test_run_event_payload(test_run: TestRun, vehicle_identifier: str) -> dict[s
 
 
 def _same_creation(
-    existing: TestRun, command: TestRunCreate, vehicle: Vehicle, actor_user_id: UUID
+    existing: TestRun,
+    command: TestRunCreate,
+    vehicle: Vehicle,
+    environment_profile: EnvironmentProfile | None,
+    actor_user_id: UUID,
 ) -> bool:
     return (
         existing.vehicle_id == vehicle.id
+        and existing.environment_profile_id
+        == (environment_profile.id if environment_profile else None)
         and existing.requested_by_user_id == actor_user_id
         and existing.name == command.name
         and existing.suite == command.suite.value
