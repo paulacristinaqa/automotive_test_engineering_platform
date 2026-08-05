@@ -37,7 +37,7 @@
 - configuration profiles for vehicle and test environments (implemented initial backend slice: EV/hybrid/autonomous type, simulator/AAOS source, bounded configuration, independent RBAC, immutable lifecycle, audit/outbox, and TestRun snapshot)
 - scheduler boundary and job lifecycle (implemented initial slice: persistent idempotent jobs, independent RBAC, optimistic cancellation, bounded multi-instance-safe due selection, atomic TestRun dispatch, audit, and outbox)
 - object storage abstraction for test artefacts (implemented initial slice: immutable TestRun evidence, streaming filesystem adapter, replaceable store interface, SHA-256 integrity, independent RBAC, bounded multipart upload, download, audit, and outbox)
-- OpenTelemetry traces, Prometheus metrics, and dashboards
+- OpenTelemetry traces, Prometheus metrics, and dashboards (implemented initial slice: W3C trace propagation, correlated IDs, bounded HTTP metrics, OTLP/HTTP export, optional Collector/Prometheus/Grafana topology, and versioned overview dashboard)
 
 ## Increment 4 — production hardening
 

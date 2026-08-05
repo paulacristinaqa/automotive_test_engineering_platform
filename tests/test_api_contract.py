@@ -206,3 +206,12 @@ def test_test_artifact_contracts_and_safe_pagination_are_published() -> None:
     assert parameters["limit"]["maximum"] == 200
     assert parameters["offset"]["maximum"] == 1_000_000
     assert "kind" in parameters
+
+
+def test_metrics_endpoint_is_operational_but_not_part_of_public_openapi() -> None:
+    assert "/metrics" not in core_app.openapi()["paths"]
+    response = TestClient(core_app).get("/metrics")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/plain")
+    assert "atep_build_info" in response.text
+    assert len(response.headers["x-trace-id"]) == 32

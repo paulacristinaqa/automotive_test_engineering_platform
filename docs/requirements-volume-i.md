@@ -57,6 +57,11 @@
 | CORE-F-051 | Repeating an artifact upload with the same run, identifier, metadata, size, and SHA-256 shall return the original record without duplicate evidence; conflicting reuse shall return a stable error. | Idempotency, conflict, and database uniqueness tests |
 | CORE-F-052 | Artifact metadata, `atep.test_artifact.stored.v1`, and immutable audit evidence shall be committed atomically after object storage succeeds. | Unit and automated Docker integration test |
 | CORE-F-053 | Artifact downloads shall preserve the stored media type and filename and expose authoritative size, ETag, and SHA-256 integrity metadata without disclosing the internal object key. | Contract, security, and download integration tests |
+| CORE-F-054 | When metrics are enabled, the platform shall expose Prometheus request count, duration, in-progress, exception, process, and build information through an internal scrape endpoint. | Unit, contract, and Docker integration tests |
+| CORE-F-055 | Every HTTP request shall create a server trace context, honor a valid W3C `traceparent`, and return the effective trace identifier in `X-Trace-ID`. | Propagation and Docker integration tests |
+| CORE-F-056 | Structured request logs and server spans shall carry the ATEP correlation identifier, trace identifier, and span identifier without recording credentials or request bodies. | Unit test and structured-log inspection |
+| CORE-F-057 | Operators shall configure trace recording, parent-based sample ratio, service identity, and OTLP/HTTP export exclusively through validated environment settings. | Configuration and exporter tests |
+| CORE-F-058 | The repository shall provide an optional, version-pinned Collector, Prometheus, and Grafana topology with provisioned datasource and dashboard assets. | Compose validation and dashboard contract tests |
 
 ## Non-functional requirements
 
@@ -88,3 +93,6 @@
 | CORE-NF-024 | Scheduler consistency | due work is selected oldest-first in bounded batches with `FOR UPDATE SKIP LOCKED`; job state, generated TestRun, audit, and outbox evidence commit or roll back together |
 | CORE-NF-025 | Artifact integrity | content is streamed through a configurable 1-byte to 1-GiB bound, hashed with SHA-256, stored under an internally generated key, and treated as immutable |
 | CORE-NF-026 | Storage isolation | client filenames never become filesystem paths; storage adapters reject root escape; object keys remain absent from public API, audit, and event contracts |
+| CORE-NF-027 | Metric cardinality | HTTP labels use bounded method, route-template, status, and exception-type values; raw paths, query strings, vehicle/user IDs, emails, filenames, and credentials are forbidden |
+| CORE-NF-028 | Observability isolation | metrics, Grafana, Prometheus, Collector, and OTLP ports are internal-only deployment surfaces; production transport requires TLS and workload authentication |
+| CORE-NF-029 | Telemetry overhead | tracing can be disabled or sampled from 0.0 to 1.0; export is batched with bounded Collector memory; observability failures must not change authoritative business state |

@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     test_scheduler_batch_size: int = Field(default=20, ge=1, le=200)
     test_artifact_storage_path: Path = Path(".atep/artifacts")
     test_artifact_max_bytes: int = Field(default=25 * 1024 * 1024, ge=1, le=1024 * 1024 * 1024)
+    metrics_enabled: bool = True
+    tracing_enabled: bool = False
+    otel_service_name: str = Field(default="atep-core", min_length=1, max_length=80)
+    otel_exporter_otlp_endpoint: str | None = None
+    otel_trace_sample_ratio: float = Field(default=1.0, ge=0.0, le=1.0)
     bootstrap_admin_email: EmailStr | None = None
     bootstrap_admin_password: SecretStr | None = None
 
