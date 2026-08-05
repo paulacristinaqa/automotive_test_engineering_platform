@@ -158,6 +158,12 @@ flowchart LR
    retaining CycloneDX SBOM evidence. Scanner exceptions must match an exact advisory, package,
    version, and type, name an owner and review date, and expire; all other findings remain gated.
    Dependabot proposes reviewed updates without weakening pins.
+30. **Kubernetes rollout is phased and fails closed.** Foundation, migration, and workloads render
+   independently so operators must retain successful schema evidence before application rollout.
+   No Secret object or credential value is versioned. A zero image digest blocks deployment until
+   a reviewed environment overlay supplies the same immutable application digest to migration and
+   workloads. Restricted Pod Security, tokenless ServiceAccounts, bounded resources, explicit
+   probes, persistent evidence storage, and default-deny networking form the initial runtime policy.
 
 ## Initial bounded contexts
 
@@ -200,6 +206,9 @@ contracts live under an explicit version and remain backward compatible during m
   CycloneDX SBOMs, and rejects high or critical vulnerabilities in the built container image
   unless an exact, documented, owned, and time-bounded exception applies.
 - Dependabot proposes weekly Python, GitHub Actions, and Docker updates for review.
+- Kubernetes workloads enforce the Restricted profile, run non-root with read-only root filesystems,
+  drop all Linux capabilities, disable ServiceAccount token automount, and consume only an
+  externally materialized runtime Secret.
 - Opaque refresh-token rotation and append-only administrative audit trails are implemented.
 - Audit search and export are protected by `audit:read` and `audit:export`; no mutation or
   deletion endpoint exists.

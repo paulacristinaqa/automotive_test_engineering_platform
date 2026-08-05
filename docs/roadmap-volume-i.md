@@ -48,7 +48,9 @@
 
 ## Increment 4 — production hardening
 
-- Kubernetes manifests and secret-manager integration
+- Kubernetes manifests and vendor-neutral external secret-manager contract (implemented initial
+  foundation/migration/workload slice; real release digest, provider binding, ingress/TLS, staged
+  evidence, and multi-replica leadership remain hardening)
 - mTLS and workload identity
 - backup, restore, retention, and disaster-recovery exercises
 - SLO threshold calibration, production incident-provider routing, load tests, artifact signing,

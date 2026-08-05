@@ -66,6 +66,8 @@ An intended end-to-end scenario is:
 - Docker Compose development and disposable integration environments;
 - hash-locked Python dependencies, immutable CI actions and a digest-pinned runtime base image;
 - automated secret, dependency, source and container scanning with retained CycloneDX SBOMs;
+- staged Kubernetes/Kustomize deployment targets with Restricted pod controls, default-deny
+  networking, immutable-image fail-closed placeholders, and an external secret-manager contract;
 - Ruff, strict mypy, pytest, and GitHub Actions quality gates.
 
 ## Architecture
@@ -114,7 +116,7 @@ idempotent and deduplicate by event ID.
 | Messaging and ephemeral state | RabbitMQ, aio-pika, Redis |
 | Security | PyJWT, Argon2 via pwdlib, RBAC, hashed workload credentials |
 | Quality | pytest, Ruff, strict mypy |
-| Runtime | Docker and Docker Compose |
+| Runtime | Docker, Docker Compose, Kubernetes, Kustomize |
 | Observability foundation | structlog, correlation/trace IDs, OpenTelemetry OTLP, Prometheus, Grafana, health probes |
 
 ## Repository structure
@@ -135,6 +137,7 @@ migrations/      versioned database revisions
 tests/           unit, contract, service, and black-box integration tests
 docs/            architecture, requirements, roadmap, policies, and workbook
 tools/           integration runner and workbook generator
+deploy/          Kubernetes and observability deployment assets
 ```
 
 ## Prerequisites
@@ -143,7 +146,8 @@ tools/           integration runner and workbook generator
 - Docker Desktop with Docker Compose;
 - WSL 2 when using Docker Desktop on Windows;
 - Python 3.12+ for local development outside containers;
-- PowerShell 7 or Windows PowerShell for the disposable integration runner.
+- PowerShell 7 or Windows PowerShell for the disposable integration runner;
+- `kubectl` with Kustomize support for rendering or applying the Kubernetes baseline.
 
 ## Quick start with Docker
 
@@ -174,6 +178,14 @@ tools/           integration runner and workbook generator
 
 The one-shot migration container must complete before the API and outbox worker start.
 PostgreSQL, Redis, and RabbitMQ include health checks used by the local topology.
+
+## Kubernetes baseline
+
+The first production-hardening deployment slice separates namespace/configuration, the Alembic
+migration Job, and application workloads into three Kustomize targets. It intentionally contains
+no Secret manifest and uses an invalid all-zero image digest until an approved release overlay
+supplies the real immutable digest. See the [Kubernetes deployment runbook](deploy/kubernetes/README.md)
+for the external secret contract, render checks, controlled rollout, evidence, and rollback rules.
 
 ## Local Python development
 
@@ -254,7 +266,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\run_integration_test
 
 The runner creates ephemeral credentials, uses isolated ports, applies every migration, and
 removes its containers, network, and volumes after execution. The latest local evidence records
-**98 fast tests plus one expanded Docker integration scenario** passing. The CarSystemUI
+**103 fast tests plus one expanded Docker integration scenario** passing. The CarSystemUI
 companion project also passes 27 unit tests, Android lint, and debug APK assembly for this slice.
 
 ## Engineering documentation
@@ -314,6 +326,9 @@ configuration, backup/restore evidence, artifact signing and provenance verifica
 monitoring, and reviewed operational policies. The repository already enforces a development
 supply-chain baseline with deterministic dependency locks, immutable build inputs, SBOMs, secret
 scanning, dependency auditing, CodeQL, and high/critical container-vulnerability gates.
+The Kubernetes baseline is fail-closed and policy-tested but has not yet been promoted to a live
+production cluster; provider-specific secret binding, ingress/TLS, and staged rollout evidence
+remain required.
 
 ## Contributing
 

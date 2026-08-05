@@ -79,6 +79,9 @@
 | CORE-F-073 | Runtime and development Python dependency graphs, including build requirements, shall be committed as deterministic manifests with SHA-256 hashes. | Lock regeneration and policy tests |
 | CORE-F-074 | Security CI shall scan repository history, Python dependencies, Python source, and the built container image and shall retain machine-readable CycloneDX SBOM evidence. | Gitleaks, pip-audit, CodeQL, Syft, and Grype workflow evidence |
 | CORE-F-075 | Third-party CI actions and the runtime base image shall use immutable identifiers, with reviewed weekly update proposals for Python, Actions, and Docker inputs. | Policy tests and Dependabot configuration review |
+| CORE-F-076 | The repository shall provide separately renderable Kubernetes foundation, migration, and workload targets so schema migration is explicitly completed before application rollout. | Kustomize render and policy tests |
+| CORE-F-077 | Kubernetes workloads shall consume non-sensitive configuration from a ConfigMap and credentials only from a named Secret materialized by an approved external secret provider. | Manifest policy and secret-contract review |
+| CORE-F-078 | The Kubernetes API and outbox worker shall expose bounded liveness/readiness evidence and run with explicit resource, storage, identity, and network controls. | Manifest policy, render, and staged smoke tests |
 
 ## Non-functional requirements
 
@@ -128,3 +131,8 @@
 | CORE-NF-042 | Build reproducibility | Linux x86-64/Python 3.14 is the canonical lock platform; Python 3.12 remains the tested minimum; identical reviewed manifests install the same dependency artifacts and reject absent or mismatched hashes |
 | CORE-NF-043 | CI least privilege | workflow permissions are read-only by default, elevated only per job, and third-party actions are pinned to full commit SHAs |
 | CORE-NF-044 | Vulnerability evidence | Python and image SBOMs are retained for 14 days; known high or critical image vulnerabilities fail CI unless a documented, time-bounded exception is reviewed |
+| CORE-NF-045 | Kubernetes least privilege | restricted Pod Security, non-root execution, RuntimeDefault seccomp, dropped capabilities, read-only root filesystems, no privilege escalation, and no automatic ServiceAccount token mounting |
+| CORE-NF-046 | Deployment secret isolation | no Kubernetes Secret values are committed; the required `atep-runtime-secrets` object is externally materialized and bootstrap credentials are removed after first use |
+| CORE-NF-047 | Deployment immutability | migration and workload overlays use the same reviewed application manifest digest; the committed zero digest prevents accidental deployment before release substitution |
+| CORE-NF-048 | Deployment ordering | the bounded migration Job completes and its evidence is retained before singleton API and worker workloads are applied; database downgrade is never automatic |
+| CORE-NF-049 | Kubernetes network isolation | default-deny ingress/egress is combined with explicit DNS, dependency-port, API-client, and metrics-client allowances on a policy-capable CNI |
