@@ -154,6 +154,54 @@ class Observability:
             ("outcome",),
             registry=self.registry,
         )
+        self.dependency_checks = Counter(
+            "atep_dependency_checks_total",
+            "ATEP readiness dependency checks by bounded dependency and outcome.",
+            ("dependency", "outcome"),
+            registry=self.registry,
+        )
+        self.dependency_check_duration = Histogram(
+            "atep_dependency_check_duration_seconds",
+            "Duration of ATEP readiness dependency checks.",
+            ("dependency",),
+            buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2),
+            registry=self.registry,
+        )
+        self.dependency_ready = Gauge(
+            "atep_dependency_ready",
+            "Current readiness state of a bounded ATEP dependency.",
+            ("dependency",),
+            registry=self.registry,
+        )
+        self.artifact_store_operations = Counter(
+            "atep_artifact_store_operations_total",
+            "Artifact object-store operations by bounded operation and outcome.",
+            ("operation", "outcome"),
+            registry=self.registry,
+        )
+        self.artifact_store_operation_duration = Histogram(
+            "atep_artifact_store_operation_duration_seconds",
+            "Duration of artifact object-store operations.",
+            ("operation",),
+            buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5),
+            registry=self.registry,
+        )
+        self.artifact_store_bytes = Counter(
+            "atep_artifact_store_bytes_total",
+            "Artifact bytes transferred by bounded direction.",
+            ("direction",),
+            registry=self.registry,
+        )
+        self.artifact_store_capacity = Gauge(
+            "atep_artifact_store_capacity_bytes",
+            "Total capacity visible to the artifact object-store adapter.",
+            registry=self.registry,
+        )
+        self.artifact_store_free = Gauge(
+            "atep_artifact_store_free_bytes",
+            "Free capacity visible to the artifact object-store adapter.",
+            registry=self.registry,
+        )
         info = Gauge(
             "atep_build_info",
             "ATEP service build and environment information.",
@@ -185,6 +233,39 @@ class Observability:
     def update_test_job_backlog(self, *, count: int, oldest_age_seconds: float) -> None:
         self.test_jobs_due.set(count)
         self.test_job_oldest_due_age.set(oldest_age_seconds)
+
+    def observe_dependency_check(
+        self, *, dependency: str, outcome: str, duration_seconds: float
+    ) -> None:
+        if dependency not in {"postgres", "redis", "rabbitmq"}:
+            raise ValueError("unsupported dependency metric label")
+        if outcome not in {"ready", "unavailable"}:
+            raise ValueError("unsupported dependency outcome metric label")
+        self.dependency_checks.labels(dependency, outcome).inc()
+        self.dependency_check_duration.labels(dependency).observe(duration_seconds)
+        self.dependency_ready.labels(dependency).set(1 if outcome == "ready" else 0)
+
+    def observe_artifact_store_operation(
+        self,
+        *,
+        operation: str,
+        outcome: str,
+        duration_seconds: float,
+        bytes_transferred: int = 0,
+    ) -> None:
+        if operation not in {"ready", "put", "stream", "exists", "delete"}:
+            raise ValueError("unsupported artifact-store operation metric label")
+        if outcome not in {"success", "rejected", "error"}:
+            raise ValueError("unsupported artifact-store outcome metric label")
+        self.artifact_store_operations.labels(operation, outcome).inc()
+        self.artifact_store_operation_duration.labels(operation).observe(duration_seconds)
+        if bytes_transferred > 0 and operation in {"put", "stream"}:
+            direction = "write" if operation == "put" else "read"
+            self.artifact_store_bytes.labels(direction).inc(bytes_transferred)
+
+    def update_artifact_store_capacity(self, *, total_bytes: int, free_bytes: int) -> None:
+        self.artifact_store_capacity.set(max(total_bytes, 0))
+        self.artifact_store_free.set(max(min(free_bytes, total_bytes), 0))
 
     def shutdown(self) -> None:
         self.tracer_provider.shutdown()

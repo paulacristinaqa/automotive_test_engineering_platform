@@ -58,6 +58,14 @@ their local spans are non-recording and nothing is exported. A caller-provided v
 | `atep_test_run_websocket_connection_attempts_total` | Counter | fixed outcome | Accepted/rejected/error connections |
 | `atep_test_run_websocket_messages_total` | Counter | fixed kind | Snapshot/update/heartbeat messages |
 | `atep_test_run_live_publish_attempts_total` | Counter | fixed outcome | Redis live-projection success/failure |
+| `atep_dependency_checks_total` | Counter | fixed dependency, outcome | PostgreSQL/Redis/RabbitMQ readiness history |
+| `atep_dependency_check_duration_seconds` | Histogram | fixed dependency | Dependency probe latency |
+| `atep_dependency_ready` | Gauge | fixed dependency | Current dependency readiness state |
+| `atep_artifact_store_operations_total` | Counter | fixed operation, outcome | Object-store success/failure activity |
+| `atep_artifact_store_operation_duration_seconds` | Histogram | fixed operation | Object-store latency |
+| `atep_artifact_store_bytes_total` | Counter | read/write direction | Evidence transfer volume |
+| `atep_artifact_store_capacity_bytes` | Gauge | none | Capacity visible to the current adapter |
+| `atep_artifact_store_free_bytes` | Gauge | none | Free capacity visible to the current adapter |
 
 The route label is the FastAPI template, such as `/api/v1/test-runs/{run_id}`, never the raw
 request path. Unmatched requests use the bounded label `unmatched`.
@@ -165,6 +173,9 @@ escalation, delivery retry monitoring, and audited change control.
 | `AtepTestSchedulerBacklogOld` | Inspect scheduler cycle duration/errors, database locks, due volume, and dispatch capacity |
 | `AtepTestSchedulerErrors` | Correlate scheduler logs with database and TestRun constraints before retrying operationally |
 | `AtepLiveUpdatePublishErrors` | Inspect Redis availability; authoritative TestRun state remains in PostgreSQL and clients must reconnect for a snapshot |
+| `AtepDependencyUnavailable` | Identify the bounded dependency label, confirm readiness and network/service health, and avoid bypassing fail-closed controls |
+| `AtepArtifactStoreOperationErrors` | Inspect the fixed operation label and correlated logs; preserve metadata/object consistency and do not delete evidence manually |
+| `AtepArtifactStoreLowFreeSpace` | Confirm filesystem capacity, retention, orphan reconciliation, and growth rate before expanding or cleaning storage under policy |
 
 Operators can inspect both the Prometheus alerts page and local Alertmanager in the optional
 topology. Local grouping, inhibition, and webhook delivery are tested; production still requires
@@ -181,8 +192,8 @@ reviewed provider routing, ownership, escalation, silences, and notification-del
   unrestricted exception messages as metric labels or span attributes.
 - Replace the debug trace exporter with a durable backend and define retention, tenant isolation,
   access audit, calibrated SLO thresholds, and capacity limits.
-- Add WebSocket, background scheduler, outbox, database-pool, Redis, RabbitMQ, and artifact-store
-  domain metrics in subsequent hardening slices.
+- Add database-pool saturation, provider-specific Redis/RabbitMQ internals, and durable
+  object-store quota/retention signals in subsequent hardening slices.
 
 ## Verification Objectives
 
@@ -200,3 +211,6 @@ reviewed provider routing, ownership, escalation, silences, and notification-del
 12. Load-test histogram/cardinality and calibrate production SLO, backlog, and latency thresholds.
 13. Validate Alertmanager configuration with `amtool` and inject a synthetic critical alert.
 14. Confirm the receiver increments only bounded counters and receives the resolved notification.
+15. Exercise ready/unavailable dependency outcomes and verify only three dependency labels exist.
+16. Exercise successful and failed object operations; verify keys and identifiers never enter metrics.
+17. Validate dependency/storage alerts with `promtool` and calibrate capacity thresholds under load.

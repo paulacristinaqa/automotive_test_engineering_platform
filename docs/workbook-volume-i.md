@@ -2,11 +2,11 @@
 
 **Subtitle:** Architecture, implementation record, verification strategy, and engineering evidence  
 **Project:** Automotive Test Engineering Platform (ATEP)  
-**Document version:** 0.24.0
+**Document version:** 0.25.0
 
 **Baseline date:** 4 August 2026
 
-**Status:** Living engineering document — local alert-routing and delivery baseline implemented
+**Status:** Living engineering document — dependency and storage observability baseline implemented
 **Language:** English
 
 ## Document Purpose
@@ -58,6 +58,7 @@ The document distinguishes three types of statements:
 | 0.22.0 | 5 August 2026 | Added permission-protected aggregate module health, bounded registry metrics, API availability/latency recording rules, multi-window error-budget alerts, module-state/lease alerts, runbook response procedures, and CI `promtool` validation | 86 fast Python tests, Ruff, strict mypy, focused health/metric/rule tests, Compose validation, and remote Prometheus rule validation |
 | 0.23.0 | 5 August 2026 | Added internal outbox-worker metrics, aggregate outbox/scheduler backlog age, scheduler throughput/failure metrics, bounded WebSocket connection/message/live-publish metrics, six domain alerts, dashboard panels, controlled worker retry, and expanded Docker scrape evidence | 89 fast Python tests plus the expanded disposable integration scenario, Ruff, strict mypy, Compose validation, and `promtool` validation |
 | 0.24.0 | 5 August 2026 | Added pinned Alertmanager routing, critical/warning grouping intervals, same-service inhibition, firing/resolved delivery, a loopback-only aggregate webhook receiver, bounded delivery metrics, configuration tests, `amtool` validation, and synthetic end-to-end CI delivery | 92 fast Python tests plus the expanded Docker and live alert-delivery scenarios, Ruff, strict mypy, Compose validation, `promtool`, and `amtool` |
+| 0.25.0 | 5 August 2026 | Added bounded PostgreSQL/Redis/RabbitMQ readiness metrics, a replaceable artifact-store instrumentation decorator, operation latency/outcomes, transferred bytes, optional filesystem capacity, three runbook-linked alerts, and expanded Docker scrape evidence | 94 fast Python tests plus the expanded disposable integration scenario, Ruff, strict mypy, cardinality/privacy checks, and `promtool` validation |
 
 ## How to Use This Workbook
 
@@ -134,7 +135,7 @@ The initial design deliberately starts as a modular monolith rather than a colle
 | Redis integration | Implemented | Readiness plus atomic expiring authentication and versioned-API rate-limit counters |
 | Structured logging | Implemented | JSON logs with request correlation context |
 | Container environment | Implemented and locally executed | One-shot migration, API, worker, PostgreSQL, Redis, and RabbitMQ services verified with Docker Compose |
-| Automated verification | Implemented | 92 fast tests plus expanded disposable black-box and live alert-delivery scenarios, 27 Android tests, Ruff, strict mypy, Android lint/build, and CI workflow |
+| Automated verification | Implemented | 94 fast tests plus expanded disposable black-box and live alert-delivery scenarios, 27 Android tests, Ruff, strict mypy, Android lint/build, and CI workflow |
 
 ## 2. Scope and Boundaries
 
@@ -338,7 +339,7 @@ External dashboards, test automation clients, and future ATEP modules call the C
 
 **Rationale.** Logs alone do not quantify latency, traffic, saturation, or error rates, while raw paths and domain identifiers in metric labels create unbounded series and privacy risk. Standard propagation and export keep the backend replaceable and allow CarSystemUI, gateways, API, workers, and future simulators to share one trace model.
 
-**Consequences.** `/metrics` and the local Grafana/Prometheus/Collector ports must be isolated as management-plane surfaces. The development Collector debug exporter is non-durable. A later increment added local Alertmanager routing, but production still requires authenticated TLS, a trace backend, retention/access policy, accountable notification ownership/escalation, SLO calibration/evidence, capacity tests, and dependency/storage metrics.
+**Consequences.** `/metrics` and the local Grafana/Prometheus/Collector ports must be isolated as management-plane surfaces. The development Collector debug exporter is non-durable. Later increments added local Alertmanager and bounded dependency/storage metrics, but production still requires authenticated TLS, a trace backend, retention/access policy, accountable notification ownership/escalation, SLO calibration/evidence, capacity tests, and provider-specific saturation signals.
 
 ### ADR-017 — Reliability Policy as Code over an Authoritative Registry Aggregate
 
@@ -363,6 +364,14 @@ External dashboards, test automation clients, and future ATEP modules call the C
 **Rationale.** Grouping, inhibition, and resolution are operational behaviors that must be tested before adding external channels. A local aggregate receiver proves end-to-end delivery without requiring email/chat credentials, contacting people, or retaining potentially sensitive alert context. Loopback host binding limits accidental exposure while Docker DNS supports internal delivery.
 
 **Consequences.** The local receiver is not an incident-management system and its counters reset on restart. Production adapters require secret-manager integration, TLS/workload authentication, owned escalation schedules, provider retry/dead-letter monitoring, audited configuration, silence governance, and delivery exercises. Receiver payload bounds may intentionally reject oversized or malformed notification groups.
+
+### ADR-020 — Instrument Dependencies and Storage at Existing Boundaries
+
+**Decision.** Record readiness duration, bounded outcome, and current state for PostgreSQL, Redis, and RabbitMQ. Decorate the replaceable artifact-store protocol to record fixed operation/outcome labels, latency, bytes transferred, and optional adapter capacity. Do not expose connection URLs, object keys, filenames, exception messages, or domain identifiers. Capacity refresh failure remains diagnostic and cannot reverse a successful object operation.
+
+**Rationale.** Readiness already performs the authoritative dependency probes, and the object-store protocol already owns evidence I/O. Instrumenting those boundaries avoids duplicate traffic and preserves the domain model. Fixed vocabularies make series count predictable, while a decorator allows filesystem, S3, MinIO, or managed adapters to share the same operational contract.
+
+**Consequences.** Readiness traffic contributes to dependency history and must be rate-calibrated. The filesystem capacity gauge describes the backing volume visible to that adapter, not a production quota guarantee. Production still requires database-pool saturation, broker/provider internals, durable object-store quota/retention metrics, load calibration, and outage exercises.
 
 ## 5. Technology Stack and Rationale
 
@@ -713,6 +722,9 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | CORE-F-067 | Prometheus shall deliver firing and resolved alerts to pinned Alertmanager with reviewed grouping intervals. | Prometheus/Compose configuration and CI delivery | OBS-020, OBS-023 |
 | CORE-F-068 | Critical alerts shall inhibit warnings for the same service and both reviewed severities shall route internally. | Alertmanager route/inhibition policy | OBS-021 |
 | CORE-F-069 | The local webhook shall validate bounded payloads and expose only aggregate delivery evidence. | Receiver schemas, metrics, and no-retention implementation | OBS-022 through OBS-024 |
+| CORE-F-070 | Readiness shall publish bounded PostgreSQL, Redis, and RabbitMQ duration/result/current-state metrics. | Health boundary and API Prometheus registry | OBS-025, OBS-027 |
+| CORE-F-071 | The replaceable artifact-store boundary shall publish operation, latency, byte, and optional capacity metrics without identifiers. | Instrumentation decorator and filesystem capacity provider | OBS-026, OBS-027 |
+| CORE-F-072 | Dependency unavailability, artifact-store errors, and low capacity shall raise runbook-linked alerts. | Three Prometheus alert rules | OBS-028 |
 
 ### 8.2 Non-Functional Requirements
 
@@ -754,6 +766,9 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | CORE-NF-036 | Alert delivery isolation | Loopback host ports, internal Docker destination, and no external provider or credential | OBS-020, architecture review |
 | CORE-NF-037 | Notification cardinality | Fixed severity/status labels; arbitrary values map to `unknown` | OBS-022 |
 | CORE-NF-038 | Alert lifecycle | Firing/resolved delivery, bounded repeat/group intervals, and same-service inhibition | OBS-021, OBS-023 |
+| CORE-NF-039 | Dependency metric cardinality | Three fixed dependency labels and two fixed outcomes | OBS-025 |
+| CORE-NF-040 | Storage metric privacy | Fixed operation/outcome/direction values; no object or domain identifiers | OBS-026 |
+| CORE-NF-041 | Observability non-interference | Capacity refresh and metric recording cannot alter storage or readiness semantics | OBS-026, architecture review |
 
 ### 8.3 Definition of Done for an Increment
 
@@ -1047,6 +1062,10 @@ The fast local suite and repeated remote disposable CI runs prove clean-database
 | OBS-022 | Send valid and untrusted-severity webhook payloads. | Valid payload returns 202; arbitrary severity becomes `unknown`; no input label/annotation appears in metrics. | Two focused receiver tests passed / P0 |
 | OBS-023 | Inject a synthetic alert through Alertmanager. | Alertmanager becomes ready and the receiver's critical/firing notification counter increments. | Disposable CI delivery scenario / P0 |
 | OBS-024 | Resolve an injected alert and verify lifecycle delivery. | Receiver records a resolved notification for the same bounded group without retaining context. | Disposable CI delivery scenario / P0 |
+| OBS-025 | Record healthy/unavailable dependency probes and attempt an arbitrary dependency label. | Only postgres/redis/rabbitmq and ready/unavailable series exist; arbitrary input is rejected before registration. | Focused cardinality test / P0 |
+| OBS-026 | Execute successful and failed object-store operations. | Fixed operation/outcome metrics, exact transferred bytes, capacity gauges, and no object key or run identifier appear. | Instrumented filesystem test / P0 |
+| OBS-027 | Call readiness and upload evidence in the disposable stack, then scrape API metrics. | All three dependencies report ready and successful artifact operations/capacity are visible. | Expanded Docker integration scenario / P0 |
+| OBS-028 | Validate dependency and storage alerts. | `promtool` accepts persistent dependency, operation-error, and low-capacity rules with bounded labels and runbook links. | Asset test locally and `promtool` in CI / P0 |
 
 ### 11.8 Quality and Security Operations
 
@@ -1214,7 +1233,7 @@ Pipeline artifacts should include test reports, coverage, OpenAPI schema, migrat
 | R-006 | Health checks create direct dependency connections. | Probe volume may add avoidable load. | Benchmark and consider pooled/lightweight broker health strategy. | Medium |
 | R-007 | The global API error schema is not snapshot/version compatibility tested. | An accidental shape change may break clients. | Add OpenAPI snapshots and consumer contract checks. | Medium |
 | R-008 | Dependency versions use ranges without a committed lock file. | Builds may change over time. | Adopt deterministic dependency locking and update automation. | Medium |
-| R-009 | HTTP, module, outbox, scheduler, and WebSocket telemetry exist, but storage, database-pool, Redis, RabbitMQ, and trace links across asynchronous publication remain incomplete. | Some storage, saturation, or cross-process failures may still require log-centric investigation. | Add bounded dependency/storage metrics and OpenTelemetry links with load/cardinality evidence. | Medium |
+| R-009 | Bounded dependency and storage telemetry exists, but database-pool saturation, Redis/RabbitMQ provider internals, durable quota/retention signals, and asynchronous trace links remain incomplete. | Some saturation, capacity-policy, or cross-process failures may still require provider consoles and log-centric investigation. | Add provider exporters/pool metrics and OpenTelemetry links with load, outage, and cardinality evidence. | Medium |
 | R-010 | No formal backup/restore evidence. | Data recovery capability is unknown. | Define RPO/RTO, automated backups, restore drills, and evidence retention. | High |
 | R-011 | Rate limiting uses fixed windows and the direct network peer when no bearer credential is present. | Bursts near a window boundary may temporarily exceed the nominal rate; a shared reverse-proxy address may group unrelated clients. | Calibrate thresholds with load tests and implement a reviewed trusted-proxy attribution policy before public deployment. | High |
 | R-012 | Shared-secret workload authentication and application-process reconciliation are implemented, but mTLS, per-instance identity, and multi-replica scheduler ownership are not. | Credential theft could permit module impersonation, and operational behavior under multiple independently scheduled API replicas is not yet evidenced. | Add secret-manager delivery, mTLS or managed workload identity, instance leases, reconciliation metrics, and explicit leader/scheduler ownership before dynamic routing. | Medium |
@@ -1252,7 +1271,7 @@ Pipeline artifacts should include test reports, coverage, OpenAPI schema, migrat
 - vehicle/test configuration profiles;
 - persistent scheduler boundary and job lifecycle — implemented initial slice;
 - object-storage abstraction for test artifacts — implemented initial slice;
-- correlated traces, bounded domain metrics, aggregate health/backlog, dashboards, recording rules, alerts, and local Alertmanager delivery — implemented; durable traces, dependency/storage metrics, production provider routing, threshold calibration, and sustained SLO evidence remain hardening.
+- correlated traces, bounded domain/dependency/storage metrics, aggregate health/backlog, dashboards, recording rules, alerts, and local Alertmanager delivery — implemented; durable traces, provider-specific saturation, production routing, threshold calibration, and sustained SLO evidence remain hardening.
 
 ### Increment 4 — Production Hardening
 
@@ -1393,10 +1412,11 @@ Application rollback is safe only when the previous version is compatible with t
 | Refresh-session implementation | `src/atep/identity/sessions.py`, identity models, schemas, and router |
 | Local service topology | `compose.yaml` and `Dockerfile` |
 | Optional observability topology | `compose.observability.yaml`, `deploy/observability/`, `src/atep/core/observability.py`, and `docs/observability.md` |
+| Dependency and storage telemetry | `src/atep/api/health.py`, `src/atep/artifacts/storage.py`, `tests/test_dependency_storage_observability.py`, alert rules, and disposable scrape evidence |
 | Disposable integration topology and runner | `compose.integration.yaml` and `tools/run_integration_tests.ps1` |
 | Black-box integration scenario | `tests/integration/test_identity_flow.py` |
 | Continuous integration workflow | `.github/workflows/integration.yml` |
-| Automated tests | `tests/test_security.py`, `test_identity.py`, `test_user_administration.py`, `test_role_catalogue.py`, `test_audit_query.py`, `test_rate_limit.py`, `test_module_registry.py`, `test_module_health.py`, `test_vehicle_telemetry.py`, `test_vehicle_commands.py`, `test_test_runs.py`, `test_test_jobs.py`, `test_artifacts.py`, `test_observability.py`, `test_domain_observability.py`, `test_alert_delivery.py`, `test_observability_assets.py`, and `test_api_contract.py` |
+| Automated tests | `tests/test_security.py`, `test_identity.py`, `test_user_administration.py`, `test_role_catalogue.py`, `test_audit_query.py`, `test_rate_limit.py`, `test_module_registry.py`, `test_module_health.py`, `test_vehicle_telemetry.py`, `test_vehicle_commands.py`, `test_test_runs.py`, `test_test_jobs.py`, `test_artifacts.py`, `test_observability.py`, `test_domain_observability.py`, `test_dependency_storage_observability.py`, `test_alert_delivery.py`, `test_observability_assets.py`, and `test_api_contract.py` |
 | Architecture summary | `docs/architecture.md` |
 | Requirements baseline | `docs/requirements-volume-i.md` |
 | Delivery roadmap | `docs/roadmap-volume-i.md` |
