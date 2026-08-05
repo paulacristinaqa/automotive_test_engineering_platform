@@ -74,6 +74,7 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
     api_url = required_environment("ATEP_INTEGRATION_API_URL")
     database_url = required_environment("ATEP_INTEGRATION_DATABASE_URL")
     rabbitmq_url = required_environment("ATEP_INTEGRATION_RABBITMQ_URL")
+    outbox_metrics_url = required_environment("ATEP_INTEGRATION_OUTBOX_METRICS_URL")
     admin_email = required_environment("ATEP_INTEGRATION_ADMIN_EMAIL")
     admin_password = required_environment("ATEP_INTEGRATION_ADMIN_PASSWORD")
 
@@ -1122,6 +1123,13 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             assert rate_limited.headers["x-ratelimit-limit"] == "5"
             assert rate_limited.headers["x-ratelimit-remaining"] == "0"
 
+            domain_metrics = await client.get("/metrics")
+            assert domain_metrics.status_code == 200, domain_metrics.text
+            assert "atep_test_jobs_dispatched_total" in domain_metrics.text
+            assert "atep_test_run_websocket_connections" in domain_metrics.text
+            assert 'kind="snapshot"' in domain_metrics.text
+            assert 'kind="update"' in domain_metrics.text
+
         message = await wait_for_message(queue)
         async with message.process():
             envelope = json.loads(message.body)
@@ -1133,6 +1141,13 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
         outbox = await wait_for_published_event(database, user_id)
         assert outbox["event_type"] == "atep.identity.user.created.v1"
         assert "password" not in json.dumps(outbox["payload"]).casefold()
+
+        async with httpx.AsyncClient(base_url=outbox_metrics_url, timeout=10) as metrics_client:
+            worker_metrics = await metrics_client.get("/metrics")
+        assert worker_metrics.status_code == 200, worker_metrics.text
+        assert "atep_outbox_worker_up 1.0" in worker_metrics.text
+        assert 'atep_outbox_publication_attempts_total{outcome="success"}' in worker_metrics.text
+        assert "atep_outbox_unpublished_events" in worker_metrics.text
 
         audit_actions = await database.fetch(
             """

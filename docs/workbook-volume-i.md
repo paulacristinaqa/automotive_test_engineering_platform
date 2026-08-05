@@ -2,11 +2,11 @@
 
 **Subtitle:** Architecture, implementation record, verification strategy, and engineering evidence  
 **Project:** Automotive Test Engineering Platform (ATEP)  
-**Document version:** 0.22.0
+**Document version:** 0.23.0
 
 **Baseline date:** 4 August 2026
 
-**Status:** Living engineering document — correlated OpenTelemetry and Prometheus baseline implemented
+**Status:** Living engineering document — reliability and domain observability baseline implemented
 **Language:** English
 
 ## Document Purpose
@@ -56,6 +56,7 @@ The document distinguishes three types of statements:
 | 0.20.0 | 5 August 2026 | Added immutable TestRun artifacts, a replaceable object-store protocol, atomic filesystem promotion, bounded multipart upload, SHA-256 integrity, independent read/write RBAC, protected download, migration `0012`, audit, and outbox evidence | 74 fast Python tests, Ruff, and strict mypy passed locally; the monitored suite completed in 1.79 seconds with 2.91 CPU-seconds and 171.1 MiB peak Python memory; disposable upload/download integration is delegated to CI |
 | 0.21.0 | 5 August 2026 | Added bounded Prometheus HTTP metrics, OpenTelemetry server spans, W3C trace propagation, correlated log/response identifiers, configurable parent-based sampling and OTLP/HTTP export, an optional pinned Collector/Prometheus/Grafana topology, and a provisioned overview dashboard | 80 fast Python tests, Ruff, strict mypy, focused propagation/cardinality tests, and Compose validation passed locally; the monitored suite completed in 1.96 seconds with 2.98 CPU-seconds and 178.0 MiB peak Python memory; Docker scrape evidence is delegated to CI |
 | 0.22.0 | 5 August 2026 | Added permission-protected aggregate module health, bounded registry metrics, API availability/latency recording rules, multi-window error-budget alerts, module-state/lease alerts, runbook response procedures, and CI `promtool` validation | 86 fast Python tests, Ruff, strict mypy, focused health/metric/rule tests, Compose validation, and remote Prometheus rule validation |
+| 0.23.0 | 5 August 2026 | Added internal outbox-worker metrics, aggregate outbox/scheduler backlog age, scheduler throughput/failure metrics, bounded WebSocket connection/message/live-publish metrics, six domain alerts, dashboard panels, controlled worker retry, and expanded Docker scrape evidence | 89 fast Python tests plus the expanded disposable integration scenario, Ruff, strict mypy, Compose validation, and `promtool` validation |
 
 ## How to Use This Workbook
 
@@ -132,7 +133,7 @@ The initial design deliberately starts as a modular monolith rather than a colle
 | Redis integration | Implemented | Readiness plus atomic expiring authentication and versioned-API rate-limit counters |
 | Structured logging | Implemented | JSON logs with request correlation context |
 | Container environment | Implemented and locally executed | One-shot migration, API, worker, PostgreSQL, Redis, and RabbitMQ services verified with Docker Compose |
-| Automated verification | Implemented | 86 fast tests plus one expanded disposable black-box integration scenario, 27 Android tests, Ruff, strict mypy, Android lint/build, and CI workflow |
+| Automated verification | Implemented | 89 fast tests plus one expanded disposable black-box integration scenario, 27 Android tests, Ruff, strict mypy, Android lint/build, and CI workflow |
 
 ## 2. Scope and Boundaries
 
@@ -345,6 +346,14 @@ External dashboards, test automation clients, and future ATEP modules call the C
 **Rationale.** A second health database would create consistency ambiguity, while raw module identifiers in Prometheus labels would create uncontrolled cardinality and disclosure risk. Multi-window burn rates detect both acute and persistent reliability loss with less noise than one instantaneous threshold. Policy-as-code makes review and rollback possible alongside application changes.
 
 **Consequences.** The module ratio is a current snapshot rather than historical uptime. Prometheus evaluates alerts, but production still requires Alertmanager routing, ownership, escalation, delivery tests, threshold calibration, and retained SLO evidence. The initial 500 ms latency alert is an operational guardrail and does not replace the formal 250 ms workload target.
+
+### ADR-018 — Process-Owned Domain Metrics with Aggregate-Only Backlog Signals
+
+**Decision.** Keep scheduler and test-run WebSocket metrics in the API process registry. Give the independently deployed outbox worker a dedicated internal Prometheus registry and HTTP endpoint on port 9101. Measure outbox and due-job backlog through SQL count/minimum-time aggregates, expose only fixed outcome/message-kind labels, and retry a failed outbox batch after rollback without deleting or mutating unpublished evidence.
+
+**Rationale.** Metrics must follow the process that owns the work. Exporting worker state through the API would couple independent lifecycles and hide worker failure. Individual event, job, run, vehicle, or user labels would leak operational identifiers and create unbounded cardinality. Aggregate count and oldest age directly reveal whether asynchronous work is making progress.
+
+**Consequences.** Prometheus must scrape two internal targets. Worker metrics reset on process restart and are operational telemetry rather than authoritative evidence. Initial 60-second backlog thresholds require capacity/load calibration. RabbitMQ and Redis outages remain safe for PostgreSQL state, but production requires notification routing and explicit recovery exercises.
 
 ## 5. Technology Stack and Rationale
 
@@ -688,6 +697,10 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | CORE-F-060 | Registry monitoring shall expose bounded heartbeat, state, availability, lease, expiry, and reconciliation metrics. | Reconciler and dedicated Prometheus registry | OBS-012 |
 | CORE-F-061 | API availability/error and latency SLIs shall be versioned as Prometheus recording rules. | `deploy/observability/alerts.yml` | OBS-013 |
 | CORE-F-062 | Error-budget, latency, module-state, and lease-risk alerts shall have severity, persistence, and runbook metadata. | Versioned alert rules and runbook | OBS-013, OBS-014 |
+| CORE-F-063 | The outbox worker shall expose bounded publication, duration, backlog-age, process, and worker metrics on an internal endpoint. | Dedicated registry and worker HTTP server | OBS-015, OBS-018 |
+| CORE-F-064 | The scheduler shall expose dispatch, failure, duration, due-count, and oldest-due-age metrics. | Scheduler aggregate and API registry | OBS-016 |
+| CORE-F-065 | Test-run live delivery shall expose bounded connection, message-kind, and Redis publication metrics. | WebSocket/Redis instrumentation | OBS-017, OBS-018 |
+| CORE-F-066 | Missing workers, old asynchronous backlog, and domain processing failures shall raise runbook-linked alerts. | Six Prometheus domain alerts | OBS-019 |
 
 ### 8.2 Non-Functional Requirements
 
@@ -723,6 +736,9 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | CORE-NF-030 | SLO policy as code | 99.9% API availability target, configurable module snapshot target, and versioned CI-validated rules | OBS-013 |
 | CORE-NF-031 | Alert safety | Bounded labels, reviewed severity/persistence, runbook metadata, and no credentials or domain identifiers | OBS-012 through OBS-014 |
 | CORE-NF-032 | Health aggregation | Constant-size PostgreSQL aggregate limited to credentialed modules | OBS-011 |
+| CORE-NF-033 | Domain metric cardinality | Fixed outcomes/message kinds or no labels; no event, run, user, vehicle, or job identifiers | OBS-015 through OBS-017 |
+| CORE-NF-034 | Worker telemetry isolation | Dedicated internal registry/port with no dependency from transaction success to metric delivery | OBS-015, architecture review |
+| CORE-NF-035 | Backlog measurement | Constant-size count/minimum-time queries without loading or labelling records | OBS-015, OBS-016 |
 
 ### 8.3 Definition of Done for an Increment
 
@@ -1006,6 +1022,11 @@ The fast local suite and repeated remote disposable CI runs prove clean-database
 | OBS-012 | Update heartbeat/reconciler metrics and inspect series. | Only fixed status labels appear; counts, active ratio, at-risk leases, expirations, and reconciliation failures remain bounded. | Focused metrics contract passed / P0 |
 | OBS-013 | Parse and validate SLO/alert rules. | Required recording rules and six named alerts have reviewed expressions, severities, persistence, and runbook links; `promtool` accepts the files. | Asset test passed locally; `promtool` delegated to CI / P0 |
 | OBS-014 | Trigger every alert in an isolated environment. | Alert state, ownership, routing, notification, silence, and recovery evidence match the runbook. | Planned with Alertmanager integration / P1 |
+| OBS-015 | Measure empty and non-empty outbox backlog and inspect worker metrics. | Count/oldest age are correct; outcomes are success/error only; no event identifiers appear. | Aggregate/cardinality unit test and Docker scrape / P0 |
+| OBS-016 | Measure due scheduled jobs before and after dispatch. | Count/oldest age, dispatch total, cycle duration, and failures reflect scheduler behavior without job identifiers. | Aggregate and metrics unit tests; Docker integration / P0 |
+| OBS-017 | Open/reject a test-run stream and publish snapshot/update/heartbeat events. | Active connections return to zero; bounded outcomes/kinds increment; no run/user/vehicle label appears. | Metrics/cardinality unit test and existing WebSocket integration / P0 |
+| OBS-018 | Stop Redis or RabbitMQ during live/outbox publication. | Failure counters increment; authoritative PostgreSQL state remains; outbox retries after rollback and WebSocket clients recover from snapshot. | Controlled unit failure passed; live dependency outage planned / P0 |
+| OBS-019 | Validate the six domain alert rules with `promtool`. | Worker availability, backlog, and failure expressions, severities, persistence windows, and runbook links are accepted. | Asset test locally; `promtool` in CI / P0 |
 
 ### 11.8 Quality and Security Operations
 
@@ -1173,7 +1194,7 @@ Pipeline artifacts should include test reports, coverage, OpenAPI schema, migrat
 | R-006 | Health checks create direct dependency connections. | Probe volume may add avoidable load. | Benchmark and consider pooled/lightweight broker health strategy. | Medium |
 | R-007 | The global API error schema is not snapshot/version compatibility tested. | An accidental shape change may break clients. | Add OpenAPI snapshots and consumer contract checks. | Medium |
 | R-008 | Dependency versions use ranges without a committed lock file. | Builds may change over time. | Adopt deterministic dependency locking and update automation. | Medium |
-| R-009 | Initial HTTP/module telemetry and distributed tracing exist, but WebSocket, outbox, scheduler, storage, and dependency-pool domain metrics remain incomplete. | Some asynchronous or saturation failures may still require log-centric investigation. | Add bounded domain metrics and trace links incrementally with load/cardinality evidence. | Medium |
+| R-009 | HTTP, module, outbox, scheduler, and WebSocket telemetry exist, but storage, database-pool, Redis, RabbitMQ, and trace links across asynchronous publication remain incomplete. | Some storage, saturation, or cross-process failures may still require log-centric investigation. | Add bounded dependency/storage metrics and OpenTelemetry links with load/cardinality evidence. | Medium |
 | R-010 | No formal backup/restore evidence. | Data recovery capability is unknown. | Define RPO/RTO, automated backups, restore drills, and evidence retention. | High |
 | R-011 | Rate limiting uses fixed windows and the direct network peer when no bearer credential is present. | Bursts near a window boundary may temporarily exceed the nominal rate; a shared reverse-proxy address may group unrelated clients. | Calibrate thresholds with load tests and implement a reviewed trusted-proxy attribution policy before public deployment. | High |
 | R-012 | Shared-secret workload authentication and application-process reconciliation are implemented, but mTLS, per-instance identity, and multi-replica scheduler ownership are not. | Credential theft could permit module impersonation, and operational behavior under multiple independently scheduled API replicas is not yet evidenced. | Add secret-manager delivery, mTLS or managed workload identity, instance leases, reconciliation metrics, and explicit leader/scheduler ownership before dynamic routing. | Medium |
@@ -1211,7 +1232,7 @@ Pipeline artifacts should include test reports, coverage, OpenAPI schema, migrat
 - vehicle/test configuration profiles;
 - persistent scheduler boundary and job lifecycle — implemented initial slice;
 - object-storage abstraction for test artifacts — implemented initial slice;
-- correlated OpenTelemetry traces, bounded Prometheus metrics, aggregate module health, provisioned dashboards, recording rules, and initial alerts — implemented; durable trace storage, additional domain metrics, Alertmanager routing, threshold calibration, and sustained SLO evidence remain production hardening.
+- correlated traces, bounded HTTP/module/outbox/scheduler/WebSocket metrics, aggregate health/backlog, dashboards, recording rules, and initial alerts — implemented; durable trace storage, dependency/storage metrics, Alertmanager routing, threshold calibration, and sustained SLO evidence remain production hardening.
 
 ### Increment 4 — Production Hardening
 
@@ -1355,7 +1376,7 @@ Application rollback is safe only when the previous version is compatible with t
 | Disposable integration topology and runner | `compose.integration.yaml` and `tools/run_integration_tests.ps1` |
 | Black-box integration scenario | `tests/integration/test_identity_flow.py` |
 | Continuous integration workflow | `.github/workflows/integration.yml` |
-| Automated tests | `tests/test_security.py`, `test_identity.py`, `test_user_administration.py`, `test_role_catalogue.py`, `test_audit_query.py`, `test_rate_limit.py`, `test_module_registry.py`, `test_module_health.py`, `test_vehicle_telemetry.py`, `test_vehicle_commands.py`, `test_test_runs.py`, `test_test_jobs.py`, `test_artifacts.py`, `test_observability.py`, `test_observability_assets.py`, and `test_api_contract.py` |
+| Automated tests | `tests/test_security.py`, `test_identity.py`, `test_user_administration.py`, `test_role_catalogue.py`, `test_audit_query.py`, `test_rate_limit.py`, `test_module_registry.py`, `test_module_health.py`, `test_vehicle_telemetry.py`, `test_vehicle_commands.py`, `test_test_runs.py`, `test_test_jobs.py`, `test_artifacts.py`, `test_observability.py`, `test_domain_observability.py`, `test_observability_assets.py`, and `test_api_contract.py` |
 | Architecture summary | `docs/architecture.md` |
 | Requirements baseline | `docs/requirements-volume-i.md` |
 | Delivery roadmap | `docs/roadmap-volume-i.md` |

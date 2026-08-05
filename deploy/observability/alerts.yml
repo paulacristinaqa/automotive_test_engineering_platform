@@ -71,3 +71,57 @@ groups:
         annotations:
           summary: One or more ATEP module leases are near expiry
           runbook_url: docs/observability.md#alert-response
+      - alert: AtepOutboxBacklogOld
+        expr: atep_outbox_oldest_unpublished_age_seconds > 60
+        for: 5m
+        labels:
+          severity: critical
+          service: atep-outbox-worker
+        annotations:
+          summary: The oldest unpublished ATEP outbox event is more than 60 seconds old
+          runbook_url: docs/observability.md#alert-response
+      - alert: AtepOutboxWorkerDown
+        expr: (up{job="atep-outbox-worker"} == 0) or (atep_outbox_worker_up == 0)
+        for: 2m
+        labels:
+          severity: critical
+          service: atep-outbox-worker
+        annotations:
+          summary: The ATEP outbox worker is unreachable or unable to complete publication cycles
+          runbook_url: docs/observability.md#alert-response
+      - alert: AtepOutboxPublicationErrors
+        expr: increase(atep_outbox_publication_attempts_total{outcome="error"}[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: atep-outbox-worker
+        annotations:
+          summary: The ATEP outbox worker failed to publish one or more events
+          runbook_url: docs/observability.md#alert-response
+      - alert: AtepTestSchedulerBacklogOld
+        expr: atep_test_job_oldest_due_age_seconds > 60
+        for: 5m
+        labels:
+          severity: warning
+          service: atep-test-scheduler
+        annotations:
+          summary: A due ATEP test job has waited more than 60 seconds for dispatch
+          runbook_url: docs/observability.md#alert-response
+      - alert: AtepTestSchedulerErrors
+        expr: increase(atep_test_scheduler_errors_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          service: atep-test-scheduler
+        annotations:
+          summary: The ATEP test scheduler encountered a dispatch-cycle failure
+          runbook_url: docs/observability.md#alert-response
+      - alert: AtepLiveUpdatePublishErrors
+        expr: increase(atep_test_run_live_publish_attempts_total{outcome="error"}[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          service: atep-test-run-live
+        annotations:
+          summary: ATEP could not publish one or more test-run live updates to Redis
+          runbook_url: docs/observability.md#alert-response

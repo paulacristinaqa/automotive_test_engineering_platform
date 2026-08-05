@@ -68,6 +68,39 @@
       ],
       "title": "Monitored module health",
       "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "atep-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s", "min": 0}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 24},
+      "id": 7,
+      "targets": [
+        {"expr": "atep_outbox_oldest_unpublished_age_seconds", "legendFormat": "oldest event", "refId": "A"}
+      ],
+      "title": "Outbox backlog age",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "atep-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s", "min": 0}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 24},
+      "id": 8,
+      "targets": [
+        {"expr": "atep_test_job_oldest_due_age_seconds", "legendFormat": "oldest due job", "refId": "A"}
+      ],
+      "title": "Scheduler dispatch lag",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "atep-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 24},
+      "id": 9,
+      "targets": [
+        {"expr": "atep_test_run_websocket_connections", "legendFormat": "connections", "refId": "A"}
+      ],
+      "title": "Live test-run connections",
+      "type": "timeseries"
     }
   ],
   "refresh": "15s",
@@ -78,5 +111,5 @@
   "timezone": "browser",
   "title": "ATEP Core Platform Overview",
   "uid": "atep-core-overview",
-  "version": 2
+  "version": 3
 }

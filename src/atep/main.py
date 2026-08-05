@@ -59,7 +59,9 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
             run_registry_reconciler(reconciler_stop, settings, observability)
         )
     if settings.test_scheduler_enabled:
-        scheduler_task = asyncio.create_task(run_test_scheduler(reconciler_stop, settings))
+        scheduler_task = asyncio.create_task(
+            run_test_scheduler(reconciler_stop, settings, observability)
+        )
     try:
         yield
     finally:

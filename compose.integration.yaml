@@ -57,6 +57,8 @@ services:
   outbox-worker:
     <<: *app-service
     command: ["python", "-m", "atep.events.worker"]
+    ports:
+      - "${ATEP_INTEGRATION_OUTBOX_METRICS_PORT:-19101}:9101"
     depends_on:
       migrate:
         condition: service_completed_successfully

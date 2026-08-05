@@ -39,6 +39,7 @@
 - object storage abstraction for test artefacts (implemented initial slice: immutable TestRun evidence, streaming filesystem adapter, replaceable store interface, SHA-256 integrity, independent RBAC, bounded multipart upload, download, audit, and outbox)
 - OpenTelemetry traces, Prometheus metrics, and dashboards (implemented initial slice: W3C trace propagation, correlated IDs, bounded HTTP metrics, OTLP/HTTP export, optional Collector/Prometheus/Grafana topology, and versioned overview dashboard)
 - module health aggregation, SLO recording rules, and burn-rate/registry alerts (implemented initial slice; production notification routing, load evidence, and threshold calibration remain hardening)
+- outbox, scheduler, and WebSocket domain metrics with backlog/failure alerts (implemented initial slice; production capacity thresholds and notification routing remain hardening)
 
 ## Increment 4 — production hardening
 

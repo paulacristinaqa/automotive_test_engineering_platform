@@ -67,6 +67,7 @@ async def create_test_run_endpoint(
             TestRunStreamEvent(
                 type="atep.test_run.created.v1", test_run=result, occurred_at=datetime.now(UTC)
             ),
+            observability=request.app.state.observability,
         )
     return result
 
@@ -130,6 +131,7 @@ async def update_test_run_status_endpoint(
             TestRunStreamEvent(
                 type="atep.test_run.updated.v1", test_run=result, occurred_at=datetime.now(UTC)
             ),
+            observability=request.app.state.observability,
         )
     return result
 
