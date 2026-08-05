@@ -35,7 +35,7 @@
 - command delivery from authorized test runs to the simulated vehicle source (implemented and verified by live `CT-SHOW-010`: idempotent request, target capability, lease recovery, safe allowlist, terminal acknowledgement, Android polling, and AAOS read-only rejection)
 - persistent test-run lifecycle and WebSocket status updates for CarSystemUI (implemented and verified: RBAC, idempotent creation, optimistic transitions, audit/outbox atomicity, Redis Pub/Sub, authenticated snapshot/update stream, Android deduplication and reconnect UI)
 - configuration profiles for vehicle and test environments (implemented initial backend slice: EV/hybrid/autonomous type, simulator/AAOS source, bounded configuration, independent RBAC, immutable lifecycle, audit/outbox, and TestRun snapshot)
-- scheduler boundary and job lifecycle
+- scheduler boundary and job lifecycle (implemented initial slice: persistent idempotent jobs, independent RBAC, optimistic cancellation, bounded multi-instance-safe due selection, atomic TestRun dispatch, audit, and outbox)
 - object storage abstraction for test artefacts
 - OpenTelemetry traces, Prometheus metrics, and dashboards
 

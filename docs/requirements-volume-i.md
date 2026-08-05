@@ -49,6 +49,10 @@
 | CORE-F-043 | Environment profiles shall follow the immutable `draft` to `active` to `archived` lifecycle and reject stale versions or invalid transitions with stable conflicts. | State, optimistic-version, and negative service tests |
 | CORE-F-044 | Profile creation and each effective lifecycle transition shall atomically persist immutable audit evidence and a versioned transactional outbox event. | Service and database integration tests |
 | CORE-F-045 | A test run may reference only an active environment profile and shall retain the profile identifier, version, vehicle kind, property source, and configuration snapshot used at creation. | Service, snapshot, and reproducibility tests |
+| CORE-F-046 | An operator with `test_jobs:manage` shall idempotently schedule a vehicle-scoped test job for a timezone-aware instant and discover it through independently protected bounded queries. | Validation, service, RBAC, OpenAPI, and Docker integration tests |
+| CORE-F-047 | A scheduled job may be cancelled exactly once before dispatch using optimistic version control; dispatched jobs shall reject cancellation with a stable state conflict. | Lifecycle, idempotency, stale-version, and negative tests |
+| CORE-F-048 | The scheduler shall atomically claim due jobs using row locks that skip work owned by another instance, create one queued TestRun, and mark the job dispatched. | Service query review and multi-instance database integration test |
+| CORE-F-049 | Scheduling, cancellation, and dispatch shall append versioned transactional outbox events and immutable audit evidence in the same unit of work as their state changes. | Unit and automated Docker integration test |
 
 ## Non-functional requirements
 
@@ -77,3 +81,4 @@
 | CORE-NF-021 | Command-delivery safety | commands are target-scoped, leased, idempotent, allowlisted, bounded by vehicle-state invariants, and acknowledged without persisting raw claim tokens |
 | CORE-NF-022 | Live test-run consistency | PostgreSQL and the transactional outbox remain authoritative; row-locked optimistic transitions prevent lost updates; Redis Pub/Sub is a best-effort projection; clients deduplicate by monotonically increasing version |
 | CORE-NF-023 | Test reproducibility | environment configurations are JSON-compatible and limited to 16 KiB; active profiles are immutable; every associated test run retains a versioned configuration snapshot independent of later archival |
+| CORE-NF-024 | Scheduler consistency | due work is selected oldest-first in bounded batches with `FOR UPDATE SKIP LOCKED`; job state, generated TestRun, audit, and outbox evidence commit or roll back together |

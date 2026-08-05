@@ -21,6 +21,8 @@ from atep.identity.router import router as identity_router
 from atep.identity.users_router import router as users_router
 from atep.registry.reconciler import run_registry_reconciler
 from atep.registry.router import router as registry_router
+from atep.test_jobs.router import router as test_jobs_router
+from atep.test_jobs.scheduler import run_test_scheduler
 from atep.test_runs.router import router as test_runs_router
 from atep.test_runs.router import websocket_router as test_runs_websocket_router
 from atep.vehicles.router import router as vehicles_router
@@ -40,14 +42,19 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     application.state.redis = redis_client
     reconciler_stop = asyncio.Event()
     reconciler_task: asyncio.Task[None] | None = None
+    scheduler_task: asyncio.Task[None] | None = None
     if settings.module_reconciliation_enabled:
         reconciler_task = asyncio.create_task(run_registry_reconciler(reconciler_stop, settings))
+    if settings.test_scheduler_enabled:
+        scheduler_task = asyncio.create_task(run_test_scheduler(reconciler_stop, settings))
     try:
         yield
     finally:
         reconciler_stop.set()
         if reconciler_task is not None:
             await reconciler_task
+        if scheduler_task is not None:
+            await scheduler_task
         await redis_client.aclose()
 
 
@@ -67,6 +74,7 @@ app.include_router(registry_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(vehicles_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(test_runs_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(environment_profiles_router, prefix="/api/v1", dependencies=rate_limited)
+app.include_router(test_jobs_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(test_runs_websocket_router, prefix="/api/v1")
 install_exception_handlers(app)
 

@@ -397,6 +397,69 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             assert test_run_page.json()["total"] == 1
             assert test_run_page.json()["items"][0]["run_id"] == test_run_id
 
+            scheduled_job_id = uuid4().hex
+            scheduled_run_id = uuid4().hex
+            scheduled_payload = {
+                "job_id": scheduled_job_id,
+                "run_id": scheduled_run_id,
+                "vehicle_id": vehicle_identifier,
+                "name": "Integration scheduled battery smoke test",
+                "suite": "smoke",
+                "metadata": {"requirement": "CORE-F-046"},
+                "scheduled_for": "2099-01-01T00:00:00Z",
+            }
+            scheduled_job = await client.post(
+                "/api/v1/test-jobs", headers=admin_headers, json=scheduled_payload
+            )
+            assert scheduled_job.status_code == 201, scheduled_job.text
+            assert scheduled_job.json()["status"] == "scheduled"
+
+            duplicate_job = await client.post(
+                "/api/v1/test-jobs", headers=admin_headers, json=scheduled_payload
+            )
+            assert duplicate_job.status_code == 200, duplicate_job.text
+            assert duplicate_job.json()["id"] == scheduled_job.json()["id"]
+
+            cancelled_job = await client.patch(
+                f"/api/v1/test-jobs/{scheduled_job_id}/cancel",
+                headers=admin_headers,
+                json={"expected_version": 1, "reason": "Integration cancellation"},
+            )
+            assert cancelled_job.status_code == 200, cancelled_job.text
+            assert cancelled_job.json()["status"] == "cancelled"
+            assert cancelled_job.json()["version"] == 2
+
+            due_job_id = uuid4().hex
+            due_run_id = uuid4().hex
+            due_job = await client.post(
+                "/api/v1/test-jobs",
+                headers=admin_headers,
+                json={
+                    **scheduled_payload,
+                    "job_id": due_job_id,
+                    "run_id": due_run_id,
+                    "scheduled_for": "2000-01-01T00:00:00Z",
+                },
+            )
+            assert due_job.status_code == 201, due_job.text
+            for _ in range(16):
+                await asyncio.sleep(0.5)
+                dispatched_job = await client.get(
+                    f"/api/v1/test-jobs/{due_job_id}", headers=admin_headers
+                )
+                assert dispatched_job.status_code == 200, dispatched_job.text
+                if dispatched_job.json()["status"] == "dispatched":
+                    break
+            else:
+                pytest.fail("The due test job was not dispatched within 8 seconds.")
+            dispatched_body = dispatched_job.json()
+            assert dispatched_body["test_run_id"]
+            generated_run = await client.get(
+                f"/api/v1/test-runs/{due_run_id}", headers=admin_headers
+            )
+            assert generated_run.status_code == 200, generated_run.text
+            assert generated_run.json()["status"] == "queued"
+
             gateway_name = f"integration-gateway-{uuid4().hex[:12]}"
             gateway_response = await client.post(
                 "/api/v1/modules",
@@ -828,6 +891,10 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                 client, "GET", "/api/v1/modules", 403, headers=user_headers
             )
             assert modules_denied["code"] == "permission_denied"
+            jobs_denied = await expected_error(
+                client, "GET", "/api/v1/test-jobs", 403, headers=user_headers
+            )
+            assert jobs_denied["code"] == "permission_denied"
 
             refresh_rows = await database.fetch(
                 "SELECT token_hash FROM refresh_tokens WHERE user_id = $1::uuid", user_id
@@ -1022,6 +1089,25 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             "vehicle.registered",
             "vehicle.status_changed",
         ]
+        dispatched_job_uuid = dispatched_body["id"]
+        assert (
+            await database.fetchval("SELECT count(*) FROM test_runs WHERE run_id = $1", due_run_id)
+            == 1
+        )
+        assert (
+            await database.fetchval(
+                "SELECT count(*) FROM outbox_events WHERE aggregate_id = $1::uuid",
+                dispatched_job_uuid,
+            )
+            == 2
+        )
+        assert (
+            await database.fetchval(
+                "SELECT count(*) FROM audit_records WHERE resource_id = $1::uuid",
+                dispatched_job_uuid,
+            )
+            == 2
+        )
         audit_id = await database.fetchval(
             "SELECT id FROM audit_records WHERE resource_id = $1::uuid LIMIT 1", user_id
         )

@@ -178,3 +178,16 @@ def test_vehicle_command_delivery_contracts_are_published() -> None:
     }
     assert command_parameters["limit"]["maximum"] == 200
     assert command_parameters["offset"]["maximum"] == 1_000_000
+
+
+def test_test_job_scheduler_contracts_and_safe_pagination_are_published() -> None:
+    paths = core_app.openapi()["paths"]
+    collection = paths["/api/v1/test-jobs"]
+    assert {"get", "post"} <= set(collection)
+    assert "/api/v1/test-jobs/{job_id}" in paths
+    assert "patch" in paths["/api/v1/test-jobs/{job_id}/cancel"]
+    parameters = {item["name"]: item["schema"] for item in collection["get"]["parameters"]}
+    assert parameters["limit"]["maximum"] == 200
+    assert parameters["offset"]["maximum"] == 1_000_000
+    assert "status" in parameters
+    assert "vehicle_id" in parameters

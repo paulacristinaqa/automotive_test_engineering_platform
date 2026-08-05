@@ -150,6 +150,15 @@ async def test_creation_is_idempotent_audited_and_evented() -> None:
             correlation_id=uuid4(),
         )
 
+    with pytest.raises(RunConflictError):
+        await create_test_run(
+            cast(AsyncSession, FakeSession(None, uuid4())),
+            command=contract(),
+            vehicle=target,
+            actor_user_id=actor_id,
+            correlation_id=None,
+        )
+
 
 @pytest.mark.asyncio
 async def test_transition_sets_timestamps_version_audit_and_event() -> None:

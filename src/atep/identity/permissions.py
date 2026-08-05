@@ -18,6 +18,8 @@ class PermissionName(StrEnum):
     TEST_RUNS_WRITE = "test_runs:write"
     ENVIRONMENT_PROFILES_READ = "environment_profiles:read"
     ENVIRONMENT_PROFILES_MANAGE = "environment_profiles:manage"
+    TEST_JOBS_READ = "test_jobs:read"
+    TEST_JOBS_MANAGE = "test_jobs:manage"
     PLATFORM_ADMIN = "platform:admin"
 
 
