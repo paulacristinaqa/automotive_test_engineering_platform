@@ -100,6 +100,12 @@ flowchart LR
    to authenticated WebSocket clients across API replicas, but a Redis publication failure never
    rolls back authoritative state. Every message carries a monotonically increasing version so
    CarSystemUI can ignore duplicates and out-of-order delivery.
+21. **Environment profiles are immutable reproducibility inputs.** A profile identifies the
+   vehicle kind, property source, and a bounded JSON configuration. It moves only from `draft`
+   to `active` to `archived`; edits after creation are replaced by a new profile identity rather
+   than silently changing an executed baseline. A TestRun may reference only an active profile
+   and copies its identifier, version, source, kind, and configuration into an immutable snapshot.
+   Later archival therefore does not change the evidence needed to reproduce a completed run.
 
 ## Initial bounded contexts
 
@@ -112,6 +118,7 @@ flowchart LR
 | Registry | platform modules, workload credentials, availability leases, and capability declarations | PostgreSQL |
 | Vehicles | vehicle catalogue, lifecycle state, immutable observations, and gateway integration contracts | PostgreSQL |
 | Test runs | vehicle-scoped execution lifecycle, progress, result summary, audit, and live projections | PostgreSQL + Redis Pub/Sub |
+| Environment profiles | immutable, versioned vehicle/test baselines and reproducibility inputs | PostgreSQL |
 
 Future volumes add contexts without importing another context's persistence models. Shared
 contracts live under an explicit version and remain backward compatible during migration.
@@ -147,5 +154,8 @@ contracts live under an explicit version and remain backward compatible during m
   digests. Android executes only the reviewed `set_property` allowlist.
 - Test-run REST mutations require `test_runs:write`; queries and WebSocket subscriptions require
   `test_runs:read`. WebSocket authentication revalidates active user state and never exposes Redis.
+- Environment profile discovery and lifecycle management use independent
+  `environment_profiles:read` and `environment_profiles:manage` permissions. Configuration is
+  JSON-compatible, bounded to 16 KiB, and excluded from secret storage by design.
 - Production follow-ups include proxy-aware client attribution, capacity tuning,
   secret-manager integration, and TLS/mTLS between workloads.

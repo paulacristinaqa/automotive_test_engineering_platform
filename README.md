@@ -54,6 +54,7 @@ An intended end-to-end scenario is:
 - capability-protected Android Automotive telemetry ingestion with idempotent retry handling;
 - persistent vehicle-scoped test runs with controlled, optimistic lifecycle transitions;
 - authenticated Redis-backed WebSocket snapshots and live test-run updates for CarSystemUI;
+- immutable EV, hybrid, and autonomous environment profiles with reproducible TestRun snapshots;
 - structured JSON logging and request correlation IDs;
 - liveness and dependency-readiness endpoints;
 - Docker Compose development and disposable integration environments;
@@ -75,6 +76,7 @@ flowchart LR
     API --> Registry["Module registry"]
     API --> Vehicles["Vehicle catalogue + telemetry"]
     API --> TestRuns["Test runs + live projection"]
+    API --> Profiles["Environment profiles"]
     API --> Audit["Immutable audit"]
     API --> PG[(PostgreSQL)]
     API --> Redis[(Redis)]
@@ -196,6 +198,7 @@ source .venv/bin/activate
 | Telemetry query | `GET /api/v1/vehicles/{vehicle_id}/telemetry` | `telemetry:read` |
 | Test runs | `POST/GET /api/v1/test-runs`, status updates | `test_runs:read`, `test_runs:write` |
 | Live test run | `WS /api/v1/test-runs/{run_id}/stream` | active bearer token + `test_runs:read` |
+| Environment profiles | `/api/v1/environment-profiles` and lifecycle status | `environment_profiles:read`, `environment_profiles:manage` |
 | Health | `/health/live`, `/health/ready` | Development probe policy |
 
 All API failures follow a stable correlation-aware error envelope. Passwords, password hashes,

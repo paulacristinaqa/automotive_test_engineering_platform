@@ -16,6 +16,8 @@ class PermissionName(StrEnum):
     VEHICLE_COMMANDS_WRITE = "vehicle_commands:write"
     TEST_RUNS_READ = "test_runs:read"
     TEST_RUNS_WRITE = "test_runs:write"
+    ENVIRONMENT_PROFILES_READ = "environment_profiles:read"
+    ENVIRONMENT_PROFILES_MANAGE = "environment_profiles:manage"
     PLATFORM_ADMIN = "platform:admin"
 
 

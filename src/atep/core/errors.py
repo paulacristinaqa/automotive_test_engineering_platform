@@ -141,6 +141,35 @@ class TestRunStateError(ApplicationError):
         )
 
 
+class EnvironmentProfileConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="environment_profile_conflict",
+            message="The profile identifier was already used for a different environment profile.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class EnvironmentProfileVersionConflictError(ApplicationError):
+    def __init__(self, *, current_version: int) -> None:
+        super().__init__(
+            code="environment_profile_version_conflict",
+            message="The environment profile was changed by another operation.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_version": current_version},
+        )
+
+
+class EnvironmentProfileStateError(ApplicationError):
+    def __init__(self, *, current_status: str, requested_status: str) -> None:
+        super().__init__(
+            code="environment_profile_state_conflict",
+            message="The requested environment-profile operation is not allowed in its state.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_status": current_status, "requested_status": requested_status},
+        )
+
+
 class InvalidCommandClaimError(ApplicationError):
     def __init__(self) -> None:
         super().__init__(

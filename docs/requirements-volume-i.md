@@ -45,6 +45,10 @@
 | CORE-F-039 | Test runs shall follow the controlled `queued` to `running` to terminal lifecycle and reject stale versions or illegal transitions with stable conflicts. | Validation, transition, idempotency, and automated Docker integration tests |
 | CORE-F-040 | An active user with `test_runs:read` shall receive an authoritative snapshot and versioned live updates over an authenticated WebSocket without direct infrastructure access. | Authenticated Redis/WebSocket Docker integration test |
 | CORE-F-041 | CarSystemUI shall display the configured test run, connection state, progress, summary, and version; ignore duplicate or out-of-order updates; and reconnect with bounded backoff. | Android unit tests, lint, and debug build |
+| CORE-F-042 | An operator with `environment_profiles:manage` shall idempotently create a bounded vehicle/test environment profile, while `environment_profiles:read` independently protects discovery. | Service, RBAC, validation, and API contract tests |
+| CORE-F-043 | Environment profiles shall follow the immutable `draft` to `active` to `archived` lifecycle and reject stale versions or invalid transitions with stable conflicts. | State, optimistic-version, and negative service tests |
+| CORE-F-044 | Profile creation and each effective lifecycle transition shall atomically persist immutable audit evidence and a versioned transactional outbox event. | Service and database integration tests |
+| CORE-F-045 | A test run may reference only an active environment profile and shall retain the profile identifier, version, vehicle kind, property source, and configuration snapshot used at creation. | Service, snapshot, and reproducibility tests |
 
 ## Non-functional requirements
 
@@ -72,3 +76,4 @@
 | CORE-NF-020 | Telemetry disposition safety | exhausted work does not restart silently; retry preserves event identity; discard affects only the selected rejected record; credentials never enter operator evidence |
 | CORE-NF-021 | Command-delivery safety | commands are target-scoped, leased, idempotent, allowlisted, bounded by vehicle-state invariants, and acknowledged without persisting raw claim tokens |
 | CORE-NF-022 | Live test-run consistency | PostgreSQL and the transactional outbox remain authoritative; row-locked optimistic transitions prevent lost updates; Redis Pub/Sub is a best-effort projection; clients deduplicate by monotonically increasing version |
+| CORE-NF-023 | Test reproducibility | environment configurations are JSON-compatible and limited to 16 KiB; active profiles are immutable; every associated test run retains a versioned configuration snapshot independent of later archival |
