@@ -2,11 +2,11 @@
 
 **Subtitle:** Architecture, implementation record, verification strategy, and engineering evidence  
 **Project:** Automotive Test Engineering Platform (ATEP)  
-**Document version:** 0.16.0
+**Document version:** 0.19.0
 
 **Baseline date:** 4 August 2026
 
-**Status:** Living engineering document — leased vehicle-command delivery implemented
+**Status:** Living engineering document — persistent test-job scheduler implemented
 **Language:** English
 
 ## Document Purpose
@@ -52,6 +52,7 @@ The document distinguishes three types of statements:
 | 0.16.0 | 4 August 2026 | Executed `CT-SHOW-010` against a live Android Automotive emulator and disposable ATEP stack, including safe mutation, validation and safety rejection, capability denial, lease recovery, telemetry, audit, outbox, and explicit AAOS read-only behavior | All ten scenario steps passed; seven commands reached terminal state (four succeeded and three rejected), the recovery command completed on attempt two, and 25 telemetry observations were retained |
 | 0.17.0 | 4 August 2026 | Added persistent vehicle-scoped test runs, idempotent creation, row-locked optimistic transitions, audit/outbox evidence, Redis Pub/Sub, authenticated WebSocket snapshots and updates, and a reconnecting CarSystemUI live-status card | 60 Python tests and 27 Android tests passed; Ruff, strict mypy, Android lint and debug APK passed; the disposable PostgreSQL/Redis/RabbitMQ/WebSocket scenario passed |
 | 0.18.0 | 5 August 2026 | Added immutable environment profiles for electric, hybrid, and autonomous test contexts, independent read/manage RBAC, bounded configuration, auditable lifecycle events, migration `0010`, and versioned TestRun snapshots | 64 Python tests passed; Ruff and strict mypy passed; the monitored suite peaked at 163.9 MiB Python working memory with no Gradle, Docker, emulator, or LibreOffice workload |
+| 0.19.0 | 5 August 2026 | Added persistent scheduled test jobs, independent read/manage RBAC, idempotent creation, optimistic cancellation, bounded multi-instance-safe due selection, atomic TestRun dispatch, migration `0011`, audit, and outbox evidence | 69 fast Python tests, Ruff, and strict mypy passed locally; the monitored suite completed in 1.77 seconds with 2.72 CPU-seconds and 169.6 MiB peak Python memory; disposable Docker integration is delegated to CI |
 
 ## How to Use This Workbook
 
@@ -109,7 +110,7 @@ The initial design deliberately starts as a modular monolith rather than a colle
 | RBAC data model | Implemented | User, role, permission, and association tables |
 | User administration | Implemented | Create, list, inspect, status, role assignment, and role removal routes |
 | Role catalogue administration | Implemented | Permission listing; role create, page, inspect, update, grant, revoke, and safe delete routes |
-| PostgreSQL persistence | Implemented | SQLAlchemy models and Alembic revisions `0001` through `0010` |
+| PostgreSQL persistence | Implemented | SQLAlchemy models and Alembic revisions `0001` through `0011` |
 | Module registry | Implemented | Persistent metadata, capability catalogue, hash-only workload credentials, heartbeat leases, and automatic reconciliation |
 | Vehicle integration boundary | Implemented initial slice | Vehicle catalogue, lifecycle state, gateway capability authorization, idempotent telemetry, and outbox contract |
 | Android Vehicle Gateway | Implemented initial slice | Changed-property mapping, persistent queue, stable retry identity, bounded rejection storage, HTTP transport, and status UI in the CarSystemUI showcase |
@@ -119,13 +120,14 @@ The initial design deliberately starts as a modular monolith rather than a colle
 | Vehicle command delivery | Implemented initial REST slice | RBAC request, target capability, atomic claim, bounded lease, hash-only claim token, idempotent acknowledgement, safe Android executor, and `CT-SHOW-010` |
 | Test-run orchestration and live status | Implemented initial slice | Persistent lifecycle, independent RBAC, idempotency, optimistic locking, audit/outbox evidence, Redis Pub/Sub, authenticated WebSocket, and CarSystemUI live card |
 | Environment profiles | Implemented initial slice | Immutable EV/hybrid/autonomous context, simulator/AAOS source, bounded configuration, lifecycle RBAC, audit/outbox, and TestRun snapshot |
+| Test-job scheduler | Implemented initial slice | Persistent idempotent schedule, bounded queries, optimistic cancellation, `SKIP LOCKED` due selection, atomic TestRun dispatch, audit, and outbox |
 | Administrative audit | Implemented | Immutable evidence, indexed bounded search, individual inspection, audited CSV export, and retention baseline |
 | API error contract | Implemented | Application, HTTP, validation, and unexpected-error handlers |
 | Reliable event publication | Implemented | Transactional outbox, resilient RabbitMQ startup, and publisher worker |
 | Redis integration | Implemented | Readiness plus atomic expiring authentication and versioned-API rate-limit counters |
 | Structured logging | Implemented | JSON logs with request correlation context |
 | Container environment | Implemented and locally executed | One-shot migration, API, worker, PostgreSQL, Redis, and RabbitMQ services verified with Docker Compose |
-| Automated verification | Implemented | 64 fast tests plus one expanded disposable black-box integration scenario, 27 Android tests, Ruff, strict mypy, Android lint/build, and CI workflow |
+| Automated verification | Implemented | 69 fast tests plus one expanded disposable black-box integration scenario, 27 Android tests, Ruff, strict mypy, Android lint/build, and CI workflow |
 
 ## 2. Scope and Boundaries
 
@@ -305,6 +307,14 @@ External dashboards, test automation clients, and future ATEP modules call the C
 **Rationale.** A command must not be delivered to an unintended gateway, applied concurrently by multiple workers, or disappear when a process or network fails between execution and acknowledgement. A lease provides recovery, a claim token binds acknowledgement to the current delivery attempt, and idempotent property assignment makes replay after lease expiry predictable. The allowlist and state invariants prevent the generic JSON contract from becoming an unrestricted vehicle-control channel.
 
 **Consequences.** The initial Android client polls every five seconds and has no separate durable acknowledgement queue; an interrupted acknowledgement therefore relies on lease expiry and safe replay. Explicit AAOS mode remains read-only. Future test-run orchestration may reference the existing optional `test_run_id`, add cancellation and priority, and publish live WebSocket status without changing the command ownership or security model.
+
+### ADR-014 — PostgreSQL-Owned Scheduled Test Dispatch
+
+**Decision.** Persist scheduled test jobs and treat PostgreSQL as the timing and ownership authority. Each scheduler replica selects a bounded oldest-first due batch with `FOR UPDATE SKIP LOCKED`. Dispatch creates the queued TestRun, links it to the job, changes the job state, and records audit/outbox evidence in one transaction. Pre-dispatch cancellation locks the row and requires an expected version.
+
+**Rationale.** In-memory timers disappear on restart and can execute twice when the API scales horizontally. Durable state plus non-blocking row ownership permits safe recovery and concurrent replicas while retaining the existing transaction and evidence model.
+
+**Consequences.** Polling introduces bounded dispatch latency configured from one to 300 seconds. Clock synchronization, scheduler lag metrics, concurrent multi-replica stress evidence, priority, recurrence, and misfire policies remain production-hardening work. The current lifecycle intentionally supports one-shot jobs only.
 
 ## 5. Technology Stack and Rationale
 
@@ -628,6 +638,10 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | CORE-F-043 | Environment profiles shall enforce immutable draft-to-active-to-archived lifecycle transitions and expected versions. | Locked status route, transition map, and stable conflicts | ENV-003, ENV-004 |
 | CORE-F-044 | Profile creation and effective transitions shall atomically append audit and outbox evidence. | SQLAlchemy unit of work, audit service, and transactional outbox | ENV-005 |
 | CORE-F-045 | Profile-backed TestRuns shall use only active profiles and preserve their reproducibility snapshot. | Active-profile resolver and TestRun snapshot columns | ENV-006 |
+| CORE-F-046 | Authorized operators shall idempotently schedule timezone-aware vehicle-scoped test jobs and independently discover them. | Test-job router, schema, service, model, and RBAC | JOB-001, JOB-002 |
+| CORE-F-047 | Scheduled jobs shall support optimistic, idempotent pre-dispatch cancellation and reject terminal changes. | Locked cancellation route and stable state/version conflicts | JOB-003, JOB-004 |
+| CORE-F-048 | Scheduler replicas shall claim bounded due work without duplicate dispatch and atomically create one queued TestRun. | Oldest-first `FOR UPDATE SKIP LOCKED` selection and shared transaction | JOB-005, JOB-006 |
+| CORE-F-049 | Effective job lifecycle changes shall append immutable audit and versioned outbox evidence atomically. | Audit recorder, transactional outbox, and scheduler unit of work | JOB-002, JOB-006 |
 
 ### 8.2 Non-Functional Requirements
 
@@ -654,6 +668,7 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | CORE-NF-021 | Command-delivery safety | Target scope, capability check, atomic claim, bounded lease, hash-only token, idempotent terminal state, allowlist, and vehicle-state invariants | VEH-017 through VEH-023, `CT-SHOW-010` |
 | CORE-NF-022 | Live test-run consistency | PostgreSQL/outbox authority, row-locked optimistic transitions, best-effort Redis projection, authenticated subscription, monotonic client deduplication | VEH-024 through VEH-030 |
 | CORE-NF-023 | Test reproducibility | Immutable profile identity, 16 KiB JSON bound, active-only use, and versioned TestRun snapshot independent of archival | ENV-001 through ENV-006 |
+| CORE-NF-024 | Scheduler consistency | Bounded oldest-first batches, row ownership with `SKIP LOCKED`, and atomic job/run/evidence state | JOB-005, JOB-006 |
 
 ### 8.3 Definition of Done for an Increment
 
@@ -1034,6 +1049,12 @@ The automated local run proves clean-database repeatability and the happy-path i
 | ENV-004 | Skip a lifecycle state, mutate an archived profile, or submit a stale expected version. | Stable state/version conflicts preserve the original profile. | Focused negative tests passed / P0 |
 | ENV-005 | Inspect profile creation and transition transactions. | Profile state, immutable audit, and versioned outbox event share one commit. | Service evidence passed; Docker expansion planned / P0 |
 | ENV-006 | Create a TestRun with draft, active, archived, and later-archived profile inputs. | Only active input is accepted and the run retains the exact version/configuration snapshot thereafter. | Active guard implemented and snapshot test passed; focused API expansion planned / P0 |
+| JOB-001 | Create, page, filter, and inspect a timezone-aware scheduled job under independent permissions. | Canonical bounded responses are returned; missing permission receives HTTP 403. | Schema, OpenAPI, service, and Docker RBAC evidence / P0 |
+| JOB-002 | Repeat exact job creation and reuse either the job ID or target run ID differently. | Exact retry returns the original job without duplicate evidence; conflicting reuse returns stable `test_job_conflict`. | Focused idempotency test and database uniqueness / P0 |
+| JOB-003 | Cancel scheduled work twice using the original request. | First cancellation advances state/version and records evidence; exact retry returns the same result without duplication. | Focused lifecycle test / P0 |
+| JOB-004 | Cancel with a stale version or after dispatch. | Stable version/state conflict is returned and persisted state remains unchanged. | Focused negative tests / P0 |
+| JOB-005 | Run two scheduler replicas against the same due batch. | Row locking with `SKIP LOCKED` assigns each job to at most one transaction and preserves oldest-first bounded selection. | Query design implemented; concurrent stress expansion planned / P0 |
+| JOB-006 | Dispatch due work and inspect the generated run, job, audit, and outbox rows. | Exactly one queued TestRun is linked; job becomes dispatched; all state and evidence commit atomically. | Focused unit and disposable Docker integration evidence / P0 |
 
 ## 12. Suggested CI/CD Quality Pipeline
 
@@ -1111,7 +1132,7 @@ Pipeline artifacts should include test reports, coverage, OpenAPI schema, migrat
 - authorized leased test-command delivery with safe Android execution — implemented and verified by live `CT-SHOW-010` emulator evidence;
 - production WebSocket connection limits, revocation fan-out, metrics, and resume-from-version replay;
 - vehicle/test configuration profiles;
-- scheduler boundary and job lifecycle;
+- persistent scheduler boundary and job lifecycle — implemented initial slice;
 - object-storage abstraction for test artifacts;
 - OpenTelemetry traces, Prometheus metrics, alerts, and dashboards.
 
@@ -1245,10 +1266,11 @@ Application rollback is safe only when the previous version is compatible with t
 | Vehicle catalogue, telemetry, and leased commands | `src/atep/vehicles/`, migrations `0007_vehicle_telemetry.py` and `0008_vehicle_command_delivery.py`, API contracts, `tests/test_vehicle_telemetry.py`, and `tests/test_vehicle_commands.py` |
 | Test-run lifecycle and live updates | `src/atep/test_runs/`, migration `0009_test_runs.py`, `tests/test_test_runs.py`, and the WebSocket path in `tests/integration/test_identity_flow.py` |
 | Environment profiles and TestRun snapshots | `src/atep/environment_profiles/`, migration `0010_environment_profiles.py`, and `tests/test_environment_profiles.py` |
+| Persistent test-job scheduling | `src/atep/test_jobs/`, migration `0011_test_jobs.py`, `tests/test_test_jobs.py`, and the disposable integration scenario |
 | Android Vehicle Gateway, property sources, retry worker, operator evidence, and command executor | `CarSystemUI_android/showcase/app/.../gateway/`, `showcase/app/.../vehicle/`, Android unit tests, `docs/ATEP_VEHICLE_GATEWAY.md`, and `docs/TEST_CASE_CT_SHOW_006.md` through `docs/TEST_CASE_CT_SHOW_010.md` in the companion repository |
 | Immutable audit model, query/export APIs, and recorder | `src/atep/audit/` |
 | Event outbox and worker | `src/atep/events/` |
-| Database migrations | `migrations/versions/0001_core_platform.py` through `0010_environment_profiles.py` |
+| Database migrations | `migrations/versions/0001_core_platform.py` through `0011_test_jobs.py` |
 | Refresh-session implementation | `src/atep/identity/sessions.py`, identity models, schemas, and router |
 | Local service topology | `compose.yaml` and `Dockerfile` |
 | Disposable integration topology and runner | `compose.integration.yaml` and `tools/run_integration_tests.ps1` |

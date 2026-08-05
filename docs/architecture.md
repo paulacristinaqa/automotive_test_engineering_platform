@@ -106,6 +106,12 @@ flowchart LR
    than silently changing an executed baseline. A TestRun may reference only an active profile
    and copies its identifier, version, source, kind, and configuration into an immutable snapshot.
    Later archival therefore does not change the evidence needed to reproduce a completed run.
+22. **Scheduled execution is a durable database boundary.** Operators create idempotent jobs with
+   external job and target run identifiers. PostgreSQL owns the `scheduled`, `cancelled`, and
+   `dispatched` lifecycle. Each scheduler replica selects a bounded oldest-first due batch using
+   `FOR UPDATE SKIP LOCKED`; the generated queued TestRun, dispatched job state, system audit, and
+   both outbox events share one transaction. Cancellation locks the job row and uses an expected
+   version so it cannot race silently with dispatch.
 
 ## Initial bounded contexts
 
@@ -119,6 +125,7 @@ flowchart LR
 | Vehicles | vehicle catalogue, lifecycle state, immutable observations, and gateway integration contracts | PostgreSQL |
 | Test runs | vehicle-scoped execution lifecycle, progress, result summary, audit, and live projections | PostgreSQL + Redis Pub/Sub |
 | Environment profiles | immutable, versioned vehicle/test baselines and reproducibility inputs | PostgreSQL |
+| Test jobs | durable scheduling, cancellation, due-work ownership, and TestRun dispatch | PostgreSQL |
 
 Future volumes add contexts without importing another context's persistence models. Shared
 contracts live under an explicit version and remain backward compatible during migration.
@@ -157,5 +164,7 @@ contracts live under an explicit version and remain backward compatible during m
 - Environment profile discovery and lifecycle management use independent
   `environment_profiles:read` and `environment_profiles:manage` permissions. Configuration is
   JSON-compatible, bounded to 16 KiB, and excluded from secret storage by design.
+- Test-job discovery and mutation use independent `test_jobs:read` and `test_jobs:manage`
+  permissions. The application scheduler never grants a client direct database or broker access.
 - Production follow-ups include proxy-aware client attribution, capacity tuning,
   secret-manager integration, and TLS/mTLS between workloads.

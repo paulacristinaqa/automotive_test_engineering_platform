@@ -170,6 +170,35 @@ class EnvironmentProfileStateError(ApplicationError):
         )
 
 
+class TestJobConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="test_job_conflict",
+            message="The job or target test-run identifier was already used differently.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class TestJobVersionConflictError(ApplicationError):
+    def __init__(self, *, current_version: int) -> None:
+        super().__init__(
+            code="test_job_version_conflict",
+            message="The test job was changed by another operation.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_version": current_version},
+        )
+
+
+class TestJobStateError(ApplicationError):
+    def __init__(self, *, current_status: str, requested_status: str) -> None:
+        super().__init__(
+            code="test_job_state_conflict",
+            message="The requested test-job state transition is not allowed.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_status": current_status, "requested_status": requested_status},
+        )
+
+
 class InvalidCommandClaimError(ApplicationError):
     def __init__(self) -> None:
         super().__init__(

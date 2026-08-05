@@ -12,6 +12,7 @@ from atep.environment_profiles import models as environment_profile_models  # no
 from atep.events import models as event_models  # noqa: F401
 from atep.identity import models as identity_models  # noqa: F401
 from atep.registry import models as registry_models  # noqa: F401
+from atep.test_jobs import models as test_job_models  # noqa: F401
 from atep.test_runs import models as test_run_models  # noqa: F401
 from atep.vehicles import models as vehicle_models  # noqa: F401
 

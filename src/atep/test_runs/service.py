@@ -47,6 +47,16 @@ async def create_test_run(
             raise TestRunConflictError()
         return existing, True
 
+    # A scheduled job reserves its target run identifier until dispatch. The local import
+    # avoids coupling model import order while preserving one public identifier namespace.
+    from atep.test_jobs.models import TestJob
+
+    reserved_run_id = await session.scalar(
+        select(TestJob.id).where(TestJob.run_id == command.run_id)
+    )
+    if reserved_run_id is not None:
+        raise TestRunConflictError()
+
     created_at = now or datetime.now(UTC)
     test_run = TestRun(
         run_id=command.run_id,

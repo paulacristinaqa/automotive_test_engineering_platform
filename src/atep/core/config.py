@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     api_rate_limit_window_seconds: int = Field(default=60, ge=1, le=86_400)
     module_reconciliation_enabled: bool = True
     module_reconciliation_interval_seconds: int = Field(default=15, ge=1, le=300)
+    test_scheduler_enabled: bool = True
+    test_scheduler_interval_seconds: int = Field(default=5, ge=1, le=300)
+    test_scheduler_batch_size: int = Field(default=20, ge=1, le=200)
     bootstrap_admin_email: EmailStr | None = None
     bootstrap_admin_password: SecretStr | None = None
 
