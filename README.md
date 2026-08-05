@@ -15,8 +15,10 @@ The repository currently contains the executable foundation of **Volume I — Co
 Implemented behavior is backed by requirements, architecture decisions, migrations, automated
 tests, a disposable integration environment, and an English engineering workbook.
 
-> **Project status:** active development. Volume I, Increment 3 is in progress. The module
-> registry, authenticated heartbeat leases, and automatic expiry reconciliation are implemented.
+> **Project status:** active development. Volume I, Increment 3 is in progress. The first
+> ATEP-to-Android-Automotive integration contract now provides a vehicle catalogue and
+> idempotent telemetry ingestion for the Vehicle Gateway. CarSystemUI now isolates simulated
+> and AAOS/CarPropertyManager observations behind an explicit property-source boundary.
 
 ## Why this project exists
 
@@ -47,6 +49,8 @@ An intended end-to-end scenario is:
 - raw-once, hash-only module workload credentials;
 - authenticated module heartbeats with bounded availability leases;
 - automatic reconciliation of expired modules to `inactive`;
+- versioned vehicle catalogue with independent read/manage permissions;
+- capability-protected Android Automotive telemetry ingestion with idempotent retry handling;
 - structured JSON logging and request correlation IDs;
 - liveness and dependency-readiness endpoints;
 - Docker Compose development and disposable integration environments;
@@ -61,9 +65,12 @@ cadence provides a concrete reason.
 ```mermaid
 flowchart LR
     Client["Dashboard / automation clients"] --> API["FastAPI Core API"]
+    Cockpit["CarSystemUI / Android Automotive"] -->|"REST + workload identity"| API
+    Cockpit --> CarAPI["CarPropertyManager / VHAL"]
     Module["ATEP runtime modules"] -->|"Authenticated heartbeat"| API
     API --> Identity["Identity and RBAC"]
     API --> Registry["Module registry"]
+    API --> Vehicles["Vehicle catalogue + telemetry"]
     API --> Audit["Immutable audit"]
     API --> PG[(PostgreSQL)]
     API --> Redis[(Redis)]
@@ -71,8 +78,14 @@ flowchart LR
     Reconciler["Lease reconciler"] --> Registry
     Worker["Outbox worker"] --> Outbox
     Worker --> MQ[(RabbitMQ)]
-    MQ --> Consumers["Future vehicle and test modules"]
+    MQ --> Consumers["Vehicle, test, diagnostics, analytics modules"]
 ```
+
+ATEP and [CarSystemUI_android](https://github.com/paulacristinaqa/CarSystemUI_android) form one
+coordinated automotive software-testing platform while retaining separate release histories.
+ATEP is the secure control plane, orchestration and evidence backbone. CarSystemUI is the
+in-vehicle cockpit, Android Automotive learning surface, simulator and future Vehicle Gateway.
+Together they are intended to exercise electric, hybrid and autonomous-vehicle scenarios.
 
 PostgreSQL is the system of record. Redis holds ephemeral coordination and abuse-control state.
 RabbitMQ provides at-least-once asynchronous integration, so consumers are expected to be
@@ -100,6 +113,7 @@ src/atep/
 ├── events/      transactional outbox and RabbitMQ worker
 ├── identity/    authentication, users, roles, permissions, and sessions
 ├── registry/    modules, capabilities, workload credentials, and leases
+├── vehicles/    vehicle catalogue and idempotent gateway telemetry
 ├── api/         shared API and health boundaries
 └── main.py      application composition and lifecycle
 
@@ -173,6 +187,9 @@ source .venv/bin/activate
 | Registry | `/api/v1/modules` and capability operations | `modules:read`, `modules:manage` |
 | Workload identity | module credential issuance and rotation | `modules:manage` |
 | Heartbeat | `POST /api/v1/modules/{id}/heartbeat` | `X-ATEP-Module-Token` |
+| Vehicles | `/api/v1/vehicles` and status operations | `vehicles:read`, `vehicles:manage` |
+| Telemetry ingest | `POST /api/v1/vehicles/{vehicle_id}/telemetry` | Gateway module identity + `vehicle.telemetry.publish` capability |
+| Telemetry query | `GET /api/v1/vehicles/{vehicle_id}/telemetry` | `telemetry:read` |
 | Health | `/health/live`, `/health/ready` | Development probe policy |
 
 All API failures follow a stable correlation-aware error envelope. Passwords, password hashes,
@@ -219,7 +236,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\run_integration_test
 
 The runner creates ephemeral credentials, uses isolated ports, applies every migration, and
 removes its containers, network, and volumes after execution. The latest local evidence records
-**44 fast tests plus one expanded Docker integration scenario** passing.
+**50 fast tests plus one expanded Docker integration scenario** passing.
 
 ## Engineering documentation
 
@@ -251,8 +268,15 @@ operational guidance, and review worksheets.
 | XI | DevOps | Planned |
 | XII | Enterprise Features | Planned |
 
-The next planned Volume I slice introduces versioned vehicle and test configuration profiles,
-followed by scheduler boundaries, artifact storage, and richer observability.
+The runnable CarSystemUI showcase connects simulated or AAOS property changes to this telemetry
+contract through a persistent, idempotent Vehicle Gateway. Its read-only CarPropertyManager/VHAL
+source labels evidence provenance and never silently substitutes simulator data. A unique,
+connectivity-constrained WorkManager job now retries pending telemetry after the activity or
+process closes. Rejected observations can now be inspected, retried with their original identity,
+or selectively discarded, while exhausted retry work remains visible until explicitly resumed.
+The next slices add area-aware properties, command delivery, and live test-run updates.
+Versioned test configuration profiles, scheduler boundaries, artifact storage, and richer
+observability remain in the Volume I roadmap.
 
 ## Security and production status
 

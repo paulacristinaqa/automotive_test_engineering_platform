@@ -2,9 +2,11 @@
 
 **Subtitle:** Architecture, implementation record, verification strategy, and engineering evidence  
 **Project:** Automotive Test Engineering Platform (ATEP)  
-**Document version:** 0.9.0  
-**Baseline date:** 15 July 2026  
-**Status:** Living engineering document — Increment 3 operational registry hardening implemented  
+**Document version:** 0.14.0
+
+**Baseline date:** 4 August 2026
+
+**Status:** Living engineering document — persistent Android background retry implemented
 **Language:** English
 
 ## Document Purpose
@@ -41,6 +43,11 @@ The document distinguishes three types of statements:
 | 0.7.0 | 15 July 2026 | Added atomic Redis-backed authentication/account and versioned-API rate limiting, hashed limiter identities, stable retry metadata, and fail-closed dependency behavior | 35 fast tests and one expanded disposable Docker integration scenario passed; Ruff and strict typing passed |
 | 0.8.0 | 15 July 2026 | Added the persistent ATEP module registry, versioned capability catalogue, independent RBAC permissions, migration `0005`, audit evidence, and transactional module events | 41 fast tests and one expanded disposable Docker integration scenario passed; Ruff and strict typing passed |
 | 0.9.0 | 15 July 2026 | Added one-time module workload credentials, authenticated heartbeats, bounded availability leases, automatic expiry reconciliation, migration `0006`, system audit evidence, and availability events | 44 fast tests and one expanded disposable Docker integration scenario passed; Ruff and strict typing passed |
+| 0.10.0 | 4 August 2026 | Defined ATEP and CarSystemUI as one coordinated platform; added the vehicle catalogue, gateway workload authorization, idempotent telemetry ingestion, migration `0007`, and automotive integration requirements | 50 fast tests and one expanded disposable Docker integration scenario passed; Ruff and strict typing passed |
+| 0.11.0 | 4 August 2026 | Connected the CarSystemUI showcase to the ATEP telemetry contract with changed-property mapping, a persistent store-before-send queue, stable retry identifiers, bounded rejection storage, configuration-safe disablement, and gateway status UI | Android debug APK assembled and five gateway unit tests passed; live Android-to-ATEP execution remains the manual `CT-SHOW-006` evidence step |
+| 0.12.0 | 4 August 2026 | Introduced `VehiclePropertySource`, retained the deterministic simulator, and added a read-only AAOS CarPropertyManager/VHAL compatibility source with explicit provenance, safe partial availability, unit conversion, and no silent simulation fallback | Android APK, lint, and nine unit tests passed; live VHAL execution remains the manual `CT-SHOW-007` evidence step |
+| 0.13.0 | 4 August 2026 | Added one unique connectivity-constrained WorkManager retry job per vehicle, 30-second exponential backoff, an eight-attempt bound, disabled-mode suppression, queue reconciliation, and process-death scenario `CT-SHOW-008` | Four retry-policy tests were added; final dependency download, Android execution, and live process-death evidence remain pending |
+| 0.14.0 | 4 August 2026 | Added persistent rejected-event inspection, unchanged-identity retry, selective discard, observable background-attempt exhaustion, explicit recovery, and operator scenario `CT-SHOW-009` | Android dependency resolution, debug APK assembly, 18 tests, and lint completed; live operator evidence remains pending |
 
 ## How to Use This Workbook
 
@@ -71,6 +78,16 @@ The first Increment 3 slice establishes an authoritative catalogue for the modul
 
 The operational-registry hardening slice separates human administration from workload identity. An administrator issues or rotates a high-entropy module credential whose raw value is returned once and whose SHA-256 digest is the only persisted form. The authenticated module reports `active` or `degraded` and renews a bounded 5–3,600-second lease through heartbeat. A background reconciler marks expired modules `inactive`, appends system audit evidence, and enqueues an availability event. Routine heartbeats deliberately create neither audit records nor events unless status or version changes, preventing high-volume evidence noise.
 
+The initial automotive-integration slice connects the Volume I control plane to the separately deployed CarSystemUI Android Automotive project. ATEP and CarSystemUI are treated as one coordinated testing platform for electric, hybrid, and autonomous vehicles while preserving independent repositories and release histories. Administrators manage canonical vehicle records with JWT/RBAC. An unattended Vehicle Gateway authenticates with a hash-only module credential, declares `vehicle.telemetry.publish`, and sends timezone-aware observations only through the public API. Each client event ID is idempotent: an exact retry returns the original receipt, while reuse for different data returns a stable conflict. The observation and `atep.vehicle.telemetry.received.v1` outbox event are committed atomically.
+
+The Android-side integration now implements the first executable Vehicle Gateway in the CarSystemUI showcase. A mapper emits only changed simulated properties with client-generated identifiers and UTC timestamps. A SharedPreferences-backed store persists events before synchronous HTTP delivery, retains temporary failures for retry with the same identity, and moves permanent client rejection into a bounded local rejected-event set. The screen reports disabled, synchronized, pending, and rejected states without displaying credentials. The debug APK and five focused unit tests passed locally; a live emulator-to-ATEP execution is deliberately recorded as pending rather than inferred from separate component tests.
+
+The next Android slice removes the gateway's dependency on a simulated origin. `VehiclePropertySource` now supplies the same immutable state from either a deterministic mutable simulator or a read-only AAOS source. The AAOS compatibility bridge uses runtime CarPropertyManager callbacks for speed, gear, ignition, battery energy/capacity, and charging-port state; converts speed from metres per second to kilometres per hour; and calculates state of charge from watt-hour values. The screen labels the evidence origin and removes local controls in AAOS mode. Unsupported or unauthorized properties are reported without silently substituting simulator data. Four source-focused tests raise the Android total to nine; a live AAOS/VHAL run remains explicitly pending.
+
+The background-delivery slice replaces activity-dependent retry with WorkManager orchestration. Any pending queue reconciles to one uniquely named job per vehicle under `ExistingWorkPolicy.KEEP`. Network connectivity is mandatory; failure returns retry with a 30-second exponential backoff, and the policy stops after eight worker attempts while retaining the source events. Manual or successful delivery cancels redundant work, and disabled gateway configuration schedules nothing even if an older queue exists. Six policy tests and `CT-SHOW-008` document success, retry, exhaustion, disabled mode, process termination, reconnection, and idempotent backend evidence. WorkManager `2.11.2` resolved successfully and the complete Android unit suite, debug APK assembly, and lint task executed on Windows; live process-death evidence remains pending.
+
+The operator-evidence slice makes permanent rejection and retry exhaustion actionable. A persistent rejected-event view shows canonical property, value, unit, timestamp, original identifier, and a non-sensitive reason without exposing credentials. Retrying one record atomically restores that exact event to the pending queue; discarding removes only the selected rejected record. WorkManager attempt count and exhaustion are persisted and observed by the `ViewModel`, and exhausted work cannot schedule itself again until the operator explicitly resumes delivery. Five additional focused tests and `CT-SHOW-009` cover inspection, unchanged identity, selective disposition, persistent exhaustion, and manual recovery. All 18 Android tests passed; live operator execution remains pending.
+
 The initial design deliberately starts as a modular monolith rather than a collection of empty microservices. Clear package boundaries and versioned event contracts allow later extraction when scaling, ownership, availability, or release cadence provides a concrete reason. This reduces operational complexity while protecting the intended distributed architecture.
 
 ### Current Increment at a Glance
@@ -82,15 +99,20 @@ The initial design deliberately starts as a modular monolith rather than a colle
 | RBAC data model | Implemented | User, role, permission, and association tables |
 | User administration | Implemented | Create, list, inspect, status, role assignment, and role removal routes |
 | Role catalogue administration | Implemented | Permission listing; role create, page, inspect, update, grant, revoke, and safe delete routes |
-| PostgreSQL persistence | Implemented | SQLAlchemy models and Alembic revisions `0001` through `0006` |
+| PostgreSQL persistence | Implemented | SQLAlchemy models and Alembic revisions `0001` through `0007` |
 | Module registry | Implemented | Persistent metadata, capability catalogue, hash-only workload credentials, heartbeat leases, and automatic reconciliation |
+| Vehicle integration boundary | Implemented initial slice | Vehicle catalogue, lifecycle state, gateway capability authorization, idempotent telemetry, and outbox contract |
+| Android Vehicle Gateway | Implemented initial slice | Changed-property mapping, persistent queue, stable retry identity, bounded rejection storage, HTTP transport, and status UI in the CarSystemUI showcase |
+| Android vehicle property sources | Implemented initial AAOS slice | Replaceable simulator/AAOS source, provenance status, read-only AAOS UI, safe partial availability, and canonical conversions |
+| Android background telemetry retry | Implemented and build verified | Unique per-vehicle WorkManager job, connected-network constraint, bounded exponential retry, lifecycle-independent queue flush, six policy tests, and manual process-death scenario |
+| Android telemetry operator evidence | Implemented and build verified | Persistent rejected-event details, unchanged-identity retry, selective discard, attempt/exhaustion state, explicit recovery, five focused tests, and `CT-SHOW-009` |
 | Administrative audit | Implemented | Immutable evidence, indexed bounded search, individual inspection, audited CSV export, and retention baseline |
 | API error contract | Implemented | Application, HTTP, validation, and unexpected-error handlers |
 | Reliable event publication | Implemented | Transactional outbox, resilient RabbitMQ startup, and publisher worker |
 | Redis integration | Implemented | Readiness plus atomic expiring authentication and versioned-API rate-limit counters |
 | Structured logging | Implemented | JSON logs with request correlation context |
 | Container environment | Implemented and locally executed | One-shot migration, API, worker, PostgreSQL, Redis, and RabbitMQ services verified with Docker Compose |
-| Automated verification | Implemented | 44 fast tests plus one expanded disposable black-box integration scenario, Ruff, strict mypy, and CI workflow |
+| Automated verification | Implemented | 50 fast tests plus one expanded disposable black-box integration scenario, Ruff, strict mypy, and CI workflow |
 
 ## 2. Scope and Boundaries
 
@@ -255,6 +277,14 @@ External dashboards, test automation clients, and future ATEP modules call the C
 
 **Consequences.** Credential distribution must be protected because possession authorizes heartbeat. Production hardening should replace or reinforce the shared secret with mTLS or managed workload identity, add lease/reconciliation metrics, and define multi-replica scheduling ownership. Instance-level registration remains necessary when one logical module has independently routable replicas.
 
+### ADR-012 — Separate Control-Plane and In-Vehicle Communication Boundaries
+
+**Decision.** Treat ATEP and CarSystemUI as one product architecture with two deployment and repository boundaries. Human Android operations use versioned REST/HTTPS and JWT/RBAC. The unattended Vehicle Gateway uses module workload identity and must declare `vehicle.telemetry.publish`. CarSystemUI and the gateway never connect directly to PostgreSQL, Redis, or RabbitMQ. Vehicle-local property access remains CarPropertyManager to CarService to VHAL; the gateway maps selected observations into the ATEP contract.
+
+**Rationale.** Android UI concerns, AOSP build cadence, and VHAL permissions differ fundamentally from control-plane persistence and orchestration. A stable public contract permits simulated, emulated, and physical vehicle sources without coupling Android code to backend infrastructure. It also creates a reusable testing boundary for electric, hybrid, and autonomous-vehicle scenarios.
+
+**Consequences.** The current shared module secret is a development-stage workload mechanism and must be protected on the Android side; managed OAuth2 workload tokens or mTLS remain production follow-ups. REST is implemented first. WebSocket test-run updates, authorized command delivery, offline gateway buffering, and CarPropertyManager integration remain subsequent slices.
+
 ## 5. Technology Stack and Rationale
 
 | Technology | Role | Why it was selected | Engineering consideration |
@@ -290,6 +320,7 @@ External dashboards, test automation clients, and future ATEP modules call the C
 | `src/atep/audit/` | Append-only administrative audit model and recording service |
 | `src/atep/events/` | Outbox model, enqueue helper, and RabbitMQ publisher worker |
 | `src/atep/registry/` | Persistent module registry, capability catalogue, schemas, services, and APIs |
+| `src/atep/vehicles/` | Vehicle catalogue, lifecycle state, gateway authorization, and idempotent telemetry ingestion |
 | `src/atep/api/health.py` | Liveness and readiness endpoints |
 | `migrations/` | Alembic environment and revision history |
 | `tests/` | Automated unit tests |
@@ -472,6 +503,16 @@ Every request receives a correlation UUID. A valid caller-provided UUID is retai
 11. Routine heartbeats do not create audit or event volume. A status or version transition enqueues `atep.platform.module.availability-changed.v1` in the same transaction.
 12. The periodic reconciler locks expired `active` or `degraded` rows with skip-locked semantics, marks them `inactive`, appends `platform.module.lease_expired` with a system actor, and enqueues the availability event atomically.
 
+### 6.14 Vehicle Catalogue and Android Automotive Telemetry
+
+1. `vehicles:read` and `vehicles:manage` protect human catalogue operations; `telemetry:read` separately protects observation retrieval.
+2. Vehicle identifiers are canonical lower-case slugs such as `vehicle-001`; internal primary and relationship identifiers remain UUIDs.
+3. The gateway supplies `X-ATEP-Module-ID` and the raw-once `X-ATEP-Module-Token`. The corresponding registered module must declare `vehicle.telemetry.publish`.
+4. Telemetry contains a URL-safe client `event_id`, canonical property name, scalar JSON value, optional unit, timezone-aware observation timestamp, and source label.
+5. New observations return HTTP 202 because downstream processing continues through the outbox. An exact retry returns HTTP 200 with `duplicate: true` and does not create another outbox event.
+6. Reusing an event ID for different vehicle, module, source, property, value, unit, or timestamp returns HTTP 409 `telemetry_event_conflict`.
+7. Observation persistence and `atep.vehicle.telemetry.received.v1` creation use one SQLAlchemy unit of work. RabbitMQ remains an internal integration mechanism and is never exposed to Android clients.
+
 ## 7. Software Engineering Practices Applied
 
 ### 7.1 Separation of Concerns
@@ -544,6 +585,16 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | CORE-F-021 | Effective module-catalogue mutations shall append correlated immutable audit evidence and versioned outbox events. | Registry service, audit recorder, and transactional outbox | MOD-009, MOD-010, EVT-012 |
 | CORE-F-022 | Administrators shall issue or rotate a module workload credential whose raw value is returned once and whose digest is the only persisted form. | Registry credential service and protected API | MOD-012, MOD-013 |
 | CORE-F-023 | Authenticated modules shall renew bounded availability leases, and automatic reconciliation shall mark expired modules inactive. | Heartbeat API, registry service, reconciler, and migration `0006` | MOD-011 through MOD-014 |
+| CORE-F-024 | Authorized administrators shall register, list, inspect, activate, and deactivate vehicle records. | Vehicle router, schemas, service, models, and migration `0007` | VEH-001 through VEH-003 |
+| CORE-F-025 | A capability-authorized Vehicle Gateway shall submit timezone-aware observations only through the public API. | Module authentication and telemetry endpoint | VEH-004 through VEH-006 |
+| CORE-F-026 | Observation persistence and the versioned telemetry outbox event shall be atomic. | Vehicle service and transactional outbox | VEH-007 |
+| CORE-F-027 | Telemetry retries shall be idempotent and conflicting reuse of an event ID shall be rejected. | Unique constraint and payload comparison | VEH-008, VEH-009 |
+| CORE-F-028 | The Android gateway shall persist changed properties before delivery and retain event identity across retry. | CarSystemUI mapper, persistent store, and gateway coordinator | VEH-011 |
+| CORE-F-029 | The Android showcase shall expose safe gateway operational states without credential disclosure. | CarSystemUI gateway status card and disabled configuration behavior | VEH-013 |
+| CORE-F-030 | The Android showcase shall consume canonical state through replaceable simulator and AAOS property sources. | `VehiclePropertySource`, simulator source, and AAOS source | VEH-012, VEH-014 |
+| CORE-F-031 | Explicit AAOS mode shall expose inaccessible VHAL properties without substituting simulator observations. | AAOS source status and read-only provenance UI | VEH-014, `CT-SHOW-007` |
+| CORE-F-032 | Pending Android telemetry shall reconcile to one persistent, connectivity-constrained, bounded background job per vehicle. | WorkManager scheduler, retry worker, and persistent gateway store | VEH-015, `CT-SHOW-008` |
+| CORE-F-033 | Rejected telemetry and exhausted background work shall remain inspectable and require an explicit, item-scoped retry or discard decision. | Persistent rejected-event model, queue observer, gateway operations, and Compose evidence card | VEH-016, `CT-SHOW-009` |
 
 ### 8.2 Non-Functional Requirements
 
@@ -561,6 +612,12 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | CORE-NF-012 | Abuse-control consistency | Atomic expiring counters, hashed limiter identities, stable retry metadata, and fail-closed Redis behavior | RATE-001 through RATE-008 |
 | CORE-NF-013 | Module-catalogue integrity | Canonical scoped names, semantic versions, bounded pages, independent read/manage permissions, and database uniqueness | MOD-001 through MOD-010 |
 | CORE-NF-014 | Operational-registry integrity | Hash-only workload credentials, heartbeat-controlled operational states, bounded leases, and atomic expiry evidence | MOD-011 through MOD-014 |
+| CORE-NF-015 | Automotive integration isolation | CarSystemUI and the gateway access only public ATEP APIs; infrastructure services remain private | VEH-004, architecture review |
+| CORE-NF-016 | Telemetry interoperability | Canonical property/event identifiers, timezone-aware timestamps, OpenAPI contracts, and idempotent retry behavior | VEH-005 through VEH-010 |
+| CORE-NF-017 | Gateway resilience | Store-before-send queue, stable retry identity, bounded permanent-rejection storage, and no delivery without configured credentials | VEH-011, VEH-013 |
+| CORE-NF-018 | Evidence provenance | Visible source identity, read-only AAOS mode, no silent fallback, and canonical unit conversion | VEH-012, VEH-014 |
+| CORE-NF-019 | Background delivery control | Unique work per vehicle, network constraint, queue-order retention, disabled-mode suppression, exponential backoff, and eight-attempt bound | VEH-015, `CT-SHOW-008` |
+| CORE-NF-020 | Telemetry disposition safety | No silent restart after exhaustion, unchanged identity on retry, item-scoped discard, persistent evidence, and no credential display | VEH-016, `CT-SHOW-009` |
 
 ### 8.3 Definition of Done for an Increment
 
@@ -582,13 +639,13 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | Check | Result | Evidence summary |
 |---|---|---|
 | Python syntax compilation | Passed | Application, tests, and migrations compiled successfully |
-| Unit and API contract suite | Passed | 44 tests passed |
+| Unit and API contract suite | Passed | 50 tests passed |
 | Ruff lint | Passed | No findings after corrections |
 | mypy strict analysis | Passed | Strict analysis passed for application and test modules |
-| Alembic offline upgrade generation | Passed | Revisions `0001` through `0006` generated PostgreSQL DDL, including audit immutability, refresh sessions, query indexes, the module registry, and heartbeat leases |
+| Alembic migration chain | Passed | Revisions `0001` through `0007` applied successfully to a clean PostgreSQL database in the disposable Docker topology |
 | Project metadata | Passed | `pyproject.toml` parsed successfully |
 | Compose syntax | Passed | YAML loaded successfully |
-| Application contract load | Passed | Authentication, health, identity, audit, and module-registry paths present in OpenAPI; bounded pagination/filter and rate-limit contracts confirmed |
+| Application contract load | Passed | Authentication, health, identity, audit, module-registry, vehicle, and telemetry paths present in OpenAPI; bounded pagination and gateway headers confirmed |
 | Docker Compose startup | Passed | PostgreSQL, Redis, and RabbitMQ became healthy; migration exited `0`; API and outbox worker remained active |
 | API health integration | Passed | `/health/live` returned `alive` and `/health/ready` returned `ready` against the container stack |
 | Administration end-to-end flow | Passed | Create/list, duplicate conflict, role assignment/removal, RBAC revocation, and account deactivation were exercised through HTTP |
@@ -601,6 +658,13 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | Redis rate-limit integration | Passed | The disposable scenario verified successful quota headers and HTTP 429 with `Retry-After` after the sixth same-account login attempt |
 | Module-registry integration | Passed | The disposable scenario verified migration `0005`, registration, duplicate conflict, capability filter, status/version update, capability declaration/removal, negative RBAC, four audit actions, and four outbox events |
 | Operational-registry integration | Passed | The disposable scenario verified migration `0006`, raw-once credential issuance, hash-only storage, invalid and valid heartbeat, lease renewal, background expiry, system audit, and availability outbox events |
+| Vehicle-gateway integration | Passed | The disposable scenario verified migration `0007`, vehicle registration/status, workload capability authorization, accepted telemetry, exact retry deduplication, conflicting retry rejection, bounded query, PostgreSQL state, audit, and outbox atomicity |
+| Android Vehicle Gateway build | Passed | CarSystemUI `showcase` produced a debug APK with the ATEP transport, persistent queue, status UI, and debug-only cleartext emulator policy |
+| Android Vehicle Gateway and property-source unit suite | Passed | Nine tests verified gateway mapping/delivery plus simulator mutation, AAOS conversion, battery percentage, and unavailable-VHAL behavior |
+| Android AAOS source build and lint | Passed | The standalone APK compiled its runtime CarPropertyManager compatibility bridge, required permission declarations, source provenance UI, and read-only AAOS mode without lint findings |
+| Android WorkManager retry build and tests | Passed | WorkManager `2.11.2` resolved; scheduler, worker, unique-work policy, connectivity constraint, exponential backoff, eight-attempt bound, disabled-mode suppression, and six policy tests compiled and passed |
+| Android rejected-event and exhaustion build and tests | Passed | Persistent inspection, atomic requeue, selective discard, attempt/exhaustion state, queue observation, explicit recovery, and five focused tests compiled and passed within the 18-test Android suite |
+| Android lint | Passed with warnings | `lintDebug` completed with zero errors and 14 non-blocking warnings covering the AAOS reflection bridge, KTX suggestions, dependency updates, target level, backup rules, and application icon |
 | GitHub Actions workflow | Defined, not remotely executed | Fast gates and disposable integration execution are configured for pull requests and `main` pushes |
 
 ### 9.2 Existing Automated Tests
@@ -889,6 +953,27 @@ The automated local run proves clean-database repeatability and the happy-path i
 | MOD-013 | Use an invalid credential or submit `registered`/`inactive` through heartbeat. | Invalid credentials return stable HTTP 401; invalid operational states return the global HTTP 422 validation envelope. | Implemented unit/contract/integration evidence / P0 |
 | MOD-014 | Renew a lease and change status/version through authenticated heartbeat. | Lease timestamps advance within the configured bound; only effective status/version transitions enqueue availability events and routine heartbeats create no audit noise. | Implemented unit/Docker integration evidence / P0 |
 
+### 11.12 Vehicle Gateway and Telemetry
+
+| ID | Test and objective | Expected result | Status / priority |
+|---|---|---|---|
+| VEH-001 | Register, page, inspect, activate, and deactivate a canonical vehicle. | Versioned APIs return deterministic state; lifecycle changes are audited and evented. | Service/contract implementation; Docker API evidence planned / P0 |
+| VEH-002 | Register a duplicate or unsafe vehicle identifier. | Canonical duplicate returns HTTP 409; invalid syntax returns the global HTTP 422 envelope. | Validation and stable error implemented; focused API evidence planned / P0 |
+| VEH-003 | Exercise `vehicles:read` and `vehicles:manage` independently. | Readers cannot mutate; unauthorized identities receive HTTP 403 without catalogue disclosure. | RBAC dependency implemented; focused API evidence planned / P0 |
+| VEH-004 | Publish telemetry with missing, invalid, or rotated gateway credentials. | Request returns stable HTTP 401 and no observation or outbox event is committed. | Credential primitive implemented; focused service/API evidence planned / P0 |
+| VEH-005 | Publish from a valid module without `vehicle.telemetry.publish`. | Request returns HTTP 403 `module_capability_required` and names the required capability. | Implemented unit evidence / P0 |
+| VEH-006 | Submit invalid property names, event IDs, values, or a timestamp without a UTC offset. | Global HTTP 422 validation envelope identifies the invalid field; no data is persisted. | Implemented schema/contract evidence / P0 |
+| VEH-007 | Commit a new telemetry observation and inspect its outbox row. | Observation and `atep.vehicle.telemetry.received.v1` exist together with matching correlation and identifiers. | Implemented service evidence; Docker transaction evidence planned / P0 |
+| VEH-008 | Retry an identical event ID and payload after a simulated network timeout. | HTTP 200 returns the original receipt with `duplicate: true`; no second observation or outbox event exists. | Implemented unit evidence; Docker retry evidence planned / P0 |
+| VEH-009 | Reuse an event ID with a changed property, value, source, vehicle, module, unit, or timestamp. | HTTP 409 `telemetry_event_conflict` is stable and the original observation remains unchanged. | Implemented unit evidence / P0 |
+| VEH-010 | Query vehicle telemetry with bounded paging and exact property filtering. | Results are newest-first, capped at 500, permission protected, and represented by the published OpenAPI schema. | Contract implemented; database/API evidence planned / P1 |
+| VEH-011 | Disconnect the Android gateway, buffer observations, reconnect, and resend. | Locally durable events arrive once logically despite retransmission and preserve original timestamps. | Persistent queue and stable-ID retry unit evidence passed; live `CT-SHOW-006` pending / P0 |
+| VEH-012 | Compare simulator and CarPropertyManager/VHAL mappings. | The same canonical state and telemetry units are preserved; speed is converted from m/s to km/h and battery percentage from energy/capacity. | Implemented Android unit evidence; live AAOS evidence pending / P0 |
+| VEH-013 | Start the showcase without module credentials and inspect gateway state and network behavior. | Gateway reports disabled, stores no event, performs no delivery, and displays no secret material. | Implemented Android unit/build evidence; manual UI check pending / P0 |
+| VEH-014 | Select explicit AAOS mode with all, partial, and no accessible VHAL properties. | Origin remains AAOS, local controls remain unavailable, accessible signals continue, and no simulated observation replaces missing evidence. | Implemented negative/unit evidence; manual `CT-SHOW-007` pending / P0 |
+| VEH-015 | Queue telemetry offline, close the process, restore connectivity, and inspect unique background work and ATEP receipts. | One job per vehicle survives the activity lifecycle, flushes in order, retains event identity, creates no duplicate observation, and stops or exhausts according to policy. | Implementation and six policy tests passed; manual `CT-SHOW-008` pending / P0 |
+| VEH-016 | Inspect rejected telemetry, retry one corrected event, discard one selected record, exhaust background work, and resume explicitly. | Evidence survives process restart; retry preserves identifier and timestamp; discard is item-scoped; eight failures stop automatic scheduling; manual recovery clears exhaustion. | Implementation and five focused tests passed; manual `CT-SHOW-009` pending / P0 |
+
 ## 12. Suggested CI/CD Quality Pipeline
 
 1. **Source checks:** secret scan, license policy, dependency lock review.
@@ -955,6 +1040,14 @@ Pipeline artifacts should include test reports, coverage, OpenAPI schema, migrat
 
 - service registry and module capability catalogue — implemented;
 - authenticated module heartbeat, bounded lease expiry, credential rotation, and automatic reconciliation — implemented;
+- vehicle catalogue and capability-protected idempotent telemetry ingestion — implemented initial slice;
+- CarSystemUI showcase connection to the ATEP REST contract — implemented initial gateway slice;
+- replaceable simulator/AAOS `VehiclePropertySource` and read-only CarPropertyManager compatibility bridge — implemented initial slice;
+- unique connectivity-constrained WorkManager retry with bounded exponential backoff — implemented and build verified;
+- persistent rejected-event inspection, unchanged-identity retry, selective discard, and retry-exhaustion visibility — implemented and build verified;
+- immutable operator-decision evidence and live emulator/VHAL-to-ATEP execution — next;
+- area-aware door/seat mapping and typed `subscribePropertyEvents` in the AOSP platform build — planned;
+- authorized test-command delivery and WebSocket test updates — planned;
 - vehicle/test configuration profiles;
 - scheduler boundary and job lifecycle;
 - object-storage abstraction for test artifacts;
@@ -1061,6 +1154,15 @@ Application rollback is safe only when the previous version is compatible with t
 | Workload credential | A high-entropy module secret returned once and persisted only as a SHA-256 digest |
 | Heartbeat lease | A bounded interval during which an authenticated module is considered operationally present |
 | Reconciliation | A periodic process that converts expired operational leases into observable inactive state |
+| CarSystemUI | The Android Automotive in-vehicle interface, learning surface, simulator, AAOS property adapter, and ATEP gateway |
+| Vehicle Gateway | Adapter that maps CarPropertyManager/VHAL observations and authorized commands to versioned ATEP contracts |
+| VehiclePropertySource | Android boundary that supplies canonical vehicle state from an explicitly identified simulator or AAOS origin |
+| CarPropertyManager | Android Automotive application API for reading, writing, and subscribing to permitted vehicle properties exposed by CarService |
+| VHAL | Vehicle Hardware Abstraction Layer; the Android boundary to a physical or simulated vehicle implementation |
+| WorkManager | Android Jetpack scheduler for persistent, constrained, deferrable background work that can survive process termination and reboot |
+| Telemetry event | A timestamped property observation identified by a client-generated idempotency key |
+| Rejected telemetry | A permanently refused client event retained locally with its original evidence and a non-sensitive reason for explicit disposition |
+| Retry exhaustion | A persisted terminal delivery state reached after the configured attempt bound; automatic scheduling remains stopped until explicit recovery |
 
 ## 19. Evidence Index
 
@@ -1073,15 +1175,17 @@ Application rollback is safe only when the previous version is compatible with t
 | Global API error contract | `src/atep/core/errors.py` |
 | Distributed Redis rate limiting | `src/atep/core/rate_limit.py`, typed settings, and application dependencies |
 | Module registry, heartbeat, and reconciliation | `src/atep/registry/`, including `src/atep/registry/reconciler.py`; migrations `0005_module_registry.py` and `0006_module_heartbeat_leases.py`; and module API contracts |
+| Vehicle catalogue and Android Automotive telemetry | `src/atep/vehicles/`, migration `0007_vehicle_telemetry.py`, vehicle API contracts, and `tests/test_vehicle_telemetry.py` |
+| Android Vehicle Gateway, property sources, retry worker, and operator evidence | `CarSystemUI_android/showcase/app/.../gateway/`, `showcase/app/.../vehicle/`, Android unit tests, `docs/ATEP_VEHICLE_GATEWAY.md`, and `docs/TEST_CASE_CT_SHOW_006.md` through `docs/TEST_CASE_CT_SHOW_009.md` in the companion repository |
 | Immutable audit model, query/export APIs, and recorder | `src/atep/audit/` |
 | Event outbox and worker | `src/atep/events/` |
-| Database migrations | `migrations/versions/0001_core_platform.py` through `0006_module_heartbeat_leases.py` |
+| Database migrations | `migrations/versions/0001_core_platform.py` through `0007_vehicle_telemetry.py` |
 | Refresh-session implementation | `src/atep/identity/sessions.py`, identity models, schemas, and router |
 | Local service topology | `compose.yaml` and `Dockerfile` |
 | Disposable integration topology and runner | `compose.integration.yaml` and `tools/run_integration_tests.ps1` |
 | Black-box integration scenario | `tests/integration/test_identity_flow.py` |
 | Continuous integration workflow | `.github/workflows/integration.yml` |
-| Automated tests | `tests/test_security.py`, `test_identity.py`, `test_user_administration.py`, `test_role_catalogue.py`, `test_audit_query.py`, `test_rate_limit.py`, `test_module_registry.py`, and `test_api_contract.py` |
+| Automated tests | `tests/test_security.py`, `test_identity.py`, `test_user_administration.py`, `test_role_catalogue.py`, `test_audit_query.py`, `test_rate_limit.py`, `test_module_registry.py`, `test_vehicle_telemetry.py`, and `test_api_contract.py` |
 | Architecture summary | `docs/architecture.md` |
 | Requirements baseline | `docs/requirements-volume-i.md` |
 | Delivery roadmap | `docs/roadmap-volume-i.md` |

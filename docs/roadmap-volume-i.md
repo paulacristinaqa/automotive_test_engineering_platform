@@ -26,6 +26,14 @@
 
 - service registry and module capability catalogue (completed)
 - authenticated module heartbeat, bounded availability leases, credential rotation, and automatic expiry reconciliation (completed)
+- vehicle catalogue and capability-protected idempotent Android Automotive telemetry ingestion (completed initial integration slice)
+- connect the CarSystemUI showcase Vehicle Gateway to the telemetry API (completed initial slice: changed-property mapping, persistent queue, retry, status UI, and Android unit tests)
+- isolate vehicle data behind `VehiclePropertySource` and add a read-only CarPropertyManager/VHAL adapter (completed initial AAOS slice: source selection, provenance UI, safe partial availability, conversion tests, and no silent simulator fallback)
+- replace activity-driven retry with unique connectivity-constrained WorkManager delivery (implemented and build verified; live `CT-SHOW-008` evidence pending)
+- add rejected-event inspection, idempotent retry, selective discard, and retry-exhaustion visibility (implemented and build verified; live `CT-SHOW-009` evidence pending)
+- add area-aware door/seat mapping and migrate the AOSP platform build to typed `subscribePropertyEvents` (planned)
+- command delivery from authorized test runs to the simulated VHAL (planned)
+- WebSocket test-run status updates for CarSystemUI (planned after REST integration)
 - configuration profiles for vehicle and test environments
 - scheduler boundary and job lifecycle
 - object storage abstraction for test artefacts

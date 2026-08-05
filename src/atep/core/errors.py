@@ -66,6 +66,34 @@ class DuplicateModuleNameError(ApplicationError):
         )
 
 
+class DuplicateVehicleIdentifierError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="vehicle_identifier_already_exists",
+            message="A vehicle with this identifier already exists.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class ModuleCapabilityRequiredError(ApplicationError):
+    def __init__(self, capability: str) -> None:
+        super().__init__(
+            code="module_capability_required",
+            message="The module is not authorized for this operation.",
+            status_code=status.HTTP_403_FORBIDDEN,
+            details={"required_capability": capability},
+        )
+
+
+class TelemetryEventConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="telemetry_event_conflict",
+            message="The event identifier was already used for different telemetry data.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
 class ProtectedRoleError(ApplicationError):
     def __init__(self) -> None:
         super().__init__(

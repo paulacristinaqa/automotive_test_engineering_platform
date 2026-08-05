@@ -102,6 +102,9 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                 "audit:export",
                 "modules:read",
                 "modules:manage",
+                "vehicles:read",
+                "vehicles:manage",
+                "telemetry:read",
             } <= permission_names
 
             module_name = f"integration-can-{uuid4().hex[:12]}"
@@ -221,6 +224,133 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                     break
             else:
                 pytest.fail("The expired module lease was not reconciled within 8 seconds.")
+
+            vehicle_identifier = f"vehicle-{uuid4().hex[:12]}"
+            vehicle_response = await client.post(
+                "/api/v1/vehicles",
+                headers=admin_headers,
+                json={
+                    "identifier": vehicle_identifier,
+                    "display_name": "Integration EV",
+                    "model": "ATEP Reference Vehicle",
+                    "description": "Disposable Android Automotive integration vehicle",
+                },
+            )
+            assert vehicle_response.status_code == 201, vehicle_response.text
+            vehicle = vehicle_response.json()
+            vehicle_uuid = vehicle["id"]
+            assert vehicle["status"] == "registered"
+
+            duplicate_vehicle = await expected_error(
+                client,
+                "POST",
+                "/api/v1/vehicles",
+                409,
+                headers=admin_headers,
+                json={
+                    "identifier": vehicle_identifier.upper(),
+                    "display_name": "Duplicate Integration EV",
+                },
+            )
+            assert duplicate_vehicle["code"] == "vehicle_identifier_already_exists"
+
+            active_vehicle = await client.patch(
+                f"/api/v1/vehicles/{vehicle_identifier}/status",
+                headers=admin_headers,
+                json={"status": "active"},
+            )
+            assert active_vehicle.status_code == 200, active_vehicle.text
+            assert active_vehicle.json()["status"] == "active"
+
+            gateway_name = f"integration-gateway-{uuid4().hex[:12]}"
+            gateway_response = await client.post(
+                "/api/v1/modules",
+                headers=admin_headers,
+                json={
+                    "name": gateway_name,
+                    "display_name": "Integration Vehicle Gateway",
+                    "version": "1.0.0",
+                    "capabilities": [
+                        {
+                            "name": "vehicle.telemetry.publish",
+                            "version": "1.0.0",
+                            "description": "Publish Android Automotive telemetry",
+                        }
+                    ],
+                },
+            )
+            assert gateway_response.status_code == 201, gateway_response.text
+            gateway_id = gateway_response.json()["id"]
+            gateway_credential_response = await client.post(
+                f"/api/v1/modules/{gateway_id}/credentials",
+                headers=admin_headers,
+                json={"lease_duration_seconds": 60},
+            )
+            assert gateway_credential_response.status_code == 200
+            gateway_token = gateway_credential_response.json()["module_token"]
+            telemetry_event_id = uuid4().hex
+            telemetry_payload = {
+                "event_id": telemetry_event_id,
+                "property": "battery_temperature",
+                "value": 47.8,
+                "unit": "celsius",
+                "timestamp": "2026-07-27T20:30:00Z",
+                "source": "android-automotive",
+            }
+
+            missing_capability = await expected_error(
+                client,
+                "POST",
+                f"/api/v1/vehicles/{vehicle_identifier}/telemetry",
+                403,
+                headers={
+                    "X-ATEP-Module-ID": module_id,
+                    "X-ATEP-Module-Token": module_token,
+                },
+                json=telemetry_payload,
+            )
+            assert missing_capability["code"] == "module_capability_required"
+
+            telemetry_headers = {
+                "X-ATEP-Module-ID": gateway_id,
+                "X-ATEP-Module-Token": gateway_token,
+            }
+            accepted_telemetry = await client.post(
+                f"/api/v1/vehicles/{vehicle_identifier}/telemetry",
+                headers=telemetry_headers,
+                json=telemetry_payload,
+            )
+            assert accepted_telemetry.status_code == 202, accepted_telemetry.text
+            assert accepted_telemetry.json()["duplicate"] is False
+
+            duplicate_telemetry = await client.post(
+                f"/api/v1/vehicles/{vehicle_identifier}/telemetry",
+                headers=telemetry_headers,
+                json=telemetry_payload,
+            )
+            assert duplicate_telemetry.status_code == 200, duplicate_telemetry.text
+            assert duplicate_telemetry.json()["id"] == accepted_telemetry.json()["id"]
+            assert duplicate_telemetry.json()["duplicate"] is True
+
+            conflict_payload = {**telemetry_payload, "value": 48.9}
+            telemetry_conflict = await expected_error(
+                client,
+                "POST",
+                f"/api/v1/vehicles/{vehicle_identifier}/telemetry",
+                409,
+                headers=telemetry_headers,
+                json=conflict_payload,
+            )
+            assert telemetry_conflict["code"] == "telemetry_event_conflict"
+
+            telemetry_page = await client.get(
+                f"/api/v1/vehicles/{vehicle_identifier}/telemetry",
+                headers=admin_headers,
+                params={"property": "battery_temperature"},
+            )
+            assert telemetry_page.status_code == 200, telemetry_page.text
+            assert telemetry_page.json()["total"] == 1
+            assert telemetry_page.json()["items"][0]["event_id"] == telemetry_event_id
 
             role_name = f"integration-qa-{uuid4().hex[:12]}"
             role_command = {
@@ -622,6 +752,33 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             )
             == 7
         )
+        assert (
+            await database.fetchval(
+                "SELECT count(*) FROM vehicle_telemetry_events WHERE vehicle_id = $1::uuid",
+                vehicle_uuid,
+            )
+            == 1
+        )
+        assert (
+            await database.fetchval(
+                "SELECT count(*) FROM outbox_events WHERE aggregate_id = $1::uuid",
+                vehicle_uuid,
+            )
+            == 3
+        )
+        vehicle_audit_actions = await database.fetch(
+            """
+            SELECT action
+            FROM audit_records
+            WHERE resource_id = $1::uuid AND action LIKE 'vehicle.%'
+            ORDER BY created_at, id
+            """,
+            vehicle_uuid,
+        )
+        assert [row["action"] for row in vehicle_audit_actions] == [
+            "vehicle.registered",
+            "vehicle.status_changed",
+        ]
         audit_id = await database.fetchval(
             "SELECT id FROM audit_records WHERE resource_id = $1::uuid LIMIT 1", user_id
         )
