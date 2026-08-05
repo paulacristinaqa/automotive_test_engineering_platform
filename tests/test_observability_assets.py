@@ -33,9 +33,35 @@ def test_prometheus_and_collector_configs_target_only_internal_services() -> Non
     assert 'targets: ["outbox-worker:9101"]' in prometheus
     assert "metrics_path: /metrics" in prometheus
     assert "/etc/prometheus/alerts.yml" in prometheus
+    assert 'targets: ["alertmanager:9093"]' in prometheus
     assert "endpoint: 0.0.0.0:4318" in collector
     assert "memory_limiter" in collector
     assert "exporters:" in collector and "debug:" in collector
+
+
+def test_alertmanager_routes_only_to_local_bounded_webhook() -> None:
+    config = yaml.safe_load(
+        Path("deploy/observability/alertmanager.yml").read_text(encoding="utf-8")
+    )
+    compose = Path("compose.observability.yaml").read_text(encoding="utf-8")
+    route = config["route"]
+    receiver = config["receivers"][0]
+    webhook = receiver["webhook_configs"][0]
+    inhibition = config["inhibit_rules"][0]
+
+    assert "prom/alertmanager:v0.33.1" in compose
+    assert route["group_by"] == ["alertname", "service", "severity"]
+    assert {child["matchers"][0] for child in route["routes"]} == {
+        'severity="critical"',
+        'severity="warning"',
+    }
+    assert inhibition["equal"] == ["service"]
+    assert webhook == {
+        "url": "http://alert-webhook:8080/api/v1/alerts",
+        "send_resolved": True,
+        "max_alerts": 50,
+    }
+    assert "https://" not in str(config)
 
 
 def test_slo_recording_rules_and_alerts_are_versioned_as_code() -> None:

@@ -40,13 +40,14 @@
 - OpenTelemetry traces, Prometheus metrics, and dashboards (implemented initial slice: W3C trace propagation, correlated IDs, bounded HTTP metrics, OTLP/HTTP export, optional Collector/Prometheus/Grafana topology, and versioned overview dashboard)
 - module health aggregation, SLO recording rules, and burn-rate/registry alerts (implemented initial slice; production notification routing, load evidence, and threshold calibration remain hardening)
 - outbox, scheduler, and WebSocket domain metrics with backlog/failure alerts (implemented initial slice; production capacity thresholds and notification routing remain hardening)
+- local Alertmanager grouping/inhibition and aggregate-only delivery receiver (implemented; production provider routing, ownership, escalation, and secret management remain hardening)
 
 ## Increment 4 — production hardening
 
 - Kubernetes manifests and secret-manager integration
 - mTLS and workload identity
 - backup, restore, retention, and disaster-recovery exercises
-- SLO threshold calibration, Alertmanager/incident routing, load tests, and security scanning
+- SLO threshold calibration, production incident-provider routing, load tests, and security scanning
 - CI/CD promotion through development, staging, and production
 
 The Volume I exit criterion is a repeatable deployment that supports the first end-to-end

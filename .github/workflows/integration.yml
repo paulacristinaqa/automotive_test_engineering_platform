@@ -39,6 +39,8 @@ jobs:
           echo "ATEP_INTEGRATION_RABBITMQ_PORT=15673" >> "$GITHUB_ENV"
           echo "ATEP_INTEGRATION_OUTBOX_METRICS_PORT=19101" >> "$GITHUB_ENV"
           echo "ATEP_INTEGRATION_OUTBOX_METRICS_URL=http://localhost:19101" >> "$GITHUB_ENV"
+          echo "ATEP_ALERTMANAGER_PORT=19093" >> "$GITHUB_ENV"
+          echo "ATEP_ALERT_WEBHOOK_PORT=19094" >> "$GITHUB_ENV"
       - name: Export dependency URLs
         shell: bash
         run: |
@@ -51,6 +53,9 @@ jobs:
           docker run --rm --entrypoint promtool \
             -v "$PWD/deploy/observability:/etc/prometheus:ro" \
             prom/prometheus:v3.13.2 check config /etc/prometheus/prometheus.yml
+          docker run --rm --entrypoint amtool \
+            -v "$PWD/deploy/observability:/etc/alertmanager:ro" \
+            prom/alertmanager:v0.33.1 check-config /etc/alertmanager/alertmanager.yml
       - name: Start disposable stack
         shell: bash
         run: |
@@ -62,11 +67,61 @@ jobs:
             sleep 2
           done
           exit 1
+      - name: Start local alert delivery services
+        shell: bash
+        run: |
+          docker compose -p atep-integration \
+            -f compose.integration.yaml \
+            -f compose.observability.yaml \
+            --profile observability \
+            up --build -d --no-deps alert-webhook alertmanager
+          for attempt in {1..30}; do
+            if curl --fail --silent http://localhost:19093/-/ready > /dev/null \
+              && curl --fail --silent http://localhost:19094/health/live > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
+      - name: Verify local alert delivery
+        shell: bash
+        run: |
+          started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          curl --fail --silent \
+            -H "Content-Type: application/json" \
+            -d "[{\"labels\":{\"alertname\":\"AtepDeliveryProbe\",\"service\":\"atep-alerting\",\"severity\":\"critical\"},\"annotations\":{\"summary\":\"CI delivery probe\"},\"startsAt\":\"${started_at}\"}]" \
+            http://localhost:19093/api/v2/alerts
+          delivered=false
+          for attempt in {1..30}; do
+            if curl --fail --silent http://localhost:19094/metrics \
+              | grep -q 'atep_alert_webhook_notifications_total{severity="critical",status="firing"} 1.0'; then
+              delivered=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$delivered" != true ]; then
+            exit 1
+          fi
+          sleep 1
+          ended_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          curl --fail --silent \
+            -H "Content-Type: application/json" \
+            -d "[{\"labels\":{\"alertname\":\"AtepDeliveryProbe\",\"service\":\"atep-alerting\",\"severity\":\"critical\"},\"annotations\":{\"summary\":\"CI delivery probe\"},\"startsAt\":\"${started_at}\",\"endsAt\":\"${ended_at}\"}]" \
+            http://localhost:19093/api/v2/alerts
+          for attempt in {1..30}; do
+            if curl --fail --silent http://localhost:19094/metrics \
+              | grep -q 'atep_alert_webhook_notifications_total{severity="critical",status="resolved"} 1.0'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
       - name: Run integration tests
         run: python -m pytest -p no:cacheprovider -o addopts= -m integration tests/integration
       - name: Show service logs on failure
         if: failure()
-        run: docker compose -p atep-integration -f compose.integration.yaml logs --no-color --tail 200
+        run: docker compose -p atep-integration -f compose.integration.yaml -f compose.observability.yaml --profile observability logs --no-color --tail 200
       - name: Remove disposable stack
         if: always()
-        run: docker compose -p atep-integration -f compose.integration.yaml down -v --remove-orphans
+        run: docker compose -p atep-integration -f compose.integration.yaml -f compose.observability.yaml --profile observability down -v --remove-orphans

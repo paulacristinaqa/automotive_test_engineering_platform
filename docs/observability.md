@@ -130,6 +130,25 @@ The versioned Grafana dashboard is provisioned automatically as **ATEP Core Plat
 The development Collector writes basic trace summaries to its own logs; it is not a durable trace
 backend.
 
+## Local Alert Delivery
+
+Prometheus sends alerts to the pinned Alertmanager at `alertmanager:9093`. Alertmanager groups by
+`alertname`, `service`, and `severity`; critical alerts use zero group wait and inhibit warning
+alerts for the same service. Both firing and resolved notifications are sent to
+`http://alert-webhook:8080/api/v1/alerts`.
+
+The development receiver validates at most 50 alerts per notification and retains no alert body,
+labels, annotations, vehicle IDs, test-run IDs, or credentials. It exposes only aggregate counters
+using bounded `severity` (`critical`, `warning`, `info`, `unknown`) and `status` (`firing`,
+`resolved`) labels. Alertmanager and receiver host ports bind to loopback:
+
+- Alertmanager: `http://127.0.0.1:9093`
+- aggregate webhook metrics: `http://127.0.0.1:9094/metrics`
+
+The receiver is evidence that routing works, not a production incident channel. Production must
+replace or extend it with managed provider adapters, secret-manager credentials, on-call ownership,
+escalation, delivery retry monitoring, and audited change control.
+
 ## Alert Response
 
 | Alert | First response |
@@ -147,9 +166,9 @@ backend.
 | `AtepTestSchedulerErrors` | Correlate scheduler logs with database and TestRun constraints before retrying operationally |
 | `AtepLiveUpdatePublishErrors` | Inspect Redis availability; authoritative TestRun state remains in PostgreSQL and clients must reconnect for a snapshot |
 
-Prometheus currently evaluates alerts but no Alertmanager is provisioned. Operators must inspect
-the Prometheus alerts page in the local topology. Production deployment requires reviewed routing,
-ownership, escalation, inhibition, silences, and notification-delivery tests.
+Operators can inspect both the Prometheus alerts page and local Alertmanager in the optional
+topology. Local grouping, inhibition, and webhook delivery are tested; production still requires
+reviewed provider routing, ownership, escalation, silences, and notification-delivery exercises.
 
 ## Security and Production Hardening
 
@@ -179,3 +198,5 @@ ownership, escalation, inhibition, silences, and notification-delivery tests.
 10. Confirm Prometheus scrapes both `api:8000/metrics` and internal `outbox-worker:9101/metrics`.
 11. Create backlog and Redis/RabbitMQ failure conditions and verify no identifiers enter labels.
 12. Load-test histogram/cardinality and calibrate production SLO, backlog, and latency thresholds.
+13. Validate Alertmanager configuration with `amtool` and inject a synthetic critical alert.
+14. Confirm the receiver increments only bounded counters and receives the resolved notification.

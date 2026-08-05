@@ -20,6 +20,35 @@ services:
     depends_on:
       api:
         condition: service_started
+      alertmanager:
+        condition: service_started
+
+  alertmanager:
+    image: prom/alertmanager:v0.33.1
+    profiles: [observability]
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    volumes:
+      - ./deploy/observability/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "127.0.0.1:${ATEP_ALERTMANAGER_PORT:-9093}:9093"
+    depends_on:
+      alert-webhook:
+        condition: service_started
+
+  alert-webhook:
+    build: .
+    profiles: [observability]
+    command:
+      - uvicorn
+      - atep.alerts.receiver:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+    ports:
+      - "127.0.0.1:${ATEP_ALERT_WEBHOOK_PORT:-9094}:8080"
 
   grafana:
     image: grafana/grafana:13.1.2

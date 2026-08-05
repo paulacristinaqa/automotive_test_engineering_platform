@@ -60,6 +60,7 @@ An intended end-to-end scenario is:
 - liveness and dependency-readiness endpoints;
 - versioned Prometheus SLO recording rules, burn-rate alerts, registry alerts, and runbooks;
 - internal outbox-worker, scheduler, and WebSocket metrics with backlog/failure alerts;
+- version-pinned Alertmanager with local grouping, inhibition, resolved delivery, and aggregate-only webhook evidence;
 - Docker Compose development and disposable integration environments;
 - Ruff, strict mypy, pytest, and GitHub Actions quality gates.
 
@@ -249,7 +250,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\run_integration_test
 
 The runner creates ephemeral credentials, uses isolated ports, applies every migration, and
 removes its containers, network, and volumes after execution. The latest local evidence records
-**89 fast tests plus one expanded Docker integration scenario** passing. The CarSystemUI
+**92 fast tests plus one expanded Docker integration scenario** passing. The CarSystemUI
 companion project also passes 27 unit tests, Android lint, and debug APK assembly for this slice.
 
 ## Engineering documentation
@@ -296,7 +297,8 @@ Versioned test configuration profiles, scheduler boundaries, artifact storage, a
 OpenTelemetry/Prometheus/Grafana observability, aggregate module health, recording rules, and
 initial SLO/registry alerts are implemented. Outbox, scheduler, and WebSocket domain telemetry
 now covers backlog age, processing failures, and live connection/message behavior. Production
-Alertmanager routing, threshold/load calibration, and durable trace retention remain hardening.
+notification-provider routing, threshold/load calibration, and durable trace retention remain
+hardening; local Alertmanager grouping, inhibition, and end-to-end webhook delivery are implemented.
 
 ## Security and production status
 

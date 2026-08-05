@@ -70,6 +70,9 @@
 | CORE-F-064 | The test scheduler shall report dispatched count, cycle failures/duration, due-job count, and oldest-due age from constant-size database aggregates. | Unit, metrics contract, and Docker integration tests |
 | CORE-F-065 | Test-run live delivery shall report bounded connection outcomes, active connections, message kinds, and Redis publication outcomes without run, user, or vehicle identifiers. | Unit, cardinality, WebSocket, and Docker integration tests |
 | CORE-F-066 | Prometheus shall raise runbook-linked alerts for an unavailable outbox worker, old outbox or scheduler backlog, and failed outbox, scheduler, or live-update publication. | Alert contract and `promtool` CI validation |
+| CORE-F-067 | Prometheus shall deliver firing and resolved alerts to a version-pinned Alertmanager using reviewed grouping intervals. | Compose, Prometheus, Alertmanager, and CI delivery tests |
+| CORE-F-068 | Alertmanager shall route critical and warning alerts to an internal development webhook and inhibit warnings while a critical alert for the same service is firing. | Configuration contract and `amtool` validation |
+| CORE-F-069 | The development webhook shall validate bounded Alertmanager payloads and expose only aggregate severity/status counters without retaining labels, annotations, or domain identifiers. | Positive, negative-cardinality, API, and live-delivery tests |
 
 ## Non-functional requirements
 
@@ -110,3 +113,6 @@
 | CORE-NF-033 | Domain metric cardinality | outbox, scheduler, and WebSocket metrics use only fixed outcomes/message kinds or no labels; event, run, user, vehicle, and job identifiers are forbidden |
 | CORE-NF-034 | Worker telemetry isolation | the outbox metrics server is internal-only, uses a dedicated registry/port, and metric failure cannot change transactional event state |
 | CORE-NF-035 | Backlog measurement | outbox and scheduler lag derive from constant-size count/minimum-time queries and never load or label individual records |
+| CORE-NF-036 | Alert delivery isolation | Alertmanager and webhook host ports bind only to loopback; the receiver configuration contains no external destinations or credentials |
+| CORE-NF-037 | Notification cardinality | receiver metric labels are restricted to critical, warning, info, unknown and firing/resolved; arbitrary incoming values never become labels |
+| CORE-NF-038 | Alert lifecycle | resolved notifications are enabled, repeat/group intervals are bounded, and critical alerts inhibit warnings only within the same service |
