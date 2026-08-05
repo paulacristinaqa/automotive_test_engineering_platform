@@ -14,6 +14,8 @@ class PermissionName(StrEnum):
     TELEMETRY_READ = "telemetry:read"
     VEHICLE_COMMANDS_READ = "vehicle_commands:read"
     VEHICLE_COMMANDS_WRITE = "vehicle_commands:write"
+    TEST_RUNS_READ = "test_runs:read"
+    TEST_RUNS_WRITE = "test_runs:write"
     PLATFORM_ADMIN = "platform:admin"
 
 

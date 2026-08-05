@@ -33,7 +33,7 @@
 - add rejected-event inspection, idempotent retry, selective discard, and retry-exhaustion visibility (implemented and build verified; live `CT-SHOW-009` evidence pending)
 - add area-aware door/seat mapping and migrate the AOSP platform build to typed `subscribePropertyEvents` (planned)
 - command delivery from authorized test runs to the simulated vehicle source (implemented and verified by live `CT-SHOW-010`: idempotent request, target capability, lease recovery, safe allowlist, terminal acknowledgement, Android polling, and AAOS read-only rejection)
-- WebSocket test-run status updates for CarSystemUI (planned after REST integration)
+- persistent test-run lifecycle and WebSocket status updates for CarSystemUI (implemented and verified: RBAC, idempotent creation, optimistic transitions, audit/outbox atomicity, Redis Pub/Sub, authenticated snapshot/update stream, Android deduplication and reconnect UI)
 - configuration profiles for vehicle and test environments
 - scheduler boundary and job lifecycle
 - object storage abstraction for test artefacts

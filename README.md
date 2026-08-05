@@ -17,8 +17,9 @@ tests, a disposable integration environment, and an English engineering workbook
 
 > **Project status:** active development. Volume I, Increment 3 is in progress. The first
 > ATEP-to-Android-Automotive integration contract now provides a vehicle catalogue and
-> idempotent telemetry ingestion for the Vehicle Gateway. CarSystemUI now isolates simulated
-> and AAOS/CarPropertyManager observations behind an explicit property-source boundary.
+> idempotent telemetry and command delivery for the Vehicle Gateway. Persistent test runs now
+> publish authenticated live WebSocket updates to CarSystemUI, which continues to isolate
+> simulated and AAOS/CarPropertyManager observations behind an explicit property-source boundary.
 
 ## Why this project exists
 
@@ -51,6 +52,8 @@ An intended end-to-end scenario is:
 - automatic reconciliation of expired modules to `inactive`;
 - versioned vehicle catalogue with independent read/manage permissions;
 - capability-protected Android Automotive telemetry ingestion with idempotent retry handling;
+- persistent vehicle-scoped test runs with controlled, optimistic lifecycle transitions;
+- authenticated Redis-backed WebSocket snapshots and live test-run updates for CarSystemUI;
 - structured JSON logging and request correlation IDs;
 - liveness and dependency-readiness endpoints;
 - Docker Compose development and disposable integration environments;
@@ -65,12 +68,13 @@ cadence provides a concrete reason.
 ```mermaid
 flowchart LR
     Client["Dashboard / automation clients"] --> API["FastAPI Core API"]
-    Cockpit["CarSystemUI / Android Automotive"] -->|"REST + workload identity"| API
+    Cockpit["CarSystemUI / Android Automotive"] -->|"REST + authenticated WebSocket"| API
     Cockpit --> CarAPI["CarPropertyManager / VHAL"]
     Module["ATEP runtime modules"] -->|"Authenticated heartbeat"| API
     API --> Identity["Identity and RBAC"]
     API --> Registry["Module registry"]
     API --> Vehicles["Vehicle catalogue + telemetry"]
+    API --> TestRuns["Test runs + live projection"]
     API --> Audit["Immutable audit"]
     API --> PG[(PostgreSQL)]
     API --> Redis[(Redis)]
@@ -190,6 +194,8 @@ source .venv/bin/activate
 | Vehicles | `/api/v1/vehicles` and status operations | `vehicles:read`, `vehicles:manage` |
 | Telemetry ingest | `POST /api/v1/vehicles/{vehicle_id}/telemetry` | Gateway module identity + `vehicle.telemetry.publish` capability |
 | Telemetry query | `GET /api/v1/vehicles/{vehicle_id}/telemetry` | `telemetry:read` |
+| Test runs | `POST/GET /api/v1/test-runs`, status updates | `test_runs:read`, `test_runs:write` |
+| Live test run | `WS /api/v1/test-runs/{run_id}/stream` | active bearer token + `test_runs:read` |
 | Health | `/health/live`, `/health/ready` | Development probe policy |
 
 All API failures follow a stable correlation-aware error envelope. Passwords, password hashes,
@@ -236,7 +242,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\run_integration_test
 
 The runner creates ephemeral credentials, uses isolated ports, applies every migration, and
 removes its containers, network, and volumes after execution. The latest local evidence records
-**55 fast tests plus one expanded Docker integration scenario** passing.
+**60 fast tests plus one expanded Docker integration scenario** passing. The CarSystemUI
+companion project also passes 27 unit tests, Android lint, and debug APK assembly for this slice.
 
 ## Engineering documentation
 

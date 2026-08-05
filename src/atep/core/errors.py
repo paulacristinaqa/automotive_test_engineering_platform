@@ -112,6 +112,35 @@ class VehicleCommandStateError(ApplicationError):
         )
 
 
+class TestRunConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="test_run_conflict",
+            message="The test-run identifier was already used for a different test run.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class TestRunVersionConflictError(ApplicationError):
+    def __init__(self, *, current_version: int) -> None:
+        super().__init__(
+            code="test_run_version_conflict",
+            message="The test run was changed by another operation.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_version": current_version},
+        )
+
+
+class TestRunStateError(ApplicationError):
+    def __init__(self, *, current_status: str, requested_status: str) -> None:
+        super().__init__(
+            code="test_run_state_conflict",
+            message="The requested test-run state transition is not allowed.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_status": current_status, "requested_status": requested_status},
+        )
+
+
 class InvalidCommandClaimError(ApplicationError):
     def __init__(self) -> None:
         super().__init__(

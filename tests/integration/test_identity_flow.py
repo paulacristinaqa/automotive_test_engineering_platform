@@ -8,6 +8,7 @@ import aio_pika
 import asyncpg  # type: ignore[import-untyped]
 import httpx
 import pytest
+import websockets
 
 pytestmark = pytest.mark.integration
 
@@ -44,6 +45,14 @@ async def wait_for_message(
             return message
         await asyncio.sleep(0.25)
     pytest.fail("The RabbitMQ event was not received within 10 seconds.")
+
+
+async def wait_for_stream_event(stream: Any, event_type: str) -> dict[str, Any]:
+    for _ in range(5):
+        event = json.loads(await asyncio.wait_for(stream.recv(), timeout=5))
+        if event["type"] == event_type:
+            return cast(dict[str, Any], event)
+    pytest.fail(f"The WebSocket event {event_type} was not received.")
 
 
 async def expected_error(
@@ -105,6 +114,8 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                 "vehicles:read",
                 "vehicles:manage",
                 "telemetry:read",
+                "test_runs:read",
+                "test_runs:write",
             } <= permission_names
 
             module_name = f"integration-can-{uuid4().hex[:12]}"
@@ -261,6 +272,130 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             )
             assert active_vehicle.status_code == 200, active_vehicle.text
             assert active_vehicle.json()["status"] == "active"
+
+            test_run_id = uuid4().hex
+            test_run_payload = {
+                "run_id": test_run_id,
+                "vehicle_id": vehicle_identifier,
+                "name": "Integration battery thermal smoke test",
+                "suite": "smoke",
+                "metadata": {"requirement": "CORE-F-038"},
+            }
+            created_test_run = await client.post(
+                "/api/v1/test-runs", headers=admin_headers, json=test_run_payload
+            )
+            assert created_test_run.status_code == 201, created_test_run.text
+            assert created_test_run.json()["status"] == "queued"
+            assert created_test_run.json()["version"] == 1
+
+            duplicate_test_run = await client.post(
+                "/api/v1/test-runs", headers=admin_headers, json=test_run_payload
+            )
+            assert duplicate_test_run.status_code == 200, duplicate_test_run.text
+            assert duplicate_test_run.json()["id"] == created_test_run.json()["id"]
+
+            test_run_conflict = await expected_error(
+                client,
+                "POST",
+                "/api/v1/test-runs",
+                409,
+                headers=admin_headers,
+                json={**test_run_payload, "name": "Different test"},
+            )
+            assert test_run_conflict["code"] == "test_run_conflict"
+
+            ws_url = (
+                api_url.replace("https://", "wss://").replace("http://", "ws://")
+                + f"/api/v1/test-runs/{test_run_id}/stream"
+            )
+            async with websockets.connect(
+                ws_url,
+                additional_headers={"Authorization": admin_headers["Authorization"]},
+            ) as stream:
+                snapshot = await wait_for_stream_event(stream, "atep.test_run.snapshot.v1")
+                assert snapshot["type"] == "atep.test_run.snapshot.v1"
+                assert snapshot["test_run"]["version"] == 1
+
+                running_test_run = await client.patch(
+                    f"/api/v1/test-runs/{test_run_id}/status",
+                    headers=admin_headers,
+                    json={
+                        "expected_version": 1,
+                        "status": "running",
+                        "progress_percent": 25,
+                        "summary": "Executing vehicle commands",
+                    },
+                )
+                assert running_test_run.status_code == 200, running_test_run.text
+                running_event = await wait_for_stream_event(stream, "atep.test_run.updated.v1")
+                assert running_event["test_run"]["status"] == "running"
+                assert running_event["test_run"]["version"] == 2
+
+                exact_retry = await client.patch(
+                    f"/api/v1/test-runs/{test_run_id}/status",
+                    headers=admin_headers,
+                    json={
+                        "expected_version": 1,
+                        "status": "running",
+                        "progress_percent": 25,
+                        "summary": "Executing vehicle commands",
+                    },
+                )
+                assert exact_retry.status_code == 200, exact_retry.text
+                assert exact_retry.json()["version"] == 2
+
+                stale_update = await expected_error(
+                    client,
+                    "PATCH",
+                    f"/api/v1/test-runs/{test_run_id}/status",
+                    409,
+                    headers=admin_headers,
+                    json={
+                        "expected_version": 1,
+                        "status": "running",
+                        "progress_percent": 50,
+                    },
+                )
+                assert stale_update["code"] == "test_run_version_conflict"
+                assert stale_update["details"]["current_version"] == 2
+
+                passed_test_run = await client.patch(
+                    f"/api/v1/test-runs/{test_run_id}/status",
+                    headers=admin_headers,
+                    json={
+                        "expected_version": 2,
+                        "status": "passed",
+                        "progress_percent": 100,
+                        "summary": "All assertions passed",
+                    },
+                )
+                assert passed_test_run.status_code == 200, passed_test_run.text
+                passed_event = await wait_for_stream_event(stream, "atep.test_run.updated.v1")
+                assert passed_event["test_run"]["status"] == "passed"
+                assert passed_event["test_run"]["version"] == 3
+
+            illegal_transition = await expected_error(
+                client,
+                "PATCH",
+                f"/api/v1/test-runs/{test_run_id}/status",
+                409,
+                headers=admin_headers,
+                json={
+                    "expected_version": 3,
+                    "status": "running",
+                    "progress_percent": 80,
+                },
+            )
+            assert illegal_transition["code"] == "test_run_state_conflict"
+
+            test_run_page = await client.get(
+                "/api/v1/test-runs",
+                headers=admin_headers,
+                params={"vehicle_id": vehicle_identifier, "status": "passed"},
+            )
+            assert test_run_page.status_code == 200, test_run_page.text
+            assert test_run_page.json()["total"] == 1
+            assert test_run_page.json()["items"][0]["run_id"] == test_run_id
 
             gateway_name = f"integration-gateway-{uuid4().hex[:12]}"
             gateway_response = await client.post(
