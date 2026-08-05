@@ -144,6 +144,11 @@ flowchart LR
    internal FastAPI webhook that validates a bounded payload and exports aggregate counters without
    persisting labels or annotations. Host ports bind to loopback. Production notification providers,
    credentials, ownership schedules, and escalation policy remain deployment-specific adapters.
+28. **Dependency and object-store telemetry is measured at existing boundaries.** Readiness records
+   duration, bounded outcome, and current state for PostgreSQL, Redis, and RabbitMQ. A decorator
+   instruments the replaceable artifact-store protocol with fixed operation/outcome labels, byte
+   counters, and optional capacity reporting. Keys, filenames, endpoints, exception messages, and
+   domain identifiers never enter labels. Telemetry failure must not alter authoritative state.
 
 ## Initial bounded contexts
 

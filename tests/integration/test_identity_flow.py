@@ -1129,6 +1129,13 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             assert "atep_test_run_websocket_connections" in domain_metrics.text
             assert 'kind="snapshot"' in domain_metrics.text
             assert 'kind="update"' in domain_metrics.text
+            assert 'atep_dependency_ready{dependency="postgres"} 1.0' in domain_metrics.text
+            assert 'atep_dependency_ready{dependency="redis"} 1.0' in domain_metrics.text
+            assert 'atep_dependency_ready{dependency="rabbitmq"} 1.0' in domain_metrics.text
+            assert 'atep_artifact_store_operations_total{operation="put",outcome="success"}' in (
+                domain_metrics.text
+            )
+            assert "atep_artifact_store_capacity_bytes" in domain_metrics.text
 
         message = await wait_for_message(queue)
         async with message.process():

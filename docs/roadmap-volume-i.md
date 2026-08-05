@@ -41,6 +41,7 @@
 - module health aggregation, SLO recording rules, and burn-rate/registry alerts (implemented initial slice; production notification routing, load evidence, and threshold calibration remain hardening)
 - outbox, scheduler, and WebSocket domain metrics with backlog/failure alerts (implemented initial slice; production capacity thresholds and notification routing remain hardening)
 - local Alertmanager grouping/inhibition and aggregate-only delivery receiver (implemented; production provider routing, ownership, escalation, and secret management remain hardening)
+- bounded dependency readiness and artifact-store operation/capacity metrics with alerts (implemented; database-pool and provider-specific saturation remain hardening)
 
 ## Increment 4 — production hardening
 

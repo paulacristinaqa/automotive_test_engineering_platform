@@ -101,6 +101,28 @@
       ],
       "title": "Live test-run connections",
       "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "atep-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0, "max": 1}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 32},
+      "id": 10,
+      "targets": [
+        {"expr": "atep_dependency_ready", "legendFormat": "{{dependency}}", "refId": "A"}
+      ],
+      "title": "Runtime dependency readiness",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "atep-prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 32},
+      "id": 11,
+      "targets": [
+        {"expr": "atep_artifact_store_free_bytes / clamp_min(atep_artifact_store_capacity_bytes, 1)", "legendFormat": "free ratio", "refId": "A"}
+      ],
+      "title": "Artifact-store free capacity",
+      "type": "timeseries"
     }
   ],
   "refresh": "15s",
@@ -111,5 +133,5 @@
   "timezone": "browser",
   "title": "ATEP Core Platform Overview",
   "uid": "atep-core-overview",
-  "version": 3
+  "version": 4
 }

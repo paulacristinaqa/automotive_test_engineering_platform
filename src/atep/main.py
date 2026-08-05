@@ -9,7 +9,7 @@ from fastapi import Depends, FastAPI, Request, Response
 
 from atep.api.health import router as health_router
 from atep.artifacts.router import router as artifacts_router
-from atep.artifacts.storage import FilesystemArtifactStore
+from atep.artifacts.storage import FilesystemArtifactStore, InstrumentedArtifactStore
 from atep.audit.router import router as audit_router
 from atep.core.config import get_settings
 from atep.core.errors import install_exception_handlers
@@ -48,7 +48,12 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         log.info("bootstrap_administrator_created")
     redis_client = redis.from_url(settings.redis_url)  # type: ignore[no-untyped-call]
     application.state.redis = redis_client
-    artifact_store = FilesystemArtifactStore(settings.test_artifact_storage_path)
+    filesystem_store = FilesystemArtifactStore(settings.test_artifact_storage_path)
+    artifact_store = InstrumentedArtifactStore(
+        filesystem_store,
+        observability,
+        capacity_provider=filesystem_store.capacity,
+    )
     await artifact_store.ensure_ready()
     application.state.artifact_store = artifact_store
     reconciler_stop = asyncio.Event()

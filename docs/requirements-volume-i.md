@@ -73,6 +73,9 @@
 | CORE-F-067 | Prometheus shall deliver firing and resolved alerts to a version-pinned Alertmanager using reviewed grouping intervals. | Compose, Prometheus, Alertmanager, and CI delivery tests |
 | CORE-F-068 | Alertmanager shall route critical and warning alerts to an internal development webhook and inhibit warnings while a critical alert for the same service is firing. | Configuration contract and `amtool` validation |
 | CORE-F-069 | The development webhook shall validate bounded Alertmanager payloads and expose only aggregate severity/status counters without retaining labels, annotations, or domain identifiers. | Positive, negative-cardinality, API, and live-delivery tests |
+| CORE-F-070 | Readiness shall publish duration, result, and current-state metrics for PostgreSQL, Redis, and RabbitMQ using only reviewed dependency and outcome labels. | Unit, cardinality, readiness, and Docker integration tests |
+| CORE-F-071 | The artifact-store boundary shall report bounded operation outcomes, duration, bytes read/written, and optional capacity without exposing object keys or evidence identifiers. | Decorator, filesystem, cardinality, and integration tests |
+| CORE-F-072 | Prometheus shall raise runbook-linked alerts for persistent dependency unavailability, artifact-store operation failures, and low free capacity. | Alert contract and `promtool` CI validation |
 
 ## Non-functional requirements
 
@@ -116,3 +119,6 @@
 | CORE-NF-036 | Alert delivery isolation | Alertmanager and webhook host ports bind only to loopback; the receiver configuration contains no external destinations or credentials |
 | CORE-NF-037 | Notification cardinality | receiver metric labels are restricted to critical, warning, info, unknown and firing/resolved; arbitrary incoming values never become labels |
 | CORE-NF-038 | Alert lifecycle | resolved notifications are enabled, repeat/group intervals are bounded, and critical alerts inhibit warnings only within the same service |
+| CORE-NF-039 | Dependency metric cardinality | dependency labels are restricted to postgres, redis, and rabbitmq; outcomes are ready or unavailable |
+| CORE-NF-040 | Storage metric privacy | operation labels are fixed; object keys, filenames, artifact/run identifiers, endpoints, and exception messages are forbidden |
+| CORE-NF-041 | Observability non-interference | capacity refresh and metric recording must not change object persistence, transaction success, or dependency readiness semantics |

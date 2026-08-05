@@ -125,3 +125,30 @@ groups:
         annotations:
           summary: ATEP could not publish one or more test-run live updates to Redis
           runbook_url: docs/observability.md#alert-response
+      - alert: AtepDependencyUnavailable
+        expr: atep_dependency_ready == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: atep-dependencies
+        annotations:
+          summary: An ATEP runtime dependency is persistently unavailable
+          runbook_url: docs/observability.md#alert-response
+      - alert: AtepArtifactStoreOperationErrors
+        expr: increase(atep_artifact_store_operations_total{outcome="error"}[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          service: atep-artifact-store
+        annotations:
+          summary: The ATEP artifact store reported one or more operation failures
+          runbook_url: docs/observability.md#alert-response
+      - alert: AtepArtifactStoreLowFreeSpace
+        expr: (atep_artifact_store_free_bytes / clamp_min(atep_artifact_store_capacity_bytes, 1)) < 0.1
+        for: 10m
+        labels:
+          severity: warning
+          service: atep-artifact-store
+        annotations:
+          summary: Artifact-store free capacity is below ten percent
+          runbook_url: docs/observability.md#alert-response
