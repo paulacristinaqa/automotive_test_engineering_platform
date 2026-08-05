@@ -131,12 +131,19 @@ flowchart LR
    the initial 99.9% API objective. Registry health is a constant-size PostgreSQL aggregate over
    modules that have received workload credentials; it does not persist a second health model.
    The reconciler refreshes bounded status gauges, and alert annotations link to the operational
-   runbook. Alert delivery remains an external Alertmanager/incident-management responsibility.
+   runbook. The local Alertmanager baseline provides disposable delivery evidence; accountable
+   production incident-management ownership and escalation remain deployment responsibilities.
 26. **Domain telemetry follows process ownership and aggregate-only backlog measurement.** The API
    registry owns scheduler and WebSocket metrics. The independently deployed outbox worker owns a
    dedicated internal Prometheus registry on port 9101. Backlog count and oldest age come from
    constant-size SQL aggregates; record identifiers and unrestricted event/run/job labels never
    enter metrics. Publication failures retain at-least-once state and trigger bounded worker retry.
+27. **Development alert delivery is local, aggregate-only, and replaceable.** Prometheus sends
+   firing and resolved alerts to a pinned Alertmanager. Alertmanager groups by alert name, service,
+   and severity; critical alerts inhibit warnings for the same service. Its only receiver is an
+   internal FastAPI webhook that validates a bounded payload and exports aggregate counters without
+   persisting labels or annotations. Host ports bind to loopback. Production notification providers,
+   credentials, ownership schedules, and escalation policy remain deployment-specific adapters.
 
 ## Initial bounded contexts
 
@@ -152,7 +159,7 @@ flowchart LR
 | Environment profiles | immutable, versioned vehicle/test baselines and reproducibility inputs | PostgreSQL |
 | Test jobs | durable scheduling, cancellation, due-work ownership, and TestRun dispatch | PostgreSQL |
 | Test artifacts | immutable TestRun evidence metadata, integrity, and binary-object abstraction | PostgreSQL + object storage |
-| Observability | bounded HTTP/module/outbox/scheduler/WebSocket metrics, trace propagation/export, SLO rules, alerts, correlation, and dashboards | PostgreSQL aggregates + process-local Prometheus registries + OpenTelemetry Collector + Grafana |
+| Observability | bounded metrics/traces, SLO rules, alert evaluation, local routing/inhibition, aggregate delivery evidence, correlation, and dashboards | PostgreSQL aggregates + process-local registries + Prometheus + Alertmanager + OpenTelemetry Collector + Grafana |
 
 Future volumes add contexts without importing another context's persistence models. Shared
 contracts live under an explicit version and remain backward compatible during migration.
