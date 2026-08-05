@@ -66,6 +66,10 @@
 | CORE-F-060 | The registry reconciler shall publish bounded module status, availability, lease-risk, heartbeat, expiry, and reconciliation-failure metrics. | Unit and metrics contract tests |
 | CORE-F-061 | Prometheus shall evaluate versioned recording rules for API availability, error ratios, and p95 latency. | Rule asset test and `promtool` CI validation |
 | CORE-F-062 | Prometheus shall raise severity-labelled, runbook-linked alerts for fast/slow error-budget burn, excessive latency, unavailable/degraded modules, and leases at risk. | Alert contract test and `promtool` CI validation |
+| CORE-F-063 | The outbox worker shall expose an internal Prometheus endpoint reporting bounded publication outcomes, batch duration, unpublished count, oldest-event age, process state, and worker state. | Unit, cardinality, Prometheus scrape, and Docker integration tests |
+| CORE-F-064 | The test scheduler shall report dispatched count, cycle failures/duration, due-job count, and oldest-due age from constant-size database aggregates. | Unit, metrics contract, and Docker integration tests |
+| CORE-F-065 | Test-run live delivery shall report bounded connection outcomes, active connections, message kinds, and Redis publication outcomes without run, user, or vehicle identifiers. | Unit, cardinality, WebSocket, and Docker integration tests |
+| CORE-F-066 | Prometheus shall raise runbook-linked alerts for an unavailable outbox worker, old outbox or scheduler backlog, and failed outbox, scheduler, or live-update publication. | Alert contract and `promtool` CI validation |
 
 ## Non-functional requirements
 
@@ -103,3 +107,6 @@
 | CORE-NF-030 | SLO policy as code | API availability uses a 99.9% target, module snapshot availability uses a configurable target, and all recording/alert rules are versioned and CI-validated |
 | CORE-NF-031 | Alert safety | alerts use bounded labels, explicit severities, minimum persistence windows, and a runbook reference; they never include credentials or domain identifiers |
 | CORE-NF-032 | Health aggregation | module health queries use database aggregation with constant-size responses and consider only modules issued a workload credential |
+| CORE-NF-033 | Domain metric cardinality | outbox, scheduler, and WebSocket metrics use only fixed outcomes/message kinds or no labels; event, run, user, vehicle, and job identifiers are forbidden |
+| CORE-NF-034 | Worker telemetry isolation | the outbox metrics server is internal-only, uses a dedicated registry/port, and metric failure cannot change transactional event state |
+| CORE-NF-035 | Backlog measurement | outbox and scheduler lag derive from constant-size count/minimum-time queries and never load or label individual records |

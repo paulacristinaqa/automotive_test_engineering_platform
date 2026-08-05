@@ -132,6 +132,11 @@ flowchart LR
    modules that have received workload credentials; it does not persist a second health model.
    The reconciler refreshes bounded status gauges, and alert annotations link to the operational
    runbook. Alert delivery remains an external Alertmanager/incident-management responsibility.
+26. **Domain telemetry follows process ownership and aggregate-only backlog measurement.** The API
+   registry owns scheduler and WebSocket metrics. The independently deployed outbox worker owns a
+   dedicated internal Prometheus registry on port 9101. Backlog count and oldest age come from
+   constant-size SQL aggregates; record identifiers and unrestricted event/run/job labels never
+   enter metrics. Publication failures retain at-least-once state and trigger bounded worker retry.
 
 ## Initial bounded contexts
 
@@ -147,7 +152,7 @@ flowchart LR
 | Environment profiles | immutable, versioned vehicle/test baselines and reproducibility inputs | PostgreSQL |
 | Test jobs | durable scheduling, cancellation, due-work ownership, and TestRun dispatch | PostgreSQL |
 | Test artifacts | immutable TestRun evidence metadata, integrity, and binary-object abstraction | PostgreSQL + object storage |
-| Observability | bounded HTTP/module metrics, trace propagation/export, SLO recording rules, alerts, cross-signal correlation, and dashboards | PostgreSQL aggregate + Prometheus + OpenTelemetry Collector + Grafana |
+| Observability | bounded HTTP/module/outbox/scheduler/WebSocket metrics, trace propagation/export, SLO rules, alerts, correlation, and dashboards | PostgreSQL aggregates + process-local Prometheus registries + OpenTelemetry Collector + Grafana |
 
 Future volumes add contexts without importing another context's persistence models. Shared
 contracts live under an explicit version and remain backward compatible during migration.

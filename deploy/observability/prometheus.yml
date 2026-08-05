@@ -10,3 +10,7 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       - targets: ["api:8000"]
+  - job_name: atep-outbox-worker
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["outbox-worker:9101"]

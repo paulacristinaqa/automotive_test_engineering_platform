@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     otel_service_name: str = Field(default="atep-core", min_length=1, max_length=80)
     otel_exporter_otlp_endpoint: str | None = None
     otel_trace_sample_ratio: float = Field(default=1.0, ge=0.0, le=1.0)
+    outbox_metrics_port: int = Field(default=9101, ge=1024, le=65535)
+    outbox_retry_seconds: int = Field(default=1, ge=1, le=60)
     bootstrap_admin_email: EmailStr | None = None
     bootstrap_admin_password: SecretStr | None = None
 

@@ -21,6 +21,8 @@ labels. It combines three replaceable signals:
 | `ATEP_OTEL_TRACE_SAMPLE_RATIO` | `1.0` | Parent-based root sampling ratio from `0.0` to `1.0` |
 | `ATEP_MODULE_AVAILABILITY_SLO_TARGET` | `0.99` | Active/credentialed module snapshot objective |
 | `ATEP_MODULE_LEASE_WARNING_SECONDS` | `30` | Remaining-lease window reported as operational risk |
+| `ATEP_OUTBOX_METRICS_PORT` | `9101` | Internal outbox-worker Prometheus HTTP port |
+| `ATEP_OUTBOX_RETRY_SECONDS` | `1` | Delay after an empty batch or controlled publication failure |
 
 Tracing-disabled requests still receive a valid `X-Trace-ID` for cross-signal correlation, but
 their local spans are non-recording and nothing is exported. A caller-provided valid W3C
@@ -42,6 +44,20 @@ their local spans are non-recording and nothing is exported. A caller-provided v
 | `atep_registry_monitored_modules` | Gauge | none | Modules included in availability monitoring |
 | `atep_module_availability_ratio` | Gauge | none | Current active/monitored snapshot ratio |
 | `atep_module_at_risk_leases` | Gauge | none | Operational leases inside the warning window |
+| `atep_outbox_publication_attempts_total` | Counter | fixed outcome | RabbitMQ publication success/failure |
+| `atep_outbox_batch_duration_seconds` | Histogram | none | Transactional publication duration |
+| `atep_outbox_unpublished_events` | Gauge | none | Current unpublished backlog |
+| `atep_outbox_oldest_unpublished_age_seconds` | Gauge | none | Oldest unpublished event age |
+| `atep_outbox_worker_up` | Gauge | none | Worker telemetry initialization |
+| `atep_test_jobs_dispatched_total` | Counter | none | Scheduler dispatch throughput |
+| `atep_test_scheduler_errors_total` | Counter | none | Scheduler cycle failures |
+| `atep_test_scheduler_cycle_duration_seconds` | Histogram | none | Scheduler cycle duration |
+| `atep_test_jobs_due` | Gauge | none | Jobs currently due |
+| `atep_test_job_oldest_due_age_seconds` | Gauge | none | Oldest due-job delay |
+| `atep_test_run_websocket_connections` | Gauge | none | Accepted live connections |
+| `atep_test_run_websocket_connection_attempts_total` | Counter | fixed outcome | Accepted/rejected/error connections |
+| `atep_test_run_websocket_messages_total` | Counter | fixed kind | Snapshot/update/heartbeat messages |
+| `atep_test_run_live_publish_attempts_total` | Counter | fixed outcome | Redis live-projection success/failure |
 
 The route label is the FastAPI template, such as `/api/v1/test-runs/{run_id}`, never the raw
 request path. Unmatched requests use the bounded label `unmatched`.
@@ -124,6 +140,12 @@ backend.
 | `AtepModuleUnavailable` | Inspect lease expiry, module process/network health, and credential rotation history before restarting |
 | `AtepModuleDegraded` | Inspect the module's own diagnostic logs and declared degraded reason; do not mask it with a synthetic active heartbeat |
 | `AtepModuleLeaseAtRisk` | Confirm heartbeat cadence, clock synchronization, network latency, and reconciler health |
+| `AtepOutboxBacklogOld` | Inspect worker/RabbitMQ health and oldest backlog age; preserve rows and avoid manual database deletion |
+| `AtepOutboxWorkerDown` | Check Prometheus target state, worker process, RabbitMQ connection, and the last failed batch; unpublished rows remain authoritative |
+| `AtepOutboxPublicationErrors` | Inspect RabbitMQ connectivity/confirms and worker logs; expect at-least-once retry after rollback |
+| `AtepTestSchedulerBacklogOld` | Inspect scheduler cycle duration/errors, database locks, due volume, and dispatch capacity |
+| `AtepTestSchedulerErrors` | Correlate scheduler logs with database and TestRun constraints before retrying operationally |
+| `AtepLiveUpdatePublishErrors` | Inspect Redis availability; authoritative TestRun state remains in PostgreSQL and clients must reconnect for a snapshot |
 
 Prometheus currently evaluates alerts but no Alertmanager is provisioned. Operators must inspect
 the Prometheus alerts page in the local topology. Production deployment requires reviewed routing,
@@ -154,4 +176,6 @@ ownership, escalation, inhibition, silences, and notification-delivery tests.
 7. Validate Prometheus configuration and rules with `promtool` in CI.
 8. Confirm the health summary denies callers without `modules:read` and has constant-size output.
 9. Trigger each alert with synthetic test traffic in an isolated environment and verify its runbook.
-10. Load-test histogram/cardinality and calibrate production SLO and latency thresholds.
+10. Confirm Prometheus scrapes both `api:8000/metrics` and internal `outbox-worker:9101/metrics`.
+11. Create backlog and Redis/RabbitMQ failure conditions and verify no identifiers enter labels.
+12. Load-test histogram/cardinality and calibrate production SLO, backlog, and latency thresholds.

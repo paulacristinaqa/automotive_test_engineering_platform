@@ -18,6 +18,5 @@ RUN addgroup --system atep && adduser --system --ingroup atep atep \
     && chown -R atep:atep /app
 USER atep
 
-EXPOSE 8000
+EXPOSE 8000 9101
 CMD ["uvicorn", "atep.main:app", "--host", "0.0.0.0", "--port", "8000"]
-

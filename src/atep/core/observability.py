@@ -105,6 +105,55 @@ class Observability:
             "Active or degraded module leases inside the warning window.",
             registry=self.registry,
         )
+        self.test_jobs_dispatched = Counter(
+            "atep_test_jobs_dispatched_total",
+            "Scheduled ATEP test jobs dispatched into test runs.",
+            registry=self.registry,
+        )
+        self.test_scheduler_errors = Counter(
+            "atep_test_scheduler_errors_total",
+            "Failures during scheduled test-job dispatch cycles.",
+            registry=self.registry,
+        )
+        self.test_scheduler_cycle_duration = Histogram(
+            "atep_test_scheduler_cycle_duration_seconds",
+            "Duration of one scheduled test-job dispatch cycle.",
+            buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10),
+            registry=self.registry,
+        )
+        self.test_jobs_due = Gauge(
+            "atep_test_jobs_due",
+            "Scheduled test jobs currently due for dispatch.",
+            registry=self.registry,
+        )
+        self.test_job_oldest_due_age = Gauge(
+            "atep_test_job_oldest_due_age_seconds",
+            "Age in seconds of the oldest due scheduled test job.",
+            registry=self.registry,
+        )
+        self.websocket_connections = Gauge(
+            "atep_test_run_websocket_connections",
+            "Currently accepted test-run WebSocket connections.",
+            registry=self.registry,
+        )
+        self.websocket_connection_attempts = Counter(
+            "atep_test_run_websocket_connection_attempts_total",
+            "Test-run WebSocket connection attempts by bounded outcome.",
+            ("outcome",),
+            registry=self.registry,
+        )
+        self.websocket_messages = Counter(
+            "atep_test_run_websocket_messages_total",
+            "Test-run WebSocket messages sent by bounded kind.",
+            ("kind",),
+            registry=self.registry,
+        )
+        self.live_publish_attempts = Counter(
+            "atep_test_run_live_publish_attempts_total",
+            "Redis test-run live-update publication attempts by bounded outcome.",
+            ("outcome",),
+            registry=self.registry,
+        )
         info = Gauge(
             "atep_build_info",
             "ATEP service build and environment information.",
@@ -132,6 +181,10 @@ class Observability:
         self.monitored_modules.set(monitored_modules)
         self.module_availability_ratio.set(availability_ratio or 0.0)
         self.module_at_risk_leases.set(at_risk_leases)
+
+    def update_test_job_backlog(self, *, count: int, oldest_age_seconds: float) -> None:
+        self.test_jobs_due.set(count)
+        self.test_job_oldest_due_age.set(oldest_age_seconds)
 
     def shutdown(self) -> None:
         self.tracer_provider.shutdown()
