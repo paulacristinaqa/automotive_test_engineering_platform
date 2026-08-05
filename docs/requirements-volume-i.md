@@ -37,6 +37,9 @@
 | CORE-F-031 | Explicit AAOS mode shall report inaccessible or unsupported VHAL properties and shall never silently replace them with simulated observations. | Negative Android unit test and manual AAOS test `CT-SHOW-007` |
 | CORE-F-032 | Pending Android telemetry shall reconcile to one persistent background job per vehicle, run only with connectivity, retain queue order and event identity, and use bounded exponential retry. | Android retry-policy tests and manual process-death test `CT-SHOW-008` |
 | CORE-F-033 | The Android showcase shall expose rejected telemetry and exhausted background delivery, retain non-sensitive event evidence across process restart, and allow one selected event to be retried with unchanged identity or discarded. | Android gateway-operation tests and manual operator test `CT-SHOW-009` |
+| CORE-F-034 | An operator with `vehicle_commands:write` shall idempotently request a bounded `set_property` command for one vehicle and one capability-authorized target module. | Service, RBAC, validation, API contract, and automated Docker integration test |
+| CORE-F-035 | An authenticated module declaring `vehicle.commands.consume` shall atomically claim one available command under a bounded lease and acknowledge it using a claim token whose digest is the only persisted representation. | Service, negative claim, lease-expiry, and automated Docker integration test |
+| CORE-F-036 | The Android Vehicle Gateway shall execute only allowlisted simulator properties, reject invalid or unsafe state transitions, refuse mutation of a read-only AAOS source, and return a terminal acknowledgement to ATEP. | Android command-executor/coordinator tests and manual end-to-end test `CT-SHOW-010` |
 
 ## Non-functional requirements
 
@@ -62,3 +65,4 @@
 | CORE-NF-018 | Evidence provenance | the UI identifies simulator versus AAOS origin, disables local mutation for AAOS observations, and preserves unit conversions defined by the canonical source adapter |
 | CORE-NF-019 | Background delivery control | retry work is unique per vehicle, persists beyond the activity lifecycle, requires connectivity, remains inactive for disabled configuration, and stops after eight worker attempts |
 | CORE-NF-020 | Telemetry disposition safety | exhausted work does not restart silently; retry preserves event identity; discard affects only the selected rejected record; credentials never enter operator evidence |
+| CORE-NF-021 | Command-delivery safety | commands are target-scoped, leased, idempotent, allowlisted, bounded by vehicle-state invariants, and acknowledged without persisting raw claim tokens |

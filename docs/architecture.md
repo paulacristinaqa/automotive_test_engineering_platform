@@ -15,7 +15,7 @@ flowchart LR
     CarAPI --> VHAL["Vehicle HAL / simulator"]
     API --> Identity["Identity and RBAC"]
     API --> Registry["Module registry"]
-    API --> Vehicle["Vehicle catalogue and telemetry"]
+    API --> Vehicle["Vehicle catalogue, telemetry, and commands"]
     API --> PG[(PostgreSQL)]
     API --> Redis[(Redis)]
     API --> Outbox[(Transactional outbox)]
@@ -85,6 +85,14 @@ flowchart LR
    An operator may atomically return one event to the pending queue without changing identity or
    discard only that record. Exhausted work is not scheduled again until an explicit manual retry
    clears the terminal retry state.
+19. **Vehicle commands use leased, capability-scoped delivery.** An operator with
+   `vehicle_commands:write` creates an idempotent `set_property` request for one vehicle and one
+   target module declaring `vehicle.commands.consume`. The gateway atomically claims the oldest
+   available command with a bounded lease and a high-entropy claim token; only the SHA-256 digest
+   is stored. Terminal acknowledgement is idempotent and evented. The Android executor accepts an
+   explicit property allowlist, validates type/range and vehicle-state invariants, and refuses to
+   mutate a read-only AAOS source. Lease expiry makes an unacknowledged idempotent property command
+   available for recovery without granting Android direct infrastructure access.
 
 ## Initial bounded contexts
 
@@ -126,5 +134,8 @@ contracts live under an explicit version and remain backward compatible during m
   status cannot be asserted through the administrative update API.
 - Vehicle Gateway telemetry requires both a valid module credential and the
   `vehicle.telemetry.publish` capability. Replayed event IDs cannot create duplicate evidence.
+- Vehicle command claim and acknowledgement require the `vehicle.commands.consume` capability;
+  raw claim tokens are returned only with a successful claim and are stored only as SHA-256
+  digests. Android executes only the reviewed `set_property` allowlist.
 - Production follow-ups include proxy-aware client attribution, capacity tuning,
   secret-manager integration, and TLS/mTLS between workloads.

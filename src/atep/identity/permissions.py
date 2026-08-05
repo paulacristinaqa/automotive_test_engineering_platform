@@ -12,6 +12,8 @@ class PermissionName(StrEnum):
     VEHICLES_READ = "vehicles:read"
     VEHICLES_MANAGE = "vehicles:manage"
     TELEMETRY_READ = "telemetry:read"
+    VEHICLE_COMMANDS_READ = "vehicle_commands:read"
+    VEHICLE_COMMANDS_WRITE = "vehicle_commands:write"
     PLATFORM_ADMIN = "platform:admin"
 
 

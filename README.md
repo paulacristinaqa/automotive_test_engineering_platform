@@ -236,7 +236,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\run_integration_test
 
 The runner creates ephemeral credentials, uses isolated ports, applies every migration, and
 removes its containers, network, and volumes after execution. The latest local evidence records
-**50 fast tests plus one expanded Docker integration scenario** passing.
+**55 fast tests plus one expanded Docker integration scenario** passing.
 
 ## Engineering documentation
 
@@ -274,7 +274,9 @@ source labels evidence provenance and never silently substitutes simulator data.
 connectivity-constrained WorkManager job now retries pending telemetry after the activity or
 process closes. Rejected observations can now be inspected, retried with their original identity,
 or selectively discarded, while exhausted retry work remains visible until explicitly resumed.
-The next slices add area-aware properties, command delivery, and live test-run updates.
+Authorized test commands now use an idempotent request, capability-scoped target, bounded lease,
+hash-only claim token, safe Android property allowlist, and terminal acknowledgement. The next
+slices add area-aware properties and live test-run updates.
 Versioned test configuration profiles, scheduler boundaries, artifact storage, and richer
 observability remain in the Volume I roadmap.
 
