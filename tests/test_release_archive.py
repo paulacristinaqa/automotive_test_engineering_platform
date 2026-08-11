@@ -16,6 +16,11 @@ from tools.seal_release_archive import (
     seal_archive,
     sha256_file,
 )
+from tools.validate_archive_export import (
+    EXPORT_RECEIPT_NAME,
+    PROVIDER_EVIDENCE_NAME,
+    build_export_receipt,
+)
 
 VALID_SOURCE_SHA = "a" * 40
 VALID_DIGEST = "sha256:" + ("b" * 64)
@@ -291,3 +296,159 @@ def test_reusable_builder_restores_the_downloaded_sealed_archive() -> None:
     assert workflow.index("Retain portable offline-verification evidence") < workflow.index(
         "archive-restore-smoke:"
     )
+
+
+def write_sealed_archive(directory: Path) -> tuple[Path, Path]:
+    manifest_path = write_archive_manifest(directory)
+    archive = directory / ARCHIVE_NAME
+    receipt = directory / RECEIPT_NAME
+    seal_archive(manifest_path=manifest_path, output_path=archive, receipt_path=receipt)
+    return archive, receipt
+
+
+def write_provider_evidence(directory: Path, archive: Path, receipt: Path) -> Path:
+    local_receipt = json.loads(receipt.read_text(encoding="utf-8"))
+    archive_sha256, archive_size = sha256_file(archive)
+    evidence = {
+        "schema_version": "1.0.0",
+        "status": "uploaded",
+        "provider": "test-worm-store",
+        "storage_resource": "projects/atep/immutable-release-evidence",
+        "object_key": local_receipt["archive_object_key"],
+        "object_version": "generation-0000000001",
+        "checksum_algorithm": "sha256",
+        "checksum_sha256": archive_sha256,
+        "size_bytes": archive_size,
+        "retention_mode": "locked",
+        "immutable_until": "2041-08-11T19:00:00Z",
+        "encryption_mode": "customer-managed",
+        "writer_identity": "spiffe://release.example/exporter",
+        "audit_event_id": "audit/export-0000000001",
+        "uploaded_at": "2026-08-11T19:00:00Z",
+        "read_back_sha256": archive_sha256,
+        "read_back_at": "2026-08-11T19:01:00Z",
+    }
+    path = directory / PROVIDER_EVIDENCE_NAME
+    path.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return path
+
+
+def test_export_gate_emits_deterministic_normalized_receipt(tmp_path: Path) -> None:
+    archive, receipt = write_sealed_archive(tmp_path)
+    provider_evidence = write_provider_evidence(tmp_path, archive, receipt)
+    output = tmp_path / EXPORT_RECEIPT_NAME
+
+    export_receipt = build_export_receipt(
+        archive_path=archive,
+        local_receipt_path=receipt,
+        provider_evidence_path=provider_evidence,
+        output_path=output,
+        minimum_retention_until=datetime(2040, 8, 11, tzinfo=UTC),
+        validated_at=datetime(2026, 8, 11, 19, 2, tzinfo=UTC),
+    )
+
+    assert export_receipt.status == "export-validated"
+    assert export_receipt.source_sha == VALID_SOURCE_SHA
+    assert export_receipt.image_digest == VALID_DIGEST
+    assert export_receipt.retention_mode == "locked"
+    assert export_receipt.minimum_retention_until == "2040-08-11T00:00:00Z"
+    assert json.loads(output.read_text(encoding="utf-8"))["object_version"] == (
+        "generation-0000000001"
+    )
+    assert not any(path.name.startswith(".atep-export-validate-") for path in tmp_path.iterdir())
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("object_key", "atep/releases/wrong.zip", "does not match"),
+        ("checksum_sha256", "0" * 64, "does not match"),
+        ("read_back_sha256", "0" * 64, "does not match"),
+        ("retention_mode", "governance", "does not match"),
+        ("encryption_mode", "none", "does not match"),
+        ("object_version", "../latest", "bounded non-sensitive"),
+    ],
+)
+def test_export_gate_rejects_weak_or_inconsistent_provider_evidence(
+    tmp_path: Path, field: str, value: object, message: str
+) -> None:
+    archive, receipt = write_sealed_archive(tmp_path)
+    provider_evidence = write_provider_evidence(tmp_path, archive, receipt)
+    evidence = json.loads(provider_evidence.read_text(encoding="utf-8"))
+    evidence[field] = value
+    provider_evidence.write_text(json.dumps(evidence), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=message):
+        build_export_receipt(
+            archive_path=archive,
+            local_receipt_path=receipt,
+            provider_evidence_path=provider_evidence,
+            output_path=tmp_path / EXPORT_RECEIPT_NAME,
+            minimum_retention_until=datetime(2040, 8, 11, tzinfo=UTC),
+        )
+
+
+def test_export_gate_rejects_short_retention_time_reversal_and_replacement(
+    tmp_path: Path,
+) -> None:
+    archive, receipt = write_sealed_archive(tmp_path)
+    provider_evidence = write_provider_evidence(tmp_path, archive, receipt)
+
+    with pytest.raises(ValueError, match="shorter than"):
+        build_export_receipt(
+            archive_path=archive,
+            local_receipt_path=receipt,
+            provider_evidence_path=provider_evidence,
+            output_path=tmp_path / EXPORT_RECEIPT_NAME,
+            minimum_retention_until=datetime(2042, 8, 11, tzinfo=UTC),
+        )
+
+    evidence = json.loads(provider_evidence.read_text(encoding="utf-8"))
+    evidence["read_back_at"] = "2026-08-11T18:59:00Z"
+    provider_evidence.write_text(json.dumps(evidence), encoding="utf-8")
+    with pytest.raises(ValueError, match="cannot precede"):
+        build_export_receipt(
+            archive_path=archive,
+            local_receipt_path=receipt,
+            provider_evidence_path=provider_evidence,
+            output_path=tmp_path / EXPORT_RECEIPT_NAME,
+            minimum_retention_until=datetime(2040, 8, 11, tzinfo=UTC),
+        )
+
+    (tmp_path / EXPORT_RECEIPT_NAME).write_text("existing", encoding="utf-8")
+    with pytest.raises(ValueError, match="replacement is forbidden"):
+        build_export_receipt(
+            archive_path=archive,
+            local_receipt_path=receipt,
+            provider_evidence_path=provider_evidence,
+            output_path=tmp_path / EXPORT_RECEIPT_NAME,
+            minimum_retention_until=datetime(2040, 8, 11, tzinfo=UTC),
+        )
+
+
+def test_export_gate_rejects_extra_provider_fields_and_future_readback(tmp_path: Path) -> None:
+    archive, receipt = write_sealed_archive(tmp_path)
+    provider_evidence = write_provider_evidence(tmp_path, archive, receipt)
+    evidence = json.loads(provider_evidence.read_text(encoding="utf-8"))
+    evidence["access_token"] = "must-never-be-accepted"
+    provider_evidence.write_text(json.dumps(evidence), encoding="utf-8")
+    with pytest.raises(ValueError, match="unexpected or missing"):
+        build_export_receipt(
+            archive_path=archive,
+            local_receipt_path=receipt,
+            provider_evidence_path=provider_evidence,
+            output_path=tmp_path / EXPORT_RECEIPT_NAME,
+            minimum_retention_until=datetime(2040, 8, 11, tzinfo=UTC),
+        )
+
+    evidence.pop("access_token")
+    provider_evidence.write_text(json.dumps(evidence), encoding="utf-8")
+    with pytest.raises(ValueError, match="validated_at cannot precede"):
+        build_export_receipt(
+            archive_path=archive,
+            local_receipt_path=receipt,
+            provider_evidence_path=provider_evidence,
+            output_path=tmp_path / EXPORT_RECEIPT_NAME,
+            minimum_retention_until=datetime(2040, 8, 11, tzinfo=UTC),
+            validated_at=datetime(2026, 8, 11, 19, 0, tzinfo=UTC),
+        )

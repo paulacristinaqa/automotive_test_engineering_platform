@@ -99,6 +99,8 @@
 | CORE-F-093 | The platform shall document a fail-closed exact-digest revocation procedure that preserves evidence before attestation/package withdrawal and proves rejection by verification, promotion, and admission. | Revocation runbook review and future live exercise |
 | CORE-F-094 | The release workflow shall seal manifest-bound evidence into a deterministic non-replaceable archive and emit a separate receipt binding its source/image identity, object key, manifest hash, archive SHA-256, size, and entry count. | Seal/restore unit and workflow-policy tests |
 | CORE-F-095 | A fresh release job shall download the sealed transfer artifact and restore it into an empty workspace before the reusable workflow succeeds. | Cross-job artifact restore contract and hosted CI evidence |
+| CORE-F-096 | The archive export gate shall accept only a fixed non-sensitive provider-evidence schema and bind one immutable object version, exact key, strong checksum/read-back, size, retention, encryption, writer identity, audit event, and timestamps to the local sealed receipt. | Export-gate unit and negative contract tests |
+| CORE-F-097 | Successful export validation shall fully restore the local archive and emit a normalized receipt binding both input evidence files by SHA-256 without replacing existing evidence. | Round-trip export-gate and replacement tests |
 
 ## Non-functional requirements
 
@@ -173,3 +175,5 @@
 | CORE-NF-067 | Revocation safety | destructive withdrawal is never automatic; it requires an exact digest, preserved evidence, incident authority, independent review, known-good replacement, and negative verification/admission evidence before release re-enablement |
 | CORE-NF-068 | Archive restoration safety | restore rejects receipt/archive mismatch, replacement, path traversal, duplicate/extra/compressed/empty/oversized entries, manifest inconsistency, and partial output; archive creation is deterministic and non-replacing |
 | CORE-NF-069 | Immutable provider boundary | product-lifetime export requires locked WORM retention, version identity, strong checksum/read-back, separate short-lived identities, independent keys/audit, deterministic object key, non-replacement, and scheduled restore evidence |
+| CORE-NF-070 | Provider evidence minimization | normalized export evidence has an exact bounded schema, contains identifiers rather than credentials or response bodies, and rejects unknown fields |
+| CORE-NF-071 | Export validation safety | export fails closed on local seal/restore failure, object-key/version/checksum/size mismatch, weak retention/encryption, insufficient retention duration, invalid time order, or existing output |

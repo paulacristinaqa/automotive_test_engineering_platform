@@ -74,6 +74,33 @@ An exporter shall:
 The provider upload receipt must itself be retained independently. An upload success message or
 HTTP status without read-back integrity and retention-state evidence is insufficient.
 
+## Normalized export gate
+
+Provider adapters must translate their API response into `provider-upload-evidence.json`. The gate
+accepts exactly these non-sensitive fields: schema/status, provider slug, storage resource,
+deterministic object key, immutable object version, SHA-256 algorithm/value, byte size, locked
+retention mode and expiry, encryption mode, workload identity, audit event ID, upload timestamp,
+and read-back SHA-256/timestamp. Unknown fields are rejected so credentials, pre-signed URLs, and
+provider response bodies cannot silently enter retained evidence.
+
+After the adapter has uploaded and read back the object, run:
+
+```text
+python tools/validate_archive_export.py \
+  --archive atep-release-evidence.zip \
+  --local-receipt release-archive-receipt.json \
+  --provider-evidence provider-upload-evidence.json \
+  --minimum-retention-until 2040-08-11T00:00:00Z \
+  --output release-archive-export-receipt.json
+```
+
+The gate fully restores the local archive in an isolated temporary workspace, verifies the local
+seal and provider read-back against the same SHA-256, requires the exact deterministic object key
+and size, checks chronological consistency and the approved minimum locked-retention date, and
+refuses to replace an existing output. Only then does it emit a normalized export receipt binding
+the local receipt and provider evidence by SHA-256. This gate validates an adapter's retained
+evidence; it does not make an untrusted provider response authoritative or provision cloud policy.
+
 ## Restore exercise
 
 At least quarterly, and after provider, key, retention, or archive-format changes:

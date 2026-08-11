@@ -199,7 +199,10 @@ flowchart LR
    hash-and-size manifest beside the release report and CycloneDX SBOM. It then creates a
    deterministic sealed ZIP and content-addressed receipt; a fresh job downloads and restores both
    before workflow success. The 90-day Actions artifact is a transfer package governed by the
-   vendor-neutral immutable provider contract, not the product-lifetime archive. A
+   vendor-neutral immutable provider contract, not the product-lifetime archive. A normalized
+   export gate validates exact provider object identity, read-back integrity, locked retention,
+   encryption, workload identity, audit reference, and time ordering before emitting a
+   non-replacing export receipt. A
    separately authorized revocation procedure preserves evidence before exact-digest attestation
    and package withdrawal.
 

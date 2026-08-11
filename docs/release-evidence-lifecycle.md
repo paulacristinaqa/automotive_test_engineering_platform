@@ -30,6 +30,12 @@ schedule and satisfy [`release-archive-provider-contract.md`](release-archive-pr
 The repository does not pretend that the workflow artifact or local restore smoke test is
 product-lifetime automotive retention.
 
+After a provider adapter uploads and reads back the object, `tools/validate_archive_export.py`
+normalizes its non-sensitive evidence. The gate re-restores the local seal, compares the exact key,
+version, SHA-256, size, locked-retention deadline, encryption mode, writer identity, audit event,
+and timestamps, then emits a non-replacing `release-archive-export-receipt.json`. Provider policy
+provisioning and the adapter's live API evidence remain external deployment responsibilities.
+
 ## Offline verification
 
 On a clean verification host, first compare every archived file with
