@@ -2,7 +2,7 @@
 
 **Subtitle:** Architecture, implementation record, verification strategy, and engineering evidence  
 **Project:** Automotive Test Engineering Platform (ATEP)  
-**Document version:** 0.30.0
+**Document version:** 0.31.0
 
 **Baseline date:** 11 August 2026
 
@@ -64,6 +64,7 @@ The document distinguishes three types of statements:
 | 0.28.0 | 5 August 2026 | Added phased Kubernetes/Kustomize targets for foundation, migration, and workloads; a vendor-neutral external Secret contract; Restricted pod controls; default-deny networking; probes, storage, and resource bounds; and fail-closed image substitution | 103 fast Python tests, five Kubernetes policy tests, three successful local Kustomize renders, Ruff, strict mypy, and remote render enforcement |
 | 0.29.0 | 11 August 2026 | Added an application-side SPIFFE/XFCC workload-identity boundary with exact module IDs, trusted direct-peer CIDRs, fail-closed ambiguity handling, capability preservation, and a controlled token migration path | 115 fast Python tests passed locally; Ruff and strict mypy passed; live proxy mTLS and certificate-lifecycle evidence remain pending |
 | 0.30.0 | 11 August 2026 | Added a PostgreSQL custom-format backup and isolated restore drill, streamed SHA-256 evidence, Alembic/schema/table-count equality, secret-safe aggregate reporting, initial RPO/RTO targets, and CI retention policy | 123 fast Python tests passed locally; disposable Docker restore evidence is delegated to CI |
+| 0.31.0 | 11 August 2026 | Added ordered development/staging/production promotion validation, strict source/digest inputs, fixed fail-closed GitHub environments, immutable Kubernetes renders, versioned evidence, concurrency guards, and a production approval contract | 127 fast Python tests, Ruff, strict mypy, and a real three-target Kustomize evidence render passed locally; real deployment, signature, and provenance evidence remain gated |
 
 ## How to Use This Workbook
 
@@ -97,6 +98,8 @@ The operational-registry hardening slice separates human administration from wor
 The initial production-identity slice lets an approved mTLS proxy forward one canonical SPIFFE ID for registered modules. ATEP trusts XFCC only from configured direct-peer networks, accepts only `spiffe://<trust-domain>/atep/module/<module-name>`, and applies the same capability authorization used by the shared-token path. A presented invalid or mismatched identity fails without token downgrade. The feature is disabled by default; proxy deployment, certificate issuance/rotation/revocation, direct-path denial, and live mTLS evidence remain explicit production-hardening work.
 
 The first disaster-recovery slice turns backup from a policy statement into executable restore evidence. After the disposable integration scenario, CI quiesces application writers, creates and validates a portable PostgreSQL custom archive, hashes it in bounded chunks, restores it into a random database created from `template0`, and compares Alembic revision, ordered schema, and every public-table row count. The dump and temporary database are deleted; a versioned aggregate report retained for 14 days contains no credentials, table names, identifiers, or domain rows. Initial 24-hour RPO and four-hour RTO values remain engineering targets until provider-native encrypted backup, immutable retention, WAL/PITR, artifact coordination, and deployed exercises exist.
+
+The initial release-promotion slice creates an ordered and reviewable boundary without pretending that a cluster is ready. A manually dispatched workflow accepts one full commit SHA already contained in `main`, one non-zero image manifest digest, and one highest target. Fixed jobs traverse development, staging, and production in order, require explicit environment enablement, serialize work per environment, and retain environment-specific foundation, migration, workload, and JSON evidence. The builder substitutes only the reviewed image placeholder, rejects literal Secrets or unexpected repositories, and fingerprints every render. Production reviewer rules remain repository configuration; real deployment, source-to-image provenance, signatures, provider identity, smoke tests, and rollback evidence remain gated.
 
 The initial automotive-integration slice connects the Volume I control plane to the separately deployed CarSystemUI Android Automotive project. ATEP and CarSystemUI are treated as one coordinated testing platform for electric, hybrid, and autonomous vehicles while preserving independent repositories and release histories. Administrators manage canonical vehicle records with JWT/RBAC. An unattended Vehicle Gateway authenticates with a hash-only module credential, declares `vehicle.telemetry.publish`, and sends timezone-aware observations only through the public API. Each client event ID is idempotent: an exact retry returns the original receipt, while reuse for different data returns a stable conflict. The observation and `atep.vehicle.telemetry.received.v1` outbox event are committed atomically.
 
@@ -148,7 +151,8 @@ The initial design deliberately starts as a modular monolith rather than a colle
 | Kubernetes deployment | Implemented initial hardening slice | Independently renderable foundation/migration/workload targets, external Secret contract, Restricted controls, default deny, probes, resource bounds, and fail-closed digest placeholder |
 | SPIFFE workload identity | Implemented initial application slice | Exact trusted-proxy XFCC identity, no downgrade, registry match, capability preservation, and token migration; live mTLS proxy evidence pending |
 | PostgreSQL disaster recovery | Implemented initial CI slice | Custom logical backup, isolated restore, migration/schema/count equality, aggregate evidence, and cleanup; provider PITR pending |
-| Automated verification | Implemented | 123 fast tests plus expanded disposable black-box, alert-delivery, and restore-drill scenarios, 27 Android tests, Ruff, strict mypy, Android lint/build, Kustomize rendering, and integration/security CI workflows |
+| Release promotion | Implemented initial validation slice | Fixed ordered GitHub environments, main-ancestor source SHA, immutable digest, fail-closed enablement, secret-free rendered manifests, evidence retention, and production approval contract; no cluster apply |
+| Automated verification | Implemented | 127 fast tests plus expanded disposable black-box, alert-delivery, and restore-drill scenarios, 27 Android tests, Ruff, strict mypy, Android lint/build, Kustomize rendering, and integration/security/promotion CI workflows |
 
 ## 2. Scope and Boundaries
 
@@ -418,6 +422,14 @@ External dashboards, test automation clients, and future ATEP modules call the C
 
 **Consequences.** The CI drill proves logical portability in a disposable PostgreSQL environment, not production RPO/RTO. Production requires provider-native encryption, immutability, base backups and WAL/PITR, independent keys and ownership, coordinated artifact-object recovery, monitoring, and scheduled operator exercises. Cluster-global roles and tablespaces remain infrastructure/provider responsibilities because the portable application dump intentionally excludes ownership and privileges.
 
+### ADR-025 â€” Separate Promotion Evidence from Provider Deployment
+
+**Decision.** Introduce one manually dispatched, least-privilege workflow with fixed development, staging, and production jobs. Require one immutable image manifest digest and a full source SHA already contained in `main`; traverse lower environments before higher ones; require exact environment enablement; serialize each environment; and retain secret-free rendered manifests plus a versioned aggregate report. Do not grant deployment, package, or OIDC write permissions and do not apply Kubernetes resources in this slice.
+
+**Rationale.** GitHub environment approvals and deployment records provide a useful review boundary, but an environment name alone does not prove that protection rules were configured. Separating deterministic manifest evidence from provider access allows the repository to fail closed while secret management, workload identity, provenance, smoke tests, and rollback controls are still incomplete.
+
+**Consequences.** The workflow records a declared source/digest pair but does not prove that the image was built from that source. Repository owners must configure and review fixed environment protections outside YAML. A future deployment controller must verify signature and provenance, consume the retained hashes, use short-lived provider identity, execute migration and smoke gates, and preserve the same digest across all environments.
+
 ## 5. Technology Stack and Rationale
 
 | Technology | Role | Why it was selected | Engineering consideration |
@@ -440,6 +452,7 @@ External dashboards, test automation clients, and future ATEP modules call the C
 | Grafana | Versioned operational views | Provisioned dashboards and PromQL visualization | Anonymous local access is forbidden in deployed environments |
 | Docker / Compose | Local topology | Repeatable development services and dependency health ordering | Production hardening requires image scanning and orchestration policies |
 | Kubernetes / Kustomize | Phased deployment baseline | Native declarative composition, renderable targets, runtime policy, and provider-neutral overlays | Real clusters require an approved digest, secret provider, CNI, ingress/TLS, storage class, and staged evidence |
+| GitHub Environments | Ordered promotion boundary | Fixed development/staging/production records, approval gates, variables, retention, and per-environment concurrency | Protection settings live outside workflow YAML and must be independently reviewed |
 | pytest | Automated tests | Concise unit/integration testing and fixture ecosystem | Integration suites should use disposable infrastructure |
 | Ruff | Static quality gate | Fast linting and consistent formatting | The rule set should evolve without disabling meaningful findings globally |
 | mypy | Static type analysis | Detects interface and async/type errors before runtime | Strict mode is the baseline for application code |
@@ -1308,6 +1321,23 @@ The fast local suite and repeated remote disposable CI runs prove clean-database
 | DR-011 | Restore a provider base backup plus WAL to a selected timestamp. | Verified recovery point meets approved RPO with encrypted immutable source evidence. | Planned production exercise / P0 |
 | DR-012 | Execute post-recovery application smoke tests. | Readiness, authentication, outbox publication, audit search, and artifact consistency pass within approved RTO. | Planned deployed exercise / P0 |
 
+### 11.16 Release Promotion
+
+| ID | Test and objective | Expected result | Status / priority |
+|---|---|---|---|
+| REL-001 | Submit valid and invalid target environments, image digests, and source SHAs. | Only fixed environment names, a non-zero lowercase SHA-256 digest, and a full lowercase commit SHA are accepted. | Implemented parameterized unit evidence / P0 |
+| REL-002 | Supply a source SHA outside `main`. | Validation stops before an environment job begins. | Workflow ancestry gate and policy review / P0 |
+| REL-003 | Promote a rendered migration and workload manifest. | Only the exact reviewed ATEP zero-digest image is replaced; every image uses the same immutable repository and digest. | Implemented unit evidence / P0 |
+| REL-004 | Render a literal Secret, unexpected repository, absent placeholder, or remaining zero digest. | Evidence generation fails and no successful report is emitted. | Implemented negative unit evidence / P0 |
+| REL-005 | Select staging or production. | Staging requires successful development; production requires successful staging; fixed environments cannot be bypassed by an input name. | Workflow policy test / P0 |
+| REL-006 | Leave `ATEP_PROMOTION_ENABLED` absent or different from lowercase `true`. | The referenced environment job fails closed before evidence generation. | Workflow policy test; live environment exercise pending / P0 |
+| REL-007 | Inspect the environment artifact. | Three secret-free manifests and schema `1.0.0` JSON bind environment, source, digest, timestamps, resource counts, and render hashes. | Implemented report-contract test / P0 |
+| REL-008 | Start overlapping validations for the same environment. | Per-environment concurrency permits at most one active validation for that environment. | Workflow policy review; live concurrency exercise pending / P1 |
+| REL-009 | Review production as the initiating operator. | GitHub prevents self-approval and requires an independent reviewer when repository protection is configured. | Manual repository-settings and deployment-review evidence pending / P0 |
+| REL-010 | Attempt to find or execute cluster apply, package publication, OIDC issuance, or write permission. | The validation workflow has read-only contents permission and performs no deployment. | Automated workflow policy evidence / P0 |
+| REL-011 | Verify image signature and source provenance before a real development deployment. | Trusted identity binds the digest to the reviewed source/build and rejects substitution. | Planned supply-chain hardening / P0 |
+| REL-012 | Execute migration, workload rollout, smoke checks, and rollback using retained evidence. | The same verified digest reaches each environment; migration and rollback evidence is preserved without automatic database downgrade. | Planned live-cluster exercise / P0 |
+
 ## 12. Suggested CI/CD Quality Pipeline
 
 1. **Source checks:** secret scan, license policy, dependency lock review.
@@ -1316,10 +1346,11 @@ The fast local suite and repeated remote disposable CI runs prove clean-database
 4. **Contract checks:** OpenAPI snapshot and event-schema compatibility.
 5. **Build:** immutable image, labels, SBOM, vulnerability scan, signature.
 6. **Integration checks:** disposable PostgreSQL, Redis, and RabbitMQ; migrations; API and outbox tests.
-7. **Environment deployment:** development namespace with externally managed secrets.
-8. **Smoke checks:** liveness, readiness, authentication, RBAC, and one event publication.
-9. **Promotion:** manual or policy gate using retained evidence.
-10. **Post-deployment verification:** dashboards, alerts, rollback readiness, and audit record.
+7. **Promotion validation:** bind source SHA and image digest; render and fingerprint development evidence.
+8. **Environment deployment:** development namespace with short-lived identity and externally managed secrets.
+9. **Smoke checks:** liveness, readiness, authentication, RBAC, and one event publication.
+10. **Ordered promotion:** staging and production gates reuse the verified digest and retained evidence.
+11. **Post-deployment verification:** dashboards, alerts, rollback readiness, and audit record.
 
 Pipeline artifacts should include test reports, coverage, OpenAPI schema, migration plan, SBOM, image digest, security scan results, deployment manifest, and a short verification summary.
 
@@ -1359,6 +1390,7 @@ Pipeline artifacts should include test reports, coverage, OpenAPI schema, migrat
 | R-015 | Three Grype CPE findings affect the Python 3.14.6 binary and no stable fixed CPython release is available; their exact exceptions expire on 5 September 2026. | An unresolved upstream vulnerability may remain reachable before a stable update is released. | Match only the exact CVE/package/version/type, review updates weekly, remove each exception immediately when fixed, and permit no broader suppression. | High |
 | R-016 | Kubernetes manifests are rendered and policy-tested but have not been exercised against a live cluster or bound to a real image digest, secret provider, CNI, ingress, TLS policy, or shared object store. | Provider behavior, rollout timing, network reachability, storage permissions, and recovery may differ from static evidence. | Execute a staged cluster exercise with approved overlays, retain migration/smoke/rollback evidence, and resolve singleton leadership before horizontal scaling. | High |
 | R-017 | ATEP validates forwarded SPIFFE identity, but the repository does not yet deploy the certificate authority, certificate lifecycle, or validating proxy. | Misconfigured XFCC forwarding or a direct application path could permit identity spoofing despite correct application parsing. | Require proxy-side certificate validation and XFCC replacement, exact CIDRs, network-policy direct-path denial, separated trust domains, rotation/revocation drills, and retained live evidence before enablement. | High |
+| R-018 | Promotion validation binds a declared source SHA and image digest but does not cryptographically prove that the image was built from that source or configure GitHub environment protections in YAML. | A substituted image or weak repository environment could receive apparently valid render evidence. | Add signed provenance and verification, independently audit environment settings, require production reviewers with self-review and bypass disabled, and retain the review before live deployment. | High |
 
 ## 15. Roadmap and Increment Plan
 
@@ -1403,7 +1435,8 @@ Pipeline artifacts should include test reports, coverage, OpenAPI schema, migrat
 - logical PostgreSQL restore drill and aggregate CI evidence — implemented initial slice;
 - provider-native encrypted backup, immutable retention, artifact coordination, PITR/WAL, and deployed disaster exercises — production hardening;
 - performance, resilience, and security-policy calibration;
-- signed artifacts, verifiable provenance, long-term release evidence, and controlled promotion across environments.
+- ordered development/staging/production promotion validation and retained render evidence â€” implemented initial slice;
+- signed artifacts, verifiable provenance, long-term release evidence, and real provider deployment across protected environments â€” production hardening.
 
 ## 16. Engineering Review Worksheets
 
@@ -1539,12 +1572,13 @@ Application rollback is safe only when the previous version is compatible with t
 | Dependency and storage telemetry | `src/atep/api/health.py`, `src/atep/artifacts/storage.py`, `tests/test_dependency_storage_observability.py`, alert rules, and disposable scrape evidence |
 | Disposable integration topology and runner | `compose.integration.yaml` and `tools/run_integration_tests.ps1` |
 | Black-box integration scenario | `tests/integration/test_identity_flow.py` |
-| Continuous integration workflows | `.github/workflows/integration.yml` and `.github/workflows/security.yml` |
+| Continuous integration workflows | `.github/workflows/integration.yml`, `.github/workflows/security.yml`, and `.github/workflows/promotion.yml` |
 | Supply-chain controls and evidence | `requirements.lock`, `requirements-dev.lock`, `Dockerfile`, `.grype.yaml`, `.github/dependabot.yml`, `.github/workflows/security.yml`, `docs/software-supply-chain-security.md`, and `tests/test_supply_chain_security.py` |
 | Kubernetes deployment baseline | `deploy/kubernetes/`, `deploy/kubernetes/README.md`, and `tests/test_kubernetes_manifests.py` |
 | SPIFFE/XFCC workload identity | `src/atep/registry/workload_identity.py`, `tests/test_workload_identity.py`, `docs/workload-identity.md`, configuration examples, and OpenAPI contract tests |
 | PostgreSQL backup and restore drill | `tools/run_postgres_restore_drill.py`, `tests/test_disaster_recovery.py`, `.github/workflows/integration.yml`, and `docs/disaster-recovery.md` |
-| Automated tests | `tests/test_security.py`, `test_identity.py`, `test_user_administration.py`, `test_role_catalogue.py`, `test_audit_query.py`, `test_rate_limit.py`, `test_module_registry.py`, `test_module_health.py`, `test_vehicle_telemetry.py`, `test_vehicle_commands.py`, `test_test_runs.py`, `test_test_jobs.py`, `test_artifacts.py`, `test_observability.py`, `test_domain_observability.py`, `test_dependency_storage_observability.py`, `test_alert_delivery.py`, `test_observability_assets.py`, `test_supply_chain_security.py`, `test_kubernetes_manifests.py`, and `test_api_contract.py` |
+| Release promotion validation | `tools/build_promotion_evidence.py`, `tests/test_release_promotion.py`, `.github/workflows/promotion.yml`, and `docs/release-promotion.md` |
+| Automated tests | `tests/test_security.py`, `test_identity.py`, `test_user_administration.py`, `test_role_catalogue.py`, `test_audit_query.py`, `test_rate_limit.py`, `test_module_registry.py`, `test_module_health.py`, `test_vehicle_telemetry.py`, `test_vehicle_commands.py`, `test_test_runs.py`, `test_test_jobs.py`, `test_artifacts.py`, `test_observability.py`, `test_domain_observability.py`, `test_dependency_storage_observability.py`, `test_alert_delivery.py`, `test_observability_assets.py`, `test_supply_chain_security.py`, `test_kubernetes_manifests.py`, `test_release_promotion.py`, and `test_api_contract.py` |
 | Architecture summary | `docs/architecture.md` |
 | Requirements baseline | `docs/requirements-volume-i.md` |
 | Delivery roadmap | `docs/roadmap-volume-i.md` |

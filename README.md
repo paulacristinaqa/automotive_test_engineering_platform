@@ -72,6 +72,8 @@ An intended end-to-end scenario is:
 - automated secret, dependency, source and container scanning with retained CycloneDX SBOMs;
 - staged Kubernetes/Kustomize deployment targets with Restricted pod controls, default-deny
   networking, immutable-image fail-closed placeholders, and an external secret-manager contract;
+- ordered development/staging/production promotion validation with immutable release inputs,
+  fail-closed environment enablement, and retained manifest evidence;
 - Ruff, strict mypy, pytest, and GitHub Actions quality gates.
 
 ## Architecture
@@ -273,7 +275,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\run_integration_test
 
 The runner creates ephemeral credentials, uses isolated ports, applies every migration, and
 removes its containers, network, and volumes after execution. The latest local evidence records
-**123 fast tests plus one expanded Docker integration and restore-drill scenario** passing. The CarSystemUI
+**127 fast tests plus one expanded Docker integration and restore-drill scenario** passing. The CarSystemUI
 companion project also passes 27 unit tests, Android lint, and debug APK assembly for this slice.
 
 ## Engineering documentation
@@ -286,6 +288,7 @@ companion project also passes 27 unit tests, Android lint, and debug APK assembl
 - [Software supply-chain security](docs/software-supply-chain-security.md)
 - [Workload identity and mTLS trust boundary](docs/workload-identity.md)
 - [PostgreSQL backup and disaster-recovery baseline](docs/disaster-recovery.md)
+- [Release promotion evidence and environment gates](docs/release-promotion.md)
 - [Engineering workbook — editable source](docs/workbook-volume-i.md)
 - [Engineering workbook — formatted document](docs/ATEP_Volume_I_Engineering_Workbook.docx)
 
@@ -335,9 +338,10 @@ trusted-network enforcement, provider-native encrypted backups and PITR evidence
 monitoring, and reviewed operational policies. The repository already enforces a development
 supply-chain baseline with deterministic dependency locks, immutable build inputs, SBOMs, secret
 scanning, dependency auditing, CodeQL, and high/critical container-vulnerability gates.
-The Kubernetes baseline is fail-closed and policy-tested but has not yet been promoted to a live
-production cluster; provider-specific secret binding, ingress/TLS, and staged rollout evidence
-remain required.
+The Kubernetes baseline and ordered promotion-evidence workflow are fail-closed and policy-tested,
+but no live cluster deployment is performed. Provider-specific secret binding, ingress/TLS,
+signature/provenance verification, protected GitHub environment configuration, smoke tests, and
+staged rollout/rollback evidence remain required.
 
 ## Contributing
 

@@ -60,7 +60,10 @@
   artifact-store coordination, PITR/WAL, and deployed disaster exercises remain hardening)
 - SLO threshold calibration, production incident-provider routing, load tests, artifact signing,
   provenance verification, and security-policy calibration
-- CI/CD promotion through development, staging, and production
+- CI/CD promotion through development, staging, and production (implemented initial validation
+  slice: ordered fixed environments, strict immutable inputs, fail-closed enablement, retained
+  manifest evidence, and production approval contract; signature/provenance verification and real
+  provider deployment remain hardening)
 
 The Volume I exit criterion is a repeatable deployment that supports the first end-to-end
 BMS/CAN/DTC/test event flow without changing its core security or event model.

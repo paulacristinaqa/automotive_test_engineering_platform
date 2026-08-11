@@ -1,0 +1,150 @@
+name: promotion-evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: Highest environment to validate in the ordered promotion chain
+        required: true
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+      image_digest:
+        description: Published ATEP image manifest digest (sha256:...)
+        required: true
+        type: string
+      source_sha:
+        description: Full lowercase commit SHA already merged into main
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate immutable release inputs and main ancestry
+        shell: bash
+        env:
+          IMAGE_DIGEST: ${{ inputs.image_digest }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          python -c "import os; from tools.build_promotion_evidence import validate_image_digest, validate_source_sha; validate_image_digest(os.environ['IMAGE_DIGEST']); validate_source_sha(os.environ['SOURCE_SHA'])"
+          git cat-file -e "${SOURCE_SHA}^{commit}"
+          git merge-base --is-ancestor "$SOURCE_SHA" origin/main
+
+  development:
+    needs: validate-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: development
+    concurrency:
+      group: atep-promotion-development
+      cancel-in-progress: false
+    steps:
+      - name: Verify development promotion is explicitly enabled
+        env:
+          ATEP_PROMOTION_ENABLED: ${{ vars.ATEP_PROMOTION_ENABLED }}
+        run: test "$ATEP_PROMOTION_ENABLED" = "true"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+      - name: Build development promotion evidence
+        env:
+          IMAGE_DIGEST: ${{ inputs.image_digest }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          python tools/build_promotion_evidence.py \
+            --environment development \
+            --image-digest "$IMAGE_DIGEST" \
+            --source-sha "$SOURCE_SHA" \
+            --output-directory promotion-evidence/development
+      - name: Retain development evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: atep-promotion-development-${{ inputs.source_sha }}
+          path: promotion-evidence/development
+          if-no-files-found: error
+          retention-days: 30
+
+  staging:
+    if: inputs.target_environment == 'staging' || inputs.target_environment == 'production'
+    needs: development
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: staging
+    concurrency:
+      group: atep-promotion-staging
+      cancel-in-progress: false
+    steps:
+      - name: Verify staging promotion is explicitly enabled
+        env:
+          ATEP_PROMOTION_ENABLED: ${{ vars.ATEP_PROMOTION_ENABLED }}
+        run: test "$ATEP_PROMOTION_ENABLED" = "true"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+      - name: Build staging promotion evidence
+        env:
+          IMAGE_DIGEST: ${{ inputs.image_digest }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          python tools/build_promotion_evidence.py \
+            --environment staging \
+            --image-digest "$IMAGE_DIGEST" \
+            --source-sha "$SOURCE_SHA" \
+            --output-directory promotion-evidence/staging
+      - name: Retain staging evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: atep-promotion-staging-${{ inputs.source_sha }}
+          path: promotion-evidence/staging
+          if-no-files-found: error
+          retention-days: 60
+
+  production:
+    if: inputs.target_environment == 'production'
+    needs: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: production
+    concurrency:
+      group: atep-promotion-production
+      cancel-in-progress: false
+    steps:
+      - name: Verify production promotion is explicitly enabled
+        env:
+          ATEP_PROMOTION_ENABLED: ${{ vars.ATEP_PROMOTION_ENABLED }}
+        run: test "$ATEP_PROMOTION_ENABLED" = "true"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+      - name: Build production promotion evidence
+        env:
+          IMAGE_DIGEST: ${{ inputs.image_digest }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          python tools/build_promotion_evidence.py \
+            --environment production \
+            --image-digest "$IMAGE_DIGEST" \
+            --source-sha "$SOURCE_SHA" \
+            --output-directory promotion-evidence/production
+      - name: Retain production evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: atep-promotion-production-${{ inputs.source_sha }}
+          path: promotion-evidence/production
+          if-no-files-found: error
+          retention-days: 90
