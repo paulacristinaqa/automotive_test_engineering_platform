@@ -59,11 +59,13 @@
   policy (implemented initial CI slice; provider-native encrypted backup, immutable retention,
   artifact-store coordination, PITR/WAL, and deployed disaster exercises remain hardening)
 - SLO threshold calibration, production incident-provider routing, load tests, artifact signing,
-  provenance verification, and security-policy calibration
+  provenance verification, and security-policy calibration (signed GHCR provenance/SBOM and
+  pre-promotion verification implemented as an initial hosted-build slice; trusted reusable
+  builder, live release evidence, admission enforcement, and long-term retention remain)
 - CI/CD promotion through development, staging, and production (implemented initial validation
   slice: ordered fixed environments, strict immutable inputs, fail-closed enablement, retained
-  manifest evidence, and production approval contract; signature/provenance verification and real
-  provider deployment remain hardening)
+  manifest evidence, production approval contract, and signed provenance verification; real
+  provider deployment remains hardening)
 
 The Volume I exit criterion is a repeatable deployment that supports the first end-to-end
 BMS/CAN/DTC/test event flow without changing its core security or event model.

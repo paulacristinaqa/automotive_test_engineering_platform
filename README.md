@@ -74,6 +74,8 @@ An intended end-to-end scenario is:
   networking, immutable-image fail-closed placeholders, and an external secret-manager contract;
 - ordered development/staging/production promotion validation with immutable release inputs,
   fail-closed environment enablement, and retained manifest evidence;
+- protected main-only GHCR publishing with commit-addressed images, signed SLSA provenance and
+  CycloneDX SBOM attestations, plus fail-closed provenance verification before promotion;
 - Ruff, strict mypy, pytest, and GitHub Actions quality gates.
 
 ## Architecture
@@ -289,6 +291,7 @@ companion project also passes 27 unit tests, Android lint, and debug APK assembl
 - [Workload identity and mTLS trust boundary](docs/workload-identity.md)
 - [PostgreSQL backup and disaster-recovery baseline](docs/disaster-recovery.md)
 - [Release promotion evidence and environment gates](docs/release-promotion.md)
+- [Signed release image provenance](docs/release-provenance.md)
 - [Engineering workbook — editable source](docs/workbook-volume-i.md)
 - [Engineering workbook — formatted document](docs/ATEP_Volume_I_Engineering_Workbook.docx)
 
@@ -340,7 +343,7 @@ supply-chain baseline with deterministic dependency locks, immutable build input
 scanning, dependency auditing, CodeQL, and high/critical container-vulnerability gates.
 The Kubernetes baseline and ordered promotion-evidence workflow are fail-closed and policy-tested,
 but no live cluster deployment is performed. Provider-specific secret binding, ingress/TLS,
-signature/provenance verification, protected GitHub environment configuration, smoke tests, and
+protected GitHub environment configuration, trusted-builder/admission enforcement, smoke tests, and
 staged rollout/rollback evidence remain required.
 
 ## Contributing

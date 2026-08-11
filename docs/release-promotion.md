@@ -22,8 +22,9 @@ source SHA, image digest, full image reference, timestamps, resource counts, and
 rendered manifest.
 
 This evidence proves that a declared commit can produce policy-conforming manifests for a declared
-digest. It does **not** yet prove that the digest was built from that commit. Signing, build
-provenance, and verification before promotion remain required hardening.
+digest. Before any environment job, the promotion workflow now also verifies signed SLSA
+provenance for the exact OCI digest, repository, release workflow, source commit, main ref, and
+GitHub-hosted signing runner. See [`docs/release-provenance.md`](release-provenance.md).
 
 ## Required GitHub environment configuration
 
@@ -46,7 +47,8 @@ sent to a runner and that required-reviewer approval can be configured to preven
 
 ## Running a validation
 
-1. Confirm the source commit is merged into `main` and all required CI checks passed.
+1. Confirm the source commit is merged into `main`, all required CI checks passed, and the protected
+   `release-image` workflow published and attested it.
 2. Obtain the published image **manifest digest**, not a mutable tag or a local image ID.
 3. Open **Actions**, select **promotion-evidence**, and choose **Run workflow**.
 4. Enter the full source SHA, image digest, and highest target environment.
@@ -74,8 +76,9 @@ credentials, bootstrap credentials, external-secret values, or private endpoints
 ## Next deployment increment
 
 The next stage may perform a real development deployment only after approved workload identity and
-secret-provider bindings exist. That stage must verify image signature and provenance, run the
-migration once, retain its terminal condition and non-sensitive logs, apply workloads, run bounded
+secret-provider bindings exist. Provenance verification is now implemented before promotion; that
+stage must additionally enforce it at admission, run the migration once, retain its terminal
+condition and non-sensitive logs, apply workloads, run bounded
 readiness/authentication/RBAC/outbox smoke tests, and retain rollback evidence. Staging and
 production must reuse the same verified digest; production database rollback must never be
 automatic.

@@ -88,6 +88,10 @@
 | CORE-F-082 | An operator shall promote one full source commit SHA and one non-zero image manifest digest through fixed development, staging, and production environments in that order. | Workflow policy and input-validation tests |
 | CORE-F-083 | Each promotion environment shall retain versioned evidence binding the environment, source SHA, image digest, rendered foundation/migration/workload hashes, resource counts, and timestamps. | Evidence contract and manifest-promotion tests |
 | CORE-F-084 | Promotion validation shall reject literal Kubernetes Secrets, unexpected image repositories, mutable or zero image identifiers, and any source commit not contained in `main`. | Negative unit and workflow-policy tests |
+| CORE-F-085 | A protected release workflow shall publish one GHCR image tagged only by the exact `main` commit and refuse replacement when that commit tag already exists. | Workflow policy and first live release evidence |
+| CORE-F-086 | The release workflow shall create signed SLSA build-provenance and CycloneDX SBOM attestations for the same fully qualified image name and manifest digest. | Attestation workflow policy and GitHub/OCI evidence |
+| CORE-F-087 | Promotion shall verify the exact image digest against this repository, the fixed release workflow, supplied source commit, `main` source ref, and a GitHub-hosted signing runner before entering development. | Negative workflow-policy and first live promotion evidence |
+| CORE-F-088 | A successful release shall retain a versioned non-sensitive report binding source SHA/ref, immutable tag, image digest/reference, and both attestation URLs. | Evidence-contract tests and retained release artifact |
 
 ## Non-functional requirements
 
@@ -151,3 +155,7 @@
 | CORE-NF-056 | Promotion fail-closed behavior | every environment requires the exact environment variable `ATEP_PROMOTION_ENABLED=true`; a missing environment configuration stops the job before evidence generation |
 | CORE-NF-057 | Promotion separation of duties | production uses a fixed GitHub environment intended for required reviewers, self-review prevention, branch/tag restrictions, and disabled administrator bypass where the repository plan supports those controls |
 | CORE-NF-058 | Promotion immutability | development, staging, and production evidence for one workflow run uses the same reviewed registry path, image manifest digest, and source SHA; per-environment concurrency prevents simultaneous promotion work |
+| CORE-NF-059 | Release least privilege | repository contents remain read-only; only the fixed release job receives package, OIDC, and attestation write permissions; registry authentication uses and then removes the short-lived job token |
+| CORE-NF-060 | Release non-replacement | a serialized release job rejects any pre-existing `sha-<commit>` tag and never publishes `latest` or another floating tag |
+| CORE-NF-061 | Provenance trust policy | promotion accepts only SLSA provenance signed for this repository by `.github/workflows/release.yml`, with the requested source SHA, `refs/heads/main`, and no self-hosted signing runner |
+| CORE-NF-062 | Release evidence privacy | retained release evidence contains digests, source identity, public attestation URLs, and timestamps only; tokens, registry credentials, environment values, and image layers are excluded |
