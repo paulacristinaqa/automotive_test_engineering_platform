@@ -30,6 +30,7 @@ graph; dependency updates are accepted only from the canonical workflow evidence
 | Offline release evidence | The builder downloads the exact digest's attestation bundle and current roots, verifies the archived provenance, and emits a SHA-256/size manifest for the release report, SBOM, bundle, and roots | 90-day transfer package and future immutable archive copy |
 | Sealed archive restore | A deterministic ZIP and separate receipt bind content, source/image identity, object key, manifest hash, size, and SHA-256; a fresh job downloads and restores them before release workflow success | seal/restore tests, cross-job download, and provider-neutral WORM contract |
 | Immutable export gate | Exact normalized provider evidence must bind the local seal to one versioned object, strong upload/read-back checksum, locked retention, encryption, short-lived writer identity, audit reference, and ordered timestamps before a non-replacing export receipt is emitted | deterministic export receipt plus positive and fail-closed provider-evidence tests |
+| AWS immutable adapter | One conditional S3 `PutObject` requires full-object SHA-256, `COMPLIANCE` retention, exact customer KMS key, expected account, STS assumed role, immutable version metadata, and full versioned read-back before normalized evidence | hash-locked Boto3 dependency, fake-client contract tests, and future live AWS denial/restore evidence |
 | Revocation | Exact-digest withdrawal preserves evidence first, freezes promotion, removes attestations plus the affected package/referrers under dual review, and proves online verification/admission denial | incident record, archived package, API/package audit, and negative verification evidence |
 | Updates | Dependabot proposes weekly grouped Python updates and weekly Actions/Docker updates | reviewed pull requests |
 
@@ -99,7 +100,7 @@ acceptance of continued risk.
 
 - protect release environments with approvals and isolated credentials;
 - retain release SBOMs alongside immutable artifacts for the required product lifetime;
-- connect the portable archive to an immutable provider with retention locks, restore exercises, and revocation catalogue;
+- provision and live-exercise the S3 Object Lock adapter with retention locks, denial/read-back/restore evidence, and an external revocation catalogue;
 - move the reusable builder to a separately governed repository, pin callers to a reviewed SHA, and retain independent provenance evidence;
 - integrate a managed secret service and define emergency credential rotation;
 - define vulnerability-response ownership, service levels, and supplier escalation;

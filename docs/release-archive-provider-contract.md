@@ -1,8 +1,8 @@
 # Immutable release archive provider contract
 
 This contract defines the provider-neutral boundary for transferring sealed ATEP release evidence
-to product-lifetime storage. The repository creates and restores the archive object, but no cloud
-provider is selected or provisioned by this increment.
+to product-lifetime storage. The repository creates and restores the archive object. AWS S3 Object
+Lock is the first implemented adapter, but no cloud account or provider resource is provisioned.
 
 ## Transfer objects
 
@@ -100,6 +100,12 @@ and size, checks chronological consistency and the approved minimum locked-reten
 refuses to replace an existing output. Only then does it emit a normalized export receipt binding
 the local receipt and provider evidence by SHA-256. This gate validates an adapter's retained
 evidence; it does not make an untrusted provider response authoritative or provision cloud policy.
+
+The first concrete adapter is documented in
+[`aws-s3-object-lock-adapter.md`](aws-s3-object-lock-adapter.md). It implements an atomic
+single-object `PutObject` boundary with S3 Object Lock `COMPLIANCE`, exact-version metadata and
+streamed read-back, SSE-KMS, STS assumed-role identity, and normalized receipts. Its fake-client
+tests are implemented; AWS provisioning and live acceptance evidence are intentionally pending.
 
 ## Restore exercise
 

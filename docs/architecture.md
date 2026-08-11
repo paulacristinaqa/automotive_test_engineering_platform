@@ -202,7 +202,9 @@ flowchart LR
    vendor-neutral immutable provider contract, not the product-lifetime archive. A normalized
    export gate validates exact provider object identity, read-back integrity, locked retention,
    encryption, workload identity, audit reference, and time ordering before emitting a
-   non-replacing export receipt. A
+   non-replacing export receipt. The initial AWS S3 Object Lock adapter maps this boundary to an
+   atomic conditional `PutObject`, `COMPLIANCE` retention, SSE-KMS, STS assumed-role identity, and
+   exact-version streamed read-back without embedding credentials or provisioning cloud state. A
    separately authorized revocation procedure preserves evidence before exact-digest attestation
    and package withdrawal.
 

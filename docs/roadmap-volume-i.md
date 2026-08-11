@@ -70,9 +70,10 @@
   an input-free same-repository reusable builder, and exact pre-promotion verification are
   implemented; a portable offline archive, deterministic sealed object, cross-job restore smoke,
   revocation runbook, immutable provider contract, and normalized fail-closed provider export gate
-  are also implemented; independently governed builder hosting, live
-  release/admission/revocation/export evidence, a provider adapter, and a selected product-lifetime
-  immutable archive provider remain)
+  are also implemented; independently governed builder hosting and live
+  release/admission/revocation/export evidence remain. An AWS S3 Object Lock adapter is implemented
+  with fake-client contract evidence, while its live account/bucket/KMS/OIDC/CloudTrail binding and
+  denial/restore exercise remain)
 - CI/CD promotion through development, staging, and production (implemented initial validation
   slice: ordered fixed environments, strict immutable inputs, fail-closed enablement, retained
   manifest evidence, production approval contract, and signed provenance verification; real

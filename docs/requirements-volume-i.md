@@ -101,6 +101,9 @@
 | CORE-F-095 | A fresh release job shall download the sealed transfer artifact and restore it into an empty workspace before the reusable workflow succeeds. | Cross-job artifact restore contract and hosted CI evidence |
 | CORE-F-096 | The archive export gate shall accept only a fixed non-sensitive provider-evidence schema and bind one immutable object version, exact key, strong checksum/read-back, size, retention, encryption, writer identity, audit event, and timestamps to the local sealed receipt. | Export-gate unit and negative contract tests |
 | CORE-F-097 | Successful export validation shall fully restore the local archive and emit a normalized receipt binding both input evidence files by SHA-256 without replacing existing evidence. | Round-trip export-gate and replacement tests |
+| CORE-F-098 | The initial AWS adapter shall restore the local seal before issuing an atomic conditional S3 upload with full-object SHA-256, `COMPLIANCE` retention, exact KMS encryption, expected account, and deterministic object key. | Fake-client upload-contract and configuration tests |
+| CORE-F-099 | The AWS adapter shall verify the returned immutable version through retention-aware metadata and complete streamed read-back before emitting normalized provider and export receipts. | Metadata, tamper, version, retention, and receipt tests |
+| CORE-F-100 | The AWS writer shall be an STS assumed-role session in the expected archive account; permanent IAM-user and cross-account identities shall fail closed. | Identity contract tests and future live OIDC evidence |
 
 ## Non-functional requirements
 
@@ -177,3 +180,6 @@
 | CORE-NF-069 | Immutable provider boundary | product-lifetime export requires locked WORM retention, version identity, strong checksum/read-back, separate short-lived identities, independent keys/audit, deterministic object key, non-replacement, and scheduled restore evidence |
 | CORE-NF-070 | Provider evidence minimization | normalized export evidence has an exact bounded schema, contains identifiers rather than credentials or response bodies, and rejects unknown fields |
 | CORE-NF-071 | Export validation safety | export fails closed on local seal/restore failure, object-key/version/checksum/size mismatch, weak retention/encryption, insufficient retention duration, invalid time order, or existing output |
+| CORE-NF-072 | AWS non-replacement | exact-prefix version-history preflight rejects versions/delete markers; `If-None-Match: *` is mandatory on the write and any conditional conflict fails without retrying under a new key/version |
+| CORE-NF-073 | AWS least privilege | writer identity is short-lived and has no delete, retention-bypass, legal-hold, lifecycle, bucket-policy, KMS-administration, IAM-administration, or audit-administration authority |
+| CORE-NF-074 | AWS bounded verification | local preflight and provider read-back are streaming, size bounded, exact-version scoped, checksum verified, and produce no cloud credential or raw response evidence |
