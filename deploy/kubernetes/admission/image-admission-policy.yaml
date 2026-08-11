@@ -1,0 +1,42 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: atep-image-integrity
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["apps"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["deployments"]
+      - apiGroups: ["batch"]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["jobs"]
+  validations:
+    - expression: >-
+        object.spec.template.spec.containers.all(container,
+        container.image.matches('^ghcr\\.io/paulacristinaqa/automotive_test_engineering_platform@sha256:[a-f0-9]{64}$') &&
+        container.image != 'ghcr.io/paulacristinaqa/automotive_test_engineering_platform@sha256:0000000000000000000000000000000000000000000000000000000000000000')
+      message: ATEP containers must use the approved GHCR repository and a non-zero lowercase SHA-256 digest.
+      reason: Invalid
+    - expression: >-
+        !has(object.spec.template.spec.initContainers) ||
+        object.spec.template.spec.initContainers.all(container,
+        container.image.matches('^ghcr\\.io/paulacristinaqa/automotive_test_engineering_platform@sha256:[a-f0-9]{64}$') &&
+        container.image != 'ghcr.io/paulacristinaqa/automotive_test_engineering_platform@sha256:0000000000000000000000000000000000000000000000000000000000000000')
+      message: ATEP init containers must use the approved GHCR repository and a non-zero lowercase SHA-256 digest.
+      reason: Invalid
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: atep-image-integrity
+spec:
+  policyName: atep-image-integrity
+  validationActions: [Deny, Audit]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        atep.dev/image-policy: enforced

@@ -7,12 +7,14 @@ remain operator-owned services.
 
 ## Deployment model
 
-The rollout is intentionally separated into three Kustomize targets:
+The rollout is intentionally separated into four Kustomize targets:
 
 1. `foundation` creates the `atep` namespace, non-sensitive configuration, identity boundaries,
    the initial artifact claim, and default-deny network policy;
-2. `migration` runs one bounded Alembic Job and must complete before application rollout;
-3. `workloads` starts one API replica and one outbox worker after migration evidence is retained.
+2. `admission` installs the cluster-scoped image-integrity policy and binding without applying a
+   namespace to those resources;
+3. `migration` runs one bounded Alembic Job and must complete before application rollout;
+4. `workloads` starts one API replica and one outbox worker after migration evidence is retained.
 
 The API remains a singleton because it currently owns the test scheduler and module reconciler.
 `Recreate` prevents two versions from owning those loops during rollout. This deliberately trades
@@ -55,6 +57,7 @@ Before deployment, render and review every target:
 
 ```bash
 kubectl kustomize deploy/kubernetes/foundation
+kubectl kustomize deploy/kubernetes/admission
 kubectl kustomize deploy/kubernetes/migration
 kubectl kustomize deploy/kubernetes/workloads
 ```
@@ -62,12 +65,35 @@ kubectl kustomize deploy/kubernetes/workloads
 Reject the release if the rendered output contains the zero digest, an unexpected registry, a
 literal Secret, privileged execution, or an unapproved external endpoint.
 
+## Cluster image admission gate
+
+The separate `admission` target installs a native `ValidatingAdmissionPolicy` and binding for Kubernetes
+1.30 or later. The binding selects only namespaces labelled `atep.dev/image-policy=enforced`; the
+committed `atep` namespace carries that label. On every ATEP Deployment or Job create/update, the
+policy denies application and init-container images unless they use the exact repository
+`ghcr.io/paulacristinaqa/automotive_test_engineering_platform`, a lowercase SHA-256 manifest
+digest, and a value other than the all-zero placeholder. Denials are also requested in the
+Kubernetes audit trail.
+
+This admission policy enforces repository and digest identity inside the cluster. It does not
+verify the GitHub/Sigstore signature or provenance by itself. Promotion must first perform the
+exact attestation verification described in [`docs/release-provenance.md`](../../docs/release-provenance.md),
+and the admitted digest must be the digest from that evidence. A production cluster may add a
+separately approved signature-aware admission controller, but it must retain this fail-closed
+repository/digest boundary.
+
+Installing or changing the policy and binding requires cluster-level authorization. Apply
+`foundation`, then `admission`, before migration; inspect the policy type-checking status, and do not remove the
+namespace enforcement label to bypass a failed deployment. Clusters older than Kubernetes 1.30
+are unsupported by this baseline and must fail before workload rollout.
+
 ## Controlled rollout
 
 After the approved image overlay and externally managed Secret exist:
 
 ```bash
 kubectl apply -k deploy/kubernetes/foundation
+kubectl apply -k deploy/kubernetes/admission
 kubectl apply -k <approved-migration-overlay>
 kubectl wait --for=condition=complete --timeout=180s job/atep-migrate -n atep
 kubectl logs -n atep job/atep-migrate

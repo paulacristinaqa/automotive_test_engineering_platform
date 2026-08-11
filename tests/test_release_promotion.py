@@ -65,6 +65,12 @@ def test_manifest_promotion_replaces_only_the_reviewed_image_and_rejects_secrets
             target="workloads",
             image_digest=VALID_DIGEST,
         )
+    with pytest.raises(ValueError, match="workload image"):
+        promote_rendered_manifest(
+            source,
+            target="admission",
+            image_digest=VALID_DIGEST,
+        )
 
 
 def test_evidence_report_binds_source_digest_environment_and_render_hashes(
@@ -74,6 +80,13 @@ def test_evidence_report_binds_source_digest_environment_and_render_hashes(
         assert timeout_seconds == 30
         if target == "foundation":
             return "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: atep\n"
+        if target == "admission":
+            return (
+                "apiVersion: admissionregistration.k8s.io/v1\n"
+                "kind: ValidatingAdmissionPolicy\n"
+                "metadata:\n"
+                "  name: atep-image-integrity\n"
+            )
         return (
             "apiVersion: batch/v1\n"
             f"kind: {'Job' if target == 'migration' else 'Deployment'}\n"
@@ -96,13 +109,14 @@ def test_evidence_report_binds_source_digest_environment_and_render_hashes(
 
     report = json.loads((tmp_path / "promotion-evidence.json").read_text(encoding="utf-8"))
     assert report == asdict(evidence)
-    assert report["schema_version"] == "1.0.0"
+    assert report["schema_version"] == "1.1.0"
     assert report["status"] == "validated"
     assert report["environment"] == "staging"
     assert report["source_sha"] == VALID_SOURCE_SHA
     assert report["image_digest"] == VALID_DIGEST
     assert [item["target"] for item in report["renders"]] == [
         "foundation",
+        "admission",
         "migration",
         "workloads",
     ]
@@ -112,9 +126,7 @@ def test_evidence_report_binds_source_digest_environment_and_render_hashes(
 
 
 def test_promotion_workflow_has_fixed_ordered_environments_and_no_deploy_command() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "promotion.yml").read_text(
-        encoding="utf-8"
-    )
+    workflow = (ROOT / ".github" / "workflows" / "promotion.yml").read_text(encoding="utf-8")
 
     assert "environment: development" in workflow
     assert "environment: staging" in workflow
@@ -122,7 +134,7 @@ def test_promotion_workflow_has_fixed_ordered_environments_and_no_deploy_command
     assert "needs: validate-release" in workflow
     assert "needs: development" in workflow
     assert "needs: staging" in workflow
-    assert workflow.count('ATEP_PROMOTION_ENABLED: ${{ vars.ATEP_PROMOTION_ENABLED }}') == 3
+    assert workflow.count("ATEP_PROMOTION_ENABLED: ${{ vars.ATEP_PROMOTION_ENABLED }}") == 3
     assert "kubectl apply" not in workflow
     assert "contents: write" not in workflow
     assert "id-token: write" not in workflow

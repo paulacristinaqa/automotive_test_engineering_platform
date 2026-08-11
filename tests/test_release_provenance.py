@@ -86,7 +86,7 @@ def test_release_workflow_is_protected_immutable_and_least_privilege() -> None:
     workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
 
     assert "environment: release" in workflow
-    assert 'ATEP_RELEASE_ENABLED: ${{ vars.ATEP_RELEASE_ENABLED }}' in workflow
+    assert "ATEP_RELEASE_ENABLED: ${{ vars.ATEP_RELEASE_ENABLED }}" in workflow
     assert 'test "$GITHUB_REF" = "refs/heads/main"' in workflow
     assert "packages: write" in workflow
     assert "id-token: write" in workflow
@@ -101,9 +101,7 @@ def test_release_workflow_is_protected_immutable_and_least_privilege() -> None:
 
 
 def test_promotion_requires_exact_signed_provenance_before_development() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "promotion.yml").read_text(
-        encoding="utf-8"
-    )
+    workflow = (ROOT / ".github" / "workflows" / "promotion.yml").read_text(encoding="utf-8")
 
     assert "attestations: read" in workflow
     assert "packages: read" in workflow

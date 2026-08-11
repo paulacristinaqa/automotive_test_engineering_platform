@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from typing import Any
 
@@ -6,6 +7,8 @@ import yaml  # type: ignore[import-untyped]
 ROOT = Path(__file__).parents[1]
 KUBERNETES = ROOT / "deploy" / "kubernetes"
 ZERO_DIGEST = "sha256:" + ("0" * 64)
+APPROVED_IMAGE = "ghcr.io/paulacristinaqa/automotive_test_engineering_platform"
+APPROVED_IMAGE_PATTERN = re.compile(rf"^{re.escape(APPROVED_IMAGE)}@sha256:[a-f0-9]{{64}}$")
 
 
 def load_documents(directory: str) -> list[dict[str, Any]]:
@@ -26,11 +29,14 @@ def documents_by_kind(directory: str, kind: str) -> list[dict[str, Any]]:
 
 
 def test_kustomizations_reference_existing_resources_and_require_an_image_digest() -> None:
-    for directory in ("foundation", "migration", "workloads"):
+    for directory in ("foundation", "admission", "migration", "workloads"):
         path = KUBERNETES / directory / "kustomization.yaml"
         kustomization = yaml.safe_load(path.read_text(encoding="utf-8"))
         assert kustomization["apiVersion"] == "kustomize.config.k8s.io/v1beta1"
-        assert kustomization["namespace"] == "atep"
+        if directory == "admission":
+            assert "namespace" not in kustomization
+        else:
+            assert kustomization["namespace"] == "atep"
         assert all((path.parent / resource).exists() for resource in kustomization["resources"])
 
     for directory in ("migration", "workloads"):
@@ -53,6 +59,7 @@ def test_foundation_is_restricted_secretless_and_default_deny() -> None:
     namespace = documents_by_kind("foundation", "Namespace")[0]
     labels = namespace["metadata"]["labels"]
     assert labels["pod-security.kubernetes.io/enforce"] == "restricted"
+    assert labels["atep.dev/image-policy"] == "enforced"
 
     service_accounts = documents_by_kind("foundation", "ServiceAccount")
     assert {item["metadata"]["name"] for item in service_accounts} == {
@@ -72,6 +79,58 @@ def test_foundation_is_restricted_secretless_and_default_deny() -> None:
     config = documents_by_kind("foundation", "ConfigMap")[0]["data"]
     assert not any("SECRET" in key or "PASSWORD" in key for key in config)
     assert config["ATEP_ENVIRONMENT"] == "production"
+
+
+def test_admission_policy_denies_unapproved_or_mutable_atep_images() -> None:
+    policies = documents_by_kind("admission", "ValidatingAdmissionPolicy")
+    bindings = documents_by_kind("admission", "ValidatingAdmissionPolicyBinding")
+    assert len(policies) == len(bindings) == 1
+
+    policy = policies[0]
+    assert policy["metadata"]["name"] == "atep-image-integrity"
+    assert policy["spec"]["failurePolicy"] == "Fail"
+    assert policy["spec"]["matchConstraints"]["resourceRules"] == [
+        {
+            "apiGroups": ["apps"],
+            "apiVersions": ["v1"],
+            "operations": ["CREATE", "UPDATE"],
+            "resources": ["deployments"],
+        },
+        {
+            "apiGroups": ["batch"],
+            "apiVersions": ["v1"],
+            "operations": ["CREATE", "UPDATE"],
+            "resources": ["jobs"],
+        },
+    ]
+    validations = policy["spec"]["validations"]
+    assert len(validations) == 2
+    assert all(validation["reason"] == "Invalid" for validation in validations)
+    assert all(APPROVED_IMAGE in validation["expression"] for validation in validations)
+    assert all(ZERO_DIGEST in validation["expression"] for validation in validations)
+
+    binding = bindings[0]
+    assert binding["spec"] == {
+        "policyName": "atep-image-integrity",
+        "validationActions": ["Deny", "Audit"],
+        "matchResources": {
+            "namespaceSelector": {"matchLabels": {"atep.dev/image-policy": "enforced"}}
+        },
+    }
+
+    accepted = f"{APPROVED_IMAGE}@sha256:{'a' * 64}"
+    rejected = (
+        f"{APPROVED_IMAGE}:latest",
+        f"{APPROVED_IMAGE}@{ZERO_DIGEST}",
+        f"docker.io/paulacristinaqa/automotive_test_engineering_platform@sha256:{'a' * 64}",
+        f"{APPROVED_IMAGE}@sha256:{'A' * 64}",
+    )
+    assert APPROVED_IMAGE_PATTERN.fullmatch(accepted)
+    assert accepted != f"{APPROVED_IMAGE}@{ZERO_DIGEST}"
+    assert all(
+        not APPROVED_IMAGE_PATTERN.fullmatch(image) or image == f"{APPROVED_IMAGE}@{ZERO_DIGEST}"
+        for image in rejected
+    )
 
 
 def test_workloads_apply_restricted_runtime_controls_and_external_secret_contract() -> None:

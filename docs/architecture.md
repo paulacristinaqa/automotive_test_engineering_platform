@@ -158,7 +158,7 @@ flowchart LR
    retaining CycloneDX SBOM evidence. Scanner exceptions must match an exact advisory, package,
    version, and type, name an owner and review date, and expire; all other findings remain gated.
    Dependabot proposes reviewed updates without weakening pins.
-30. **Kubernetes rollout is phased and fails closed.** Foundation, migration, and workloads render
+30. **Kubernetes rollout is phased and fails closed.** Foundation, cluster-scoped admission, migration, and workloads render
    independently so operators must retain successful schema evidence before application rollout.
    No Secret object or credential value is versioned. A zero image digest blocks deployment until
    a reviewed environment overlay supplies the same immutable application digest to migration and
@@ -178,6 +178,14 @@ flowchart LR
    aggregate hash report, never the protected dump. Provider-native encrypted backups, immutable
    retention, WAL/PITR, artifact-object coordination, and deployed RPO/RTO evidence remain separate
    production controls.
+33. **Image identity is enforced again at Kubernetes admission.** A separate cluster-scoped target
+   follows the namespaced foundation. Promotion verifies signed
+   provenance before producing an approved digest, while a native fail-closed
+   `ValidatingAdmissionPolicy` independently rejects ATEP Deployments and Jobs that reference a
+   mutable tag, another repository, a malformed digest, or the all-zero placeholder. The binding
+   is scoped by an explicit namespace label and emits audit evidence. This native gate constrains
+   image identity but does not replace cryptographic attestation verification or a future
+   signature-aware admission controller.
 
 ## Initial bounded contexts
 

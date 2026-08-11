@@ -14,7 +14,7 @@ The workflow accepts only:
 - a non-zero lowercase `sha256` image manifest digest; and
 - a full lowercase 40-character source commit SHA already contained in `main`.
 
-The evidence builder renders the committed foundation, migration, and workload Kustomize targets.
+The evidence builder renders the committed foundation, cluster-scoped admission, migration, and workload Kustomize targets.
 It substitutes only the exact reviewed all-zero application image placeholder, requires every
 rendered application image to use the same repository and digest, rejects literal Kubernetes
 Secrets, and fails if any zero digest remains. The resulting JSON binds the declared environment,
@@ -45,6 +45,11 @@ The repository owner must inspect the environment settings and retain a settings
 first production exercise. GitHub documents that protection rules are evaluated before a job is
 sent to a runner and that required-reviewer approval can be configured to prevent self-approval.
 
+As inspected on 11 August 2026, this repository has one direct collaborator. Enabling required
+independent review with self-review prevention would therefore deadlock release. Add a trusted
+read-or-higher collaborator and retain the reviewer/environment settings evidence before the
+first protected publication; do not weaken the rule merely to create a package.
+
 ## Running a validation
 
 1. Confirm the source commit is merged into `main`, all required CI checks passed, and the protected
@@ -65,19 +70,21 @@ the same environment simultaneously.
 Each environment artifact contains:
 
 - `foundation.yaml`;
+- `admission.yaml`;
 - `migration.yaml`;
 - `workloads.yaml`; and
-- `promotion-evidence.json` using schema version `1.0.0`.
+- `promotion-evidence.json` using schema version `1.1.0`.
 
-The manifests contain no runtime Secret values. Review the evidence JSON and recompute the three
+The manifests contain no runtime Secret values. Review the evidence JSON and recompute the four
 manifest hashes before using it as an input to a future deployment controller. Do not place cluster
 credentials, bootstrap credentials, external-secret values, or private endpoints in an artifact.
 
 ## Next deployment increment
 
 The next stage may perform a real development deployment only after approved workload identity and
-secret-provider bindings exist. Provenance verification is now implemented before promotion; that
-stage must additionally enforce it at admission, run the migration once, retain its terminal
+secret-provider bindings exist. Provenance verification and native repository/digest admission are
+implemented; that stage must exercise cluster type-checking and negative denial/audit evidence,
+run the migration once, retain its terminal
 condition and non-sensitive logs, apply workloads, run bounded
 readiness/authentication/RBAC/outbox smoke tests, and retain rollback evidence. Staging and
 production must reuse the same verified digest; production database rollback must never be

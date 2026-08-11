@@ -17,7 +17,7 @@ DIGEST_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 SOURCE_SHA_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 IMAGE_PATTERN = re.compile(r"^\s*(?:-\s*)?image:\s*(\S+)\s*$", re.MULTILINE)
 KIND_PATTERN = re.compile(r"^kind:\s*(\S+)\s*$", re.MULTILINE)
-REPORT_SCHEMA_VERSION = "1.0.0"
+REPORT_SCHEMA_VERSION = "1.1.0"
 
 
 @dataclass(frozen=True)
@@ -73,7 +73,12 @@ def promote_rendered_manifest(rendered: str, *, target: str, image_digest: str) 
 
     if target == "foundation":
         if ZERO_DIGEST in rendered or IMAGE_REPOSITORY in rendered:
-            raise ValueError("foundation render unexpectedly contains the application image")
+            raise ValueError(f"{target} render unexpectedly contains the application image")
+        return rendered
+
+    if target == "admission":
+        if IMAGE_PATTERN.findall(rendered):
+            raise ValueError("admission render unexpectedly contains a workload image")
         return rendered
 
     placeholder = f"{IMAGE_REPOSITORY}@{ZERO_DIGEST}"
@@ -133,7 +138,7 @@ def build_evidence(
     output_directory.mkdir(parents=True, exist_ok=True)
     renders: list[RenderEvidence] = []
 
-    for target in ("foundation", "migration", "workloads"):
+    for target in ("foundation", "admission", "migration", "workloads"):
         rendered = render_target(repository_root, target, timeout_seconds=timeout_seconds)
         promoted = promote_rendered_manifest(
             rendered,
