@@ -56,7 +56,7 @@ jobs:
         run: |
           gh attestation verify "oci://$IMAGE_NAME@$IMAGE_DIGEST" \
             --repo "$GITHUB_REPOSITORY" \
-            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/reusable-release-builder.yml" \
             --source-digest "$SOURCE_SHA" \
             --source-ref refs/heads/main \
             --deny-self-hosted-runners

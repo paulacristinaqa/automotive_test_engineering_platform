@@ -46,9 +46,12 @@ def test_workflows_pin_every_action_to_a_full_commit_and_define_security_gates()
     workflow_files = sorted((ROOT / ".github" / "workflows").glob("*.yml"))
     workflows = "\n".join(path.read_text(encoding="utf-8") for path in workflow_files)
     uses_lines = [line for line in workflows.splitlines() if "uses:" in line]
+    local_workflows = [line.strip() for line in uses_lines if "uses: ./" in line]
+    external_actions = [line for line in uses_lines if "uses: ./" not in line]
     pinned_actions = ACTION_PATTERN.findall(workflows)
 
-    assert len(pinned_actions) == len(uses_lines)
+    assert local_workflows == ["uses: ./.github/workflows/reusable-release-builder.yml"]
+    assert len(pinned_actions) == len(external_actions)
     assert "gitleaks/gitleaks-action" in workflows
     assert "github/codeql-action/init" in workflows
     assert "github/codeql-action/analyze" in workflows

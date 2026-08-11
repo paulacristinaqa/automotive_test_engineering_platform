@@ -66,9 +66,10 @@
   policy (implemented initial CI slice; provider-native encrypted backup, immutable retention,
   artifact-store coordination, PITR/WAL, and deployed disaster exercises remain hardening)
 - SLO threshold calibration, production incident-provider routing, load tests, artifact signing,
-  provenance verification, and security-policy calibration (signed GHCR provenance/SBOM and
-  pre-promotion verification implemented as an initial hosted-build slice; trusted reusable
-  builder, live release and admission execution evidence, and long-term retention remain)
+  provenance verification, and security-policy calibration (signed GHCR provenance/SBOM,
+  an input-free same-repository reusable builder, and exact pre-promotion verification are
+  implemented; independently governed builder hosting, live release/admission evidence, and
+  long-term retention remain)
 - CI/CD promotion through development, staging, and production (implemented initial validation
   slice: ordered fixed environments, strict immutable inputs, fail-closed enablement, retained
   manifest evidence, production approval contract, and signed provenance verification; real

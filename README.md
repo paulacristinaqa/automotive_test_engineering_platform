@@ -198,7 +198,7 @@ for the external secret contract, render checks, controlled rollout, evidence, a
 For Kubernetes 1.30 or later, a separate admission target installs a namespace-scoped,
 fail-closed native policy that rejects mutable, foreign, malformed, and all-zero images for ATEP
 Deployments and Jobs. The namespace also opts into a GitHub/Sigstore Policy Controller contract
-restricted to the exact ATEP image, repository, `release.yml`, `main` ref, and SLSA v1 provenance,
+restricted to the exact ATEP image, repository, `reusable-release-builder.yml`, `main` ref, and SLSA v1 provenance,
 with no exemptions. Pre-promotion verification remains independently mandatory.
 The common base leaves workload identity disabled; an environment overlay may enable the
 [SPIFFE/XFCC trust boundary](docs/workload-identity.md) only after proxy mTLS, header replacement,

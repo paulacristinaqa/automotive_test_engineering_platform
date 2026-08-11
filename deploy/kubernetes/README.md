@@ -95,7 +95,7 @@ no exemptions and restricts SLSA v1 provenance to:
 
 - `ghcr.io/paulacristinaqa/automotive_test_engineering_platform` images;
 - the `paulacristinaqa/automotive_test_engineering_platform` repository;
-- `.github/workflows/release.yml` on `refs/heads/main`; and
+- `.github/workflows/reusable-release-builder.yml` on `refs/heads/main`; and
 - the GitHub Actions OIDC issuer under the GitHub and Sigstore public trust authorities.
 
 Use the exact chart versions reviewed in the official GitHub procedure. Verify and retain each

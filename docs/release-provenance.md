@@ -5,9 +5,10 @@ Registry (GHCR), generates signed SLSA build provenance and a signed CycloneDX S
 and records a non-sensitive release summary. Promotion verifies the provenance before any GitHub
 environment gate is entered.
 
-This is an initial hosted-build trust boundary. It does not yet deploy the image, establish SLSA
-Build Level 3, provide an independent reusable trusted builder, or replace admission control in a
-real Kubernetes cluster.
+This is an initial reusable-builder trust boundary. The protected caller performs only approval
+and source checks; an input-free reusable workflow builds, publishes, and signs. The builder is
+still governed in the same repository and therefore does not by itself prove independent SLSA
+Build Level 3 isolation, deploy the image, or replace admission control in a real Kubernetes cluster.
 
 ## Release invariants
 
@@ -22,7 +23,10 @@ real Kubernetes cluster.
 - The image receives OCI source, revision, and title labels.
 - The build action records the registry manifest digest; downstream evidence never trusts a tag as
   the immutable identity.
-- The release job alone receives `packages: write`, `id-token: write`, and `attestations: write`.
+- The approval job has read-only contents access. Only its dependent reusable-builder call receives
+  `packages: write`, `id-token: write`, and `attestations: write`.
+- The reusable workflow declares no caller-controlled inputs or secrets and verifies its exact
+  `job.workflow_ref` identity on `refs/heads/main` before authenticating to the registry.
   Repository contents remain read-only.
 - Registry authentication uses the short-lived job `GITHUB_TOKEN`; it is removed in an `always()`
   cleanup step.
@@ -41,9 +45,9 @@ records. The action's optional organization-only storage record is disabled beca
 is owned by a personal account. The workflow also retains `release-evidence.json` and the release
 SBOM for 90 days.
 
-The signed statement proves a claim made by the release workflow. It does not make the workflow
+The signed statement proves a claim made by the reusable builder. It does not make the workflow
 itself trustworthy: branch protection, code review, pinned actions, least privilege, isolated
-release configuration, and future reusable trusted-builder separation remain necessary controls.
+release configuration, and future independent builder governance remain necessary controls.
 
 ## Promotion verification
 
@@ -51,7 +55,7 @@ Before `development`, the promotion workflow authenticates to GHCR and runs `gh 
 verify` against the exact `oci://<image>@<digest>` subject. Verification requires:
 
 - this exact repository as the attestation owner;
-- `.github/workflows/release.yml` as the signer workflow;
+- `.github/workflows/reusable-release-builder.yml` as the signer workflow;
 - the supplied source commit as the provenance source digest;
 - `refs/heads/main` as the source ref;
 - the standard SLSA provenance predicate; and
@@ -87,12 +91,17 @@ default; choose visibility intentionally before expecting anonymous verification
 8. Retain the release run, attestation URLs, verification output, and promotion artifact as the
    first live evidence set.
 
+The signer check deliberately names the reusable workflow, not the manual caller. GitHub records
+the workflow containing `actions/attest` as the attestation signer. A future move to a separately
+governed builder repository must update the signer repository, workflow, admission subject, and
+verification tests atomically.
+
 No release workflow is dispatched automatically by this increment. Publishing the first package
 is an explicit operator action because it creates an externally consumable artifact.
 
 ## Remaining hardening
 
-- move build and signing into a reviewed reusable workflow with restricted inputs;
+- move the reusable builder into a separately governed repository and pin callers to a reviewed SHA;
 - generate a multi-architecture manifest when required by deployment targets;
 - install the reviewed GitHub/Sigstore admission charts by retained OCI digest and execute the
   committed exact-workflow policy against positive and negative images;
@@ -104,6 +113,8 @@ is an explicit operator action because it creates an externally consumable artif
 ## References
 
 - [GitHub artifact attestation guide](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations)
+- [GitHub reusable-workflow attestation guidance](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/increase-security-rating)
+- [GitHub reusable workflow reference](https://docs.github.com/en/actions/reference/workflows-and-actions/reusing-workflow-configurations)
 - [GitHub CLI attestation verification](https://cli.github.com/manual/gh_attestation_verify)
 - [GitHub Container Registry guidance](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)
 - [GitHub Kubernetes attestation enforcement](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/enforce-artifact-attestations)
