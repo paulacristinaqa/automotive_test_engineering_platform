@@ -85,6 +85,9 @@
 | CORE-F-079 | A registered module shall authenticate heartbeat, telemetry, and command operations with one canonical SPIFFE ID forwarded by an approved mTLS proxy while existing capability authorization remains enforced. | Parser, authentication, capability, API-contract, and future live proxy tests |
 | CORE-F-080 | The repository shall provide a bounded PostgreSQL logical backup and isolated restore drill that validates archive readability, Alembic revision, schema, and per-table row counts. | Pure unit tests, workflow policy tests, and disposable CI restore evidence |
 | CORE-F-081 | A successful restore drill shall retain a versioned aggregate evidence report containing timestamps, duration, archive integrity, migration revision, and fingerprints without retaining the database archive or domain records. | Report contract, privacy test, and CI artifact review |
+| CORE-F-082 | An operator shall promote one full source commit SHA and one non-zero image manifest digest through fixed development, staging, and production environments in that order. | Workflow policy and input-validation tests |
+| CORE-F-083 | Each promotion environment shall retain versioned evidence binding the environment, source SHA, image digest, rendered foundation/migration/workload hashes, resource counts, and timestamps. | Evidence contract and manifest-promotion tests |
+| CORE-F-084 | Promotion validation shall reject literal Kubernetes Secrets, unexpected image repositories, mutable or zero image identifiers, and any source commit not contained in `main`. | Negative unit and workflow-policy tests |
 
 ## Non-functional requirements
 
@@ -145,3 +148,6 @@
 | CORE-NF-053 | Restore evidence integrity | The dump is non-empty and SHA-256 identified; restore fails on the first database error; revision, ordered schema, and every public-table count must match |
 | CORE-NF-054 | Recovery isolation | Restore targets a randomly named empty database created from `template0`, application writers are quiesced for exact comparison, and temporary archive/database state is removed |
 | CORE-NF-055 | Recovery objectives | Initial database targets are RPO 24 hours and RTO 4 hours until business impact analysis and deployed provider exercises establish approved values |
+| CORE-NF-056 | Promotion fail-closed behavior | every environment requires the exact environment variable `ATEP_PROMOTION_ENABLED=true`; a missing environment configuration stops the job before evidence generation |
+| CORE-NF-057 | Promotion separation of duties | production uses a fixed GitHub environment intended for required reviewers, self-review prevention, branch/tag restrictions, and disabled administrator bypass where the repository plan supports those controls |
+| CORE-NF-058 | Promotion immutability | development, staging, and production evidence for one workflow run uses the same reviewed registry path, image manifest digest, and source SHA; per-environment concurrency prevents simultaneous promotion work |

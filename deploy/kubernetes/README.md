@@ -46,6 +46,11 @@ must create a reviewed environment overlay that replaces it with the published A
 `sha256` manifest digest in both the migration and workload targets. Mutable tags are not an
 acceptable production input.
 
+The initial repository promotion workflow validates this substitution and retains a separate
+render plus evidence report for each ordered environment. It does not apply resources. Configure
+the fixed GitHub environments and review procedure in
+[`docs/release-promotion.md`](../../docs/release-promotion.md) before running it.
+
 Before deployment, render and review every target:
 
 ```bash
