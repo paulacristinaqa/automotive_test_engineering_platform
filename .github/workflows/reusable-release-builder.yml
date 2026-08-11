@@ -90,11 +90,64 @@ jobs:
             --provenance-url "$PROVENANCE_URL" \
             --sbom-attestation-url "$SBOM_ATTESTATION_URL" \
             --output release-evidence.json
+      - name: Download attestations and current trusted roots
+        id: offline-evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          BUNDLE_FILE="sha256:${IMAGE_DIGEST#sha256:}.jsonl"
+          gh attestation download "oci://$IMAGE_NAME@$IMAGE_DIGEST" \
+            --repo "$GITHUB_REPOSITORY" \
+            --limit 30
+          test -s "$BUNDLE_FILE"
+          gh attestation trusted-root > trusted_root.jsonl
+          test -s trusted_root.jsonl
+          echo "bundle-file=$BUNDLE_FILE" >> "$GITHUB_OUTPUT"
+      - name: Verify the archived provenance bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+          BUNDLE_FILE: ${{ steps.offline-evidence.outputs.bundle-file }}
+        run: |
+          gh attestation verify "oci://$IMAGE_NAME@$IMAGE_DIGEST" \
+            --repo "$GITHUB_REPOSITORY" \
+            --bundle "$BUNDLE_FILE" \
+            --custom-trusted-root trusted_root.jsonl \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/reusable-release-builder.yml" \
+            --source-digest "$GITHUB_SHA" \
+            --source-ref refs/heads/main \
+            --deny-self-hosted-runners
+      - name: Build the offline archive manifest
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+          BUNDLE_FILE: ${{ steps.offline-evidence.outputs.bundle-file }}
+        run: |
+          python tools/build_release_archive_manifest.py \
+            --source-sha "$GITHUB_SHA" \
+            --image-digest "$IMAGE_DIGEST" \
+            --release-evidence release-evidence.json \
+            --sbom atep-release-image.cdx.json \
+            --attestation-bundle "$BUNDLE_FILE" \
+            --trusted-root trusted_root.jsonl \
+            --output release-archive-manifest.json
       - name: Retain release evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: atep-release-evidence-${{ github.sha }}
           path: release-evidence.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Retain portable offline-verification evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: atep-release-offline-archive-${{ github.sha }}
+          path: |
+            release-archive-manifest.json
+            release-evidence.json
+            atep-release-image.cdx.json
+            ${{ steps.offline-evidence.outputs.bundle-file }}
+            trusted_root.jsonl
           if-no-files-found: error
           retention-days: 90
       - name: Remove registry credentials

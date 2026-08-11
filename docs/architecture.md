@@ -194,6 +194,12 @@ flowchart LR
    policy and pre-promotion `gh` verification; chart installation, resolved digests, trust-root
    status, positive admission, and negative denial evidence remain operator-controlled cluster
    evidence rather than an implicit repository deployment.
+9. **Evidence lifecycle boundary:** the reusable builder downloads the exact digest's GitHub
+   attestation bundle and current Sigstore roots, verifies the archived provenance, and emits a
+   hash-and-size manifest beside the release report and CycloneDX SBOM. The 90-day Actions artifact
+   is a transfer package for approved immutable storage, not the product-lifetime archive. A
+   separately authorized revocation procedure preserves evidence before exact-digest attestation
+   and package withdrawal.
 
 ## Initial bounded contexts
 
