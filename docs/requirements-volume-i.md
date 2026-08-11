@@ -93,6 +93,7 @@
 | CORE-F-087 | Promotion shall verify the exact image digest against this repository, the fixed release workflow, supplied source commit, `main` source ref, and a GitHub-hosted signing runner before entering development. | Negative workflow-policy and first live promotion evidence |
 | CORE-F-088 | A successful release shall retain a versioned non-sensitive report binding source SHA/ref, immutable tag, image digest/reference, and both attestation URLs. | Evidence-contract tests and retained release artifact |
 | CORE-F-089 | The Kubernetes API shall deny ATEP Deployment and Job creation or update when any application or init-container image uses a mutable tag, an unapproved repository, a malformed digest, or the committed zero digest. | Admission-policy structure, binding-scope, and negative image tests |
+| CORE-F-090 | The ATEP namespace shall enforce SLSA v1 provenance for the exact GHCR image, repository, `release.yml` signer workflow, and `main` source ref through the GitHub/Sigstore Policy Controller without image exemptions. | Helm-values contract, release-workflow compatibility, and future live admission tests |
 
 ## Non-functional requirements
 
@@ -161,3 +162,4 @@
 | CORE-NF-061 | Provenance trust policy | promotion accepts only SLSA provenance signed for this repository by `.github/workflows/release.yml`, with the requested source SHA, `refs/heads/main`, and no self-hosted signing runner |
 | CORE-NF-062 | Release evidence privacy | retained release evidence contains digests, source identity, public attestation URLs, and timestamps only; tokens, registry credentials, environment values, and image layers are excluded |
 | CORE-NF-063 | Cluster image admission | admission is fail-closed, applies only to namespaces explicitly labelled for ATEP image enforcement, records denials in audit, and requires the approved GHCR repository with a non-zero lowercase SHA-256 digest |
+| CORE-NF-064 | Cryptographic admission trust | signature verification uses the GitHub Actions issuer, exact workflow subject, SLSA v1 predicate, GitHub/Sigstore trust roots, no exempt images, reviewed chart versions/digests, and the same immutable digest used by promotion |

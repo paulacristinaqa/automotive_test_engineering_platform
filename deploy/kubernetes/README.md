@@ -75,17 +75,58 @@ policy denies application and init-container images unless they use the exact re
 digest, and a value other than the all-zero placeholder. Denials are also requested in the
 Kubernetes audit trail.
 
-This admission policy enforces repository and digest identity inside the cluster. It does not
-verify the GitHub/Sigstore signature or provenance by itself. Promotion must first perform the
-exact attestation verification described in [`docs/release-provenance.md`](../../docs/release-provenance.md),
-and the admitted digest must be the digest from that evidence. A production cluster may add a
-separately approved signature-aware admission controller, but it must retain this fail-closed
-repository/digest boundary.
+This native admission policy enforces repository and digest identity inside the cluster. The
+GitHub/Sigstore controller described below adds cryptographic provenance verification; both gates
+are required. Promotion must still perform the independent verification described in
+[`docs/release-provenance.md`](../../docs/release-provenance.md), and every gate must use the same
+manifest digest.
 
 Installing or changing the policy and binding requires cluster-level authorization. Apply
 `foundation`, then `admission`, before migration; inspect the policy type-checking status, and do not remove the
 namespace enforcement label to bypass a failed deployment. Clusters older than Kubernetes 1.30
 are unsupported by this baseline and must fail before workload rollout.
+
+## GitHub/Sigstore attestation admission
+
+The namespace also carries `policy.sigstore.dev/include=true`. This label becomes active only
+after the official Sigstore Policy Controller and GitHub trust policy are installed. The committed
+[`github-attestation-policy-values.yaml`](admission/github-attestation-policy-values.yaml) accepts
+no exemptions and restricts SLSA v1 provenance to:
+
+- `ghcr.io/paulacristinaqa/automotive_test_engineering_platform` images;
+- the `paulacristinaqa/automotive_test_engineering_platform` repository;
+- `.github/workflows/release.yml` on `refs/heads/main`; and
+- the GitHub Actions OIDC issuer under the GitHub and Sigstore public trust authorities.
+
+Use the exact chart versions reviewed in the official GitHub procedure. Verify and retain each
+resolved OCI chart digest before installation; version tags alone are not immutable evidence.
+The GitHub trust-policy chart is itself attested and must pass this verification:
+
+```bash
+gh attestation verify --owner github \
+  oci://ghcr.io/github/artifact-attestations-helm-charts/trust-policies:v0.7.0
+
+helm upgrade policy-controller --install --atomic \
+  --create-namespace --namespace artifact-attestations \
+  oci://ghcr.io/sigstore/helm-charts/policy-controller \
+  --version 0.10.5
+
+helm upgrade trust-policies --install --atomic \
+  --namespace artifact-attestations \
+  oci://ghcr.io/github/artifact-attestations-helm-charts/trust-policies \
+  --version v0.7.0 \
+  -f deploy/kubernetes/admission/github-attestation-policy-values.yaml
+```
+
+Do not install with `--set policy.organization` alone: that would trust every repository owned by
+the account. Do not add `exemptImages`, broaden the image glob, remove the namespace label, or use
+an unreviewed chart version to recover a failed rollout. Installation requires Kubernetes 1.27+
+and Helm 3, while the native ATEP policy keeps the effective platform minimum at Kubernetes 1.30.
+
+Before workload rollout, submit the approved attested digest and negative samples for an
+unattested digest, another repository, another workflow, another source ref, and a malformed image.
+Retain controller version/digests, `TrustRoot`, `ClusterImagePolicy`, policy status, admission
+denials, and Kubernetes audit records. No live cluster installation is performed by this repository.
 
 ## Controlled rollout
 
