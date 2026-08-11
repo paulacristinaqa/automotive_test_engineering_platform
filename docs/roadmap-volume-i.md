@@ -69,8 +69,9 @@
   provenance verification, and security-policy calibration (signed GHCR provenance/SBOM,
   an input-free same-repository reusable builder, and exact pre-promotion verification are
   implemented; a portable offline archive, deterministic sealed object, cross-job restore smoke,
-  revocation runbook, and immutable provider contract are also implemented; independently governed
-  builder hosting, live release/admission/revocation evidence, and a selected product-lifetime
+  revocation runbook, immutable provider contract, and normalized fail-closed provider export gate
+  are also implemented; independently governed builder hosting, live
+  release/admission/revocation/export evidence, a provider adapter, and a selected product-lifetime
   immutable archive provider remain)
 - CI/CD promotion through development, staging, and production (implemented initial validation
   slice: ordered fixed environments, strict immutable inputs, fail-closed enablement, retained
