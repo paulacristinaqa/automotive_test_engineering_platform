@@ -1,5 +1,10 @@
 FROM python:3.14.6-alpine3.24@sha256:26730869004e2b9c4b9ad09cab8625e81d256d1ce97e72df5520e806b1709f92 AS runtime
 
+ARG ATEP_SOURCE_REVISION=unknown
+LABEL org.opencontainers.image.source="https://github.com/paulacristinaqa/automotive_test_engineering_platform" \
+      org.opencontainers.image.revision="$ATEP_SOURCE_REVISION" \
+      org.opencontainers.image.title="Automotive Test Engineering Platform Core"
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:$PATH"

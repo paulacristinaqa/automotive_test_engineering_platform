@@ -22,6 +22,8 @@ on:
 
 permissions:
   contents: read
+  packages: read
+  attestations: read
 
 jobs:
   validate-release:
@@ -41,6 +43,26 @@ jobs:
           python -c "import os; from tools.build_promotion_evidence import validate_image_digest, validate_source_sha; validate_image_digest(os.environ['IMAGE_DIGEST']); validate_source_sha(os.environ['SOURCE_SHA'])"
           git cat-file -e "${SOURCE_SHA}^{commit}"
           git merge-base --is-ancestor "$SOURCE_SHA" origin/main
+      - name: Authenticate to GHCR for provenance verification
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - name: Verify signed image provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE_DIGEST: ${{ inputs.image_digest }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          IMAGE_NAME: ghcr.io/paulacristinaqa/automotive_test_engineering_platform
+        run: |
+          gh attestation verify "oci://$IMAGE_NAME@$IMAGE_DIGEST" \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+            --source-digest "$SOURCE_SHA" \
+            --source-ref refs/heads/main \
+            --deny-self-hosted-runners
+      - name: Remove registry credentials
+        if: always()
+        run: docker logout ghcr.io
 
   development:
     needs: validate-release
