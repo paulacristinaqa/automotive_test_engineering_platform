@@ -36,6 +36,12 @@ version, SHA-256, size, locked-retention deadline, encryption mode, writer ident
 and timestamps, then emits a non-replacing `release-archive-export-receipt.json`. Provider policy
 provisioning and the adapter's live API evidence remain external deployment responsibilities.
 
+The initial AWS adapter performs the pre-upload restore, atomic conditional S3 write, explicit
+`COMPLIANCE` retention, exact KMS binding, versioned metadata verification, and complete streamed
+read-back. It requires an STS assumed-role identity in the expected archive account and does not
+accept long-lived IAM-user identity. The adapter is not enabled by a release workflow until the
+AWS foundation and destructive negative acceptance exercise are independently approved.
+
 ## Offline verification
 
 On a clean verification host, first compare every archived file with

@@ -301,6 +301,7 @@ companion project also passes 27 unit tests, Android lint, and debug APK assembl
 - [Release evidence lifecycle and revocation](docs/release-evidence-lifecycle.md)
 - [Immutable release archive provider contract](docs/release-archive-provider-contract.md)
 - [Release archive export gate](docs/release-archive-provider-contract.md#normalized-export-gate)
+- [AWS S3 Object Lock archive adapter](docs/aws-s3-object-lock-adapter.md)
 - [Engineering workbook — editable source](docs/workbook-volume-i.md)
 - [Engineering workbook — formatted document](docs/ATEP_Volume_I_Engineering_Workbook.docx)
 
