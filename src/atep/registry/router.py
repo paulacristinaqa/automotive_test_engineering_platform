@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Path, Query, Request, status
+from fastapi import APIRouter, Depends, Path, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atep.core.config import Settings, get_settings
@@ -36,6 +36,7 @@ from atep.registry.service import (
     summarize_module_health,
     update_module,
 )
+from atep.registry.workload_identity import ModuleAuthentication, module_authentication
 
 router = APIRouter(prefix="/modules", tags=["modules"])
 modules_read = require_permissions(PermissionName.MODULES_READ.value)
@@ -117,12 +118,13 @@ async def heartbeat_module_endpoint(
     command: ModuleHeartbeat,
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
-    module_token: Annotated[str, Header(alias="X-ATEP-Module-Token", min_length=32)],
+    authentication: Annotated[ModuleAuthentication, Depends(module_authentication)],
 ) -> ModuleResponse:
     module = await heartbeat_module(
         session,
         module_id=module_id,
-        token=module_token,
+        token=authentication.token,
+        spiffe_module_name=authentication.spiffe_module_name,
         command=command,
         correlation_id=request_correlation_id(request),
     )

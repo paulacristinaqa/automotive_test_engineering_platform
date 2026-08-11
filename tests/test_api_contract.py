@@ -128,6 +128,9 @@ def test_module_registry_contracts_and_safe_pagination_are_published() -> None:
         item["name"]: item for item in heartbeat["parameters"] if item["in"] == "header"
     }
     assert "X-ATEP-Module-Token" in heartbeat_headers
+    assert "X-Forwarded-Client-Cert" in heartbeat_headers
+    assert heartbeat_headers["X-ATEP-Module-Token"]["required"] is False
+    assert heartbeat_headers["X-Forwarded-Client-Cert"]["required"] is False
 
     parameters = {
         item["name"]: item["schema"] for item in paths["/api/v1/modules"]["get"]["parameters"]
@@ -151,7 +154,7 @@ def test_vehicle_gateway_contracts_and_safe_pagination_are_published() -> None:
         for item in telemetry_path["post"]["parameters"]
         if item["in"] == "header"
     }
-    assert {"X-ATEP-Module-ID", "X-ATEP-Module-Token"} <= set(headers)
+    assert {"X-ATEP-Module-ID", "X-ATEP-Module-Token", "X-Forwarded-Client-Cert"} <= set(headers)
     list_parameters = {
         item["name"]: item["schema"] for item in paths["/api/v1/vehicles"]["get"]["parameters"]
     }
@@ -173,7 +176,11 @@ def test_vehicle_command_delivery_contracts_are_published() -> None:
     ]
     for operation in (claim, acknowledgement):
         headers = {item["name"]: item for item in operation["parameters"] if item["in"] == "header"}
-        assert {"X-ATEP-Module-ID", "X-ATEP-Module-Token"} <= set(headers)
+        assert {
+            "X-ATEP-Module-ID",
+            "X-ATEP-Module-Token",
+            "X-Forwarded-Client-Cert",
+        } <= set(headers)
     command_parameters = {
         item["name"]: item["schema"] for item in command_path["get"]["parameters"]
     }

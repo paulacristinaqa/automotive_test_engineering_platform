@@ -51,7 +51,10 @@
 - Kubernetes manifests and vendor-neutral external secret-manager contract (implemented initial
   foundation/migration/workload slice; real release digest, provider binding, ingress/TLS, staged
   evidence, and multi-replica leadership remain hardening)
-- mTLS and workload identity
+- application-side SPIFFE/XFCC workload identity boundary (implemented initial slice: exact
+  module identity, trusted proxy CIDRs, fail-closed parsing, capability preservation, and token
+  migration path; proxy deployment, certificate lifecycle, direct-path denial, and live mTLS
+  evidence remain hardening)
 - backup, restore, retention, and disaster-recovery exercises
 - SLO threshold calibration, production incident-provider routing, load tests, artifact signing,
   provenance verification, and security-policy calibration

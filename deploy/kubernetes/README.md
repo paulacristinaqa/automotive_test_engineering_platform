@@ -79,6 +79,16 @@ The API Service is `ClusterIP`. An ingress controller namespace must carry the l
 `atep.dev/metrics-access=true`. Add TLS, authentication policy, approved hostnames, and rate-limit
 calibration in an environment overlay; do not expose the Service directly as a `NodePort`.
 
+## Workload identity overlay
+
+The common ConfigMap keeps workload identity disabled. Enable it only in an environment overlay
+after an approved mTLS proxy is deployed. Configure the environment's SPIFFE trust domain and the
+proxy's exact direct-peer CIDRs; never use a broad network merely to restore connectivity. The
+proxy must validate the client certificate, replace any caller-supplied XFCC with one validated
+`URI=` field, and be the only network path to the ATEP pod. See
+[`docs/workload-identity.md`](../../docs/workload-identity.md) for the contract, migration order,
+negative tests, and pending live-evidence gate.
+
 ## Verification and rollback
 
 Retain these items with the release evidence:

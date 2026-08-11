@@ -67,8 +67,8 @@ flowchart LR
    and `atep.vehicle.telemetry.received.v1` enqueueing share one database transaction.
 14. **Human and workload identities remain separate.** Catalogue and telemetry-query operations
    use JWT/RBAC. The unattended Vehicle Gateway uses a hash-only module credential and must
-   declare `vehicle.telemetry.publish`. OAuth2 workload tokens or mTLS may replace this development
-   mechanism without exposing infrastructure services to Android clients.
+   declare `vehicle.telemetry.publish`. The initial trusted-proxy SPIFFE boundary can replace the
+   development token after live mTLS evidence without exposing infrastructure services to Android clients.
 15. **Android delivery is store-before-send.** The CarSystemUI showcase records changed vehicle
    properties in a local persistent queue, preserves their identifiers and timestamps across
    retry, and exposes synchronized, pending, rejected, and disabled states in the UI.
@@ -164,6 +164,13 @@ flowchart LR
    a reviewed environment overlay supplies the same immutable application digest to migration and
    workloads. Restricted Pod Security, tokenless ServiceAccounts, bounded resources, explicit
    probes, persistent evidence storage, and default-deny networking form the initial runtime policy.
+31. **Forwarded workload identity has an explicit trust boundary.** ATEP accepts exactly one
+   `spiffe://<trust-domain>/atep/module/<module-name>` identity only from a configured direct-peer
+   proxy network. A presented XFCC value that is disabled, untrusted, malformed, ambiguous, or
+   mismatched fails closed and never downgrades to a valid shared token. The proxy owns certificate
+   verification and header replacement; ATEP owns canonical identity-to-registry matching and
+   capability authorization. The shared module token remains a migration path only when XFCC is
+   absent.
 
 ## Initial bounded contexts
 
@@ -217,6 +224,8 @@ contracts live under an explicit version and remain backward compatible during m
 - Module workload credentials are high entropy, stored only as SHA-256 digests, rotated by
   an authorized administrator, and used to renew bounded heartbeat leases. Operational
   status cannot be asserted through the administrative update API.
+- SPIFFE module identity is accepted only through a configured trusted mTLS proxy. XFCC input is
+  canonical, single-valued, fail-closed, and cannot grant capabilities absent from the registry.
 - Vehicle Gateway telemetry requires both a valid module credential and the
   `vehicle.telemetry.publish` capability. Replayed event IDs cannot create duplicate evidence.
 - Vehicle command claim and acknowledgement require the `vehicle.commands.consume` capability;
@@ -236,5 +245,5 @@ contracts live under an explicit version and remain backward compatible during m
   anonymous Grafana access is disposable-only; production requires network isolation, TLS,
   workload authentication, access audit, and retention controls.
 - Production follow-ups include proxy-aware client attribution, capacity tuning,
-  secret-manager integration, TLS/mTLS between workloads, artifact signing, and verifiable
+  secret-manager integration, live proxy/certificate lifecycle evidence, artifact signing, and verifiable
   build provenance.

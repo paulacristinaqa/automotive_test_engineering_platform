@@ -29,6 +29,21 @@ from atep.registry.schemas import (
 )
 
 
+def _valid_module_authentication(
+    module: PlatformModule,
+    *,
+    token: str | None,
+    spiffe_module_name: str | None,
+) -> bool:
+    if spiffe_module_name is not None:
+        return module.name == spiffe_module_name
+    return (
+        token is not None
+        and module.heartbeat_token_hash is not None
+        and verify_module_token(token, module.heartbeat_token_hash)
+    )
+
+
 async def summarize_module_health(
     session: AsyncSession,
     *,
@@ -123,13 +138,12 @@ async def authenticate_module(
     session: AsyncSession,
     *,
     module_id: UUID,
-    token: str,
+    token: str | None,
+    spiffe_module_name: str | None = None,
     required_capability: str | None = None,
 ) -> PlatformModule:
     module = await require_module(session, module_id)
-    if module.heartbeat_token_hash is None or not verify_module_token(
-        token, module.heartbeat_token_hash
-    ):
+    if not _valid_module_authentication(module, token=token, spiffe_module_name=spiffe_module_name):
         raise InvalidModuleCredentialError()
     if required_capability is not None and required_capability not in {
         item.name for item in module.capabilities
@@ -284,7 +298,8 @@ async def heartbeat_module(
     session: AsyncSession,
     *,
     module_id: UUID,
-    token: str,
+    token: str | None,
+    spiffe_module_name: str | None = None,
     command: ModuleHeartbeat,
     correlation_id: UUID | None,
     now: datetime | None = None,
@@ -295,9 +310,7 @@ async def heartbeat_module(
     module = result.scalar_one_or_none()
     if module is None:
         raise ResourceNotFoundError("module")
-    if module.heartbeat_token_hash is None or not verify_module_token(
-        token, module.heartbeat_token_hash
-    ):
+    if not _valid_module_authentication(module, token=token, spiffe_module_name=spiffe_module_name):
         raise InvalidModuleCredentialError()
 
     observed_at = now or datetime.now(UTC)
