@@ -148,7 +148,7 @@ def test_github_attestation_admission_is_exact_and_has_no_exempt_images() -> Non
         "enabled": True,
         "subjectRegExp": (
             "^https://github[.]com/paulacristinaqa/automotive_test_engineering_platform/"
-            "[.]github/workflows/release[.]yml@refs/heads/main$"
+            "[.]github/workflows/reusable-release-builder[.]yml@refs/heads/main$"
         ),
         "predicateType": "https://slsa.dev/provenance/v1",
         "images": [f"{APPROVED_IMAGE}**"],
@@ -160,8 +160,10 @@ def test_github_attestation_admission_is_exact_and_has_no_exempt_images() -> Non
         },
     }
 
-    release_workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
-    assert release_workflow.count("push-to-registry: true") == 2
+    builder_workflow = (ROOT / ".github" / "workflows" / "reusable-release-builder.yml").read_text(
+        encoding="utf-8"
+    )
+    assert builder_workflow.count("push-to-registry: true") == 2
 
 
 def test_workloads_apply_restricted_runtime_controls_and_external_secret_contract() -> None:

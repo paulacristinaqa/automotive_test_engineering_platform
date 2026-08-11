@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+import yaml  # type: ignore[import-untyped]
 
 from tools.build_promotion_evidence import IMAGE_REPOSITORY, ZERO_DIGEST
 from tools.build_release_evidence import (
@@ -20,6 +21,7 @@ PROVENANCE_URL = (
 SBOM_URL = (
     "https://github.com/paulacristinaqa/automotive_test_engineering_platform/attestations/456"
 )
+SIGNER_WORKFLOW = ".github/workflows/reusable-release-builder.yml"
 
 
 def test_buildx_metadata_requires_one_non_zero_sha256_digest(tmp_path: Path) -> None:
@@ -83,21 +85,50 @@ def test_release_evidence_binds_commit_image_and_attestations() -> None:
 
 
 def test_release_workflow_is_protected_immutable_and_least_privilege() -> None:
-    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    caller = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    builder = (ROOT / ".github" / "workflows" / "reusable-release-builder.yml").read_text(
+        encoding="utf-8"
+    )
+    caller_jobs = yaml.safe_load(caller)["jobs"]
+    builder_jobs = yaml.safe_load(builder)["jobs"]
 
-    assert "environment: release" in workflow
-    assert "ATEP_RELEASE_ENABLED: ${{ vars.ATEP_RELEASE_ENABLED }}" in workflow
-    assert 'test "$GITHUB_REF" = "refs/heads/main"' in workflow
-    assert "packages: write" in workflow
-    assert "id-token: write" in workflow
-    assert "attestations: write" in workflow
-    assert "contents: write" not in workflow
-    assert "sha-$GITHUB_SHA" in workflow
-    assert "refusing replacement" in workflow
-    assert "--provenance=false" in workflow
-    assert workflow.count("actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6") == 2
-    assert "push-to-registry: true" in workflow
-    assert "create-storage-record: false" in workflow
+    assert "environment: release" in caller
+    assert "ATEP_RELEASE_ENABLED: ${{ vars.ATEP_RELEASE_ENABLED }}" in caller
+    assert 'test "$GITHUB_REF" = "refs/heads/main"' in caller
+    assert "uses: ./.github/workflows/reusable-release-builder.yml" in caller
+    assert "needs: approve-release" in caller
+    assert "packages: write" in caller
+    assert "id-token: write" in caller
+    assert "attestations: write" in caller
+    assert "contents: write" not in caller
+    assert caller_jobs["approve-release"]["permissions"] == {"contents": "read"}
+    assert caller_jobs["publish-attested-image"]["permissions"] == {
+        "contents": "read",
+        "packages": "write",
+        "id-token": "write",
+        "attestations": "write",
+    }
+
+    assert "workflow_call:" in builder
+    assert "inputs:" not in builder
+    assert "secrets:" not in builder
+    assert "${{ job.workflow_ref }}" in builder
+    assert (
+        'test "$BUILDER_WORKFLOW_REF" = "$GITHUB_REPOSITORY/.github/workflows/'
+        'reusable-release-builder.yml@refs/heads/main"' in builder
+    )
+    assert 'test "$GITHUB_REF" = "refs/heads/main"' in builder
+    assert "packages: write" in builder
+    assert "id-token: write" in builder
+    assert "attestations: write" in builder
+    assert "contents: write" not in builder
+    assert builder_jobs["build-publish-attest"]["runs-on"] == "ubuntu-latest"
+    assert "sha-$GITHUB_SHA" in builder
+    assert "refusing replacement" in builder
+    assert "--provenance=false" in builder
+    assert builder.count("actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6") == 2
+    assert builder.count("push-to-registry: true") == 2
+    assert builder.count("create-storage-record: false") == 2
 
 
 def test_promotion_requires_exact_signed_provenance_before_development() -> None:
@@ -106,8 +137,26 @@ def test_promotion_requires_exact_signed_provenance_before_development() -> None
     assert "attestations: read" in workflow
     assert "packages: read" in workflow
     assert "gh attestation verify" in workflow
-    assert '--signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml"' in workflow
+    assert (
+        '--signer-workflow "$GITHUB_REPOSITORY/.github/workflows/'
+        'reusable-release-builder.yml"' in workflow
+    )
     assert '--source-digest "$SOURCE_SHA"' in workflow
     assert "--source-ref refs/heads/main" in workflow
     assert "--deny-self-hosted-runners" in workflow
     assert workflow.index("gh attestation verify") < workflow.index("environment: development")
+
+
+def test_promotion_and_admission_trust_the_reusable_attestation_signer() -> None:
+    promotion = (ROOT / ".github" / "workflows" / "promotion.yml").read_text(encoding="utf-8")
+    values = (
+        ROOT / "deploy" / "kubernetes" / "admission" / "github-attestation-policy-values.yaml"
+    ).read_text(encoding="utf-8")
+    builder = (ROOT / SIGNER_WORKFLOW).read_text(encoding="utf-8")
+
+    assert f"$GITHUB_REPOSITORY/{SIGNER_WORKFLOW}" in promotion
+    assert "workflows/reusable-release-builder[.]yml@refs/heads/main$" in values
+    assert "actions/attest@" in builder
+    assert "actions/attest@" not in (ROOT / ".github" / "workflows" / "release.yml").read_text(
+        encoding="utf-8"
+    )

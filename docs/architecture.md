@@ -189,7 +189,7 @@ flowchart LR
 34. **Cryptographic provenance is enforced by an independently deployed policy controller.** The
    `atep` namespace opts into the official GitHub/Sigstore admission path. Its committed values
    accept only SLSA v1 provenance whose GitHub Actions certificate subject identifies this
-   repository's `release.yml` on `refs/heads/main`, and whose image matches the exact ATEP GHCR
+   repository's input-free `reusable-release-builder.yml` on `refs/heads/main`, and whose image matches the exact ATEP GHCR
    repository. No image exemption exists. The controller complements the native repository/digest
    policy and pre-promotion `gh` verification; chart installation, resolved digests, trust-root
    status, positive admission, and negative denial evidence remain operator-controlled cluster
