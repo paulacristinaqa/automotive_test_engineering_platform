@@ -1,7 +1,9 @@
+import re
 from functools import lru_cache
+from ipaddress import ip_network
 from pathlib import Path
 
-from pydantic import EmailStr, Field, SecretStr
+from pydantic import EmailStr, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -28,6 +30,9 @@ class Settings(BaseSettings):
     module_reconciliation_interval_seconds: int = Field(default=15, ge=1, le=300)
     module_availability_slo_target: float = Field(default=0.99, gt=0.0, le=1.0)
     module_lease_warning_seconds: int = Field(default=30, ge=1, le=3600)
+    workload_identity_enabled: bool = False
+    workload_identity_trust_domain: str = "atep.local"
+    workload_identity_trusted_proxy_cidrs: str = ""
     test_scheduler_enabled: bool = True
     test_scheduler_interval_seconds: int = Field(default=5, ge=1, le=300)
     test_scheduler_batch_size: int = Field(default=20, ge=1, le=200)
@@ -42,6 +47,23 @@ class Settings(BaseSettings):
     outbox_retry_seconds: int = Field(default=1, ge=1, le=60)
     bootstrap_admin_email: EmailStr | None = None
     bootstrap_admin_password: SecretStr | None = None
+
+    @field_validator("workload_identity_trust_domain")
+    @classmethod
+    def validate_workload_identity_trust_domain(cls, value: str) -> str:
+        normalized = value.strip().casefold()
+        if not re.fullmatch(r"[a-z0-9._-]{1,255}", normalized):
+            raise ValueError("workload identity trust domain is invalid")
+        return normalized
+
+    @field_validator("workload_identity_trusted_proxy_cidrs")
+    @classmethod
+    def validate_workload_identity_trusted_proxy_cidrs(cls, value: str) -> str:
+        networks = [item.strip() for item in value.split(",") if item.strip()]
+        normalized: list[str] = []
+        for network in networks:
+            normalized.append(str(ip_network(network, strict=False)))
+        return ",".join(normalized)
 
 
 @lru_cache

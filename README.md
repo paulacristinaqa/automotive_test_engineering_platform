@@ -21,6 +21,8 @@ tests, a disposable integration environment, and an English engineering workbook
 > idempotent telemetry and command delivery for the Vehicle Gateway. Persistent test runs now
 > publish authenticated live WebSocket updates to CarSystemUI, which continues to isolate
 > simulated and AAOS/CarPropertyManager observations behind an explicit property-source boundary.
+> The initial SPIFFE/XFCC workload-identity boundary now supports trusted mTLS proxies without
+> weakening registry capability checks or the existing token migration path.
 
 ## Why this project exists
 
@@ -49,6 +51,7 @@ An intended end-to-end scenario is:
 - transactional outbox and asynchronous RabbitMQ publication;
 - persistent module and versioned capability catalogue;
 - raw-once, hash-only module workload credentials;
+- exact SPIFFE module identity from configured trusted mTLS proxies, disabled by default;
 - authenticated module heartbeats with bounded availability leases;
 - automatic reconciliation of expired modules to `inactive`;
 - permission-protected aggregate module health with configurable availability objective;
@@ -81,7 +84,7 @@ flowchart LR
     Client["Dashboard / automation clients"] --> API["FastAPI Core API"]
     Cockpit["CarSystemUI / Android Automotive"] -->|"REST + authenticated WebSocket"| API
     Cockpit --> CarAPI["CarPropertyManager / VHAL"]
-    Module["ATEP runtime modules"] -->|"Authenticated heartbeat"| API
+    Module["ATEP runtime modules"] -->|"Token or trusted-proxy SPIFFE identity"| API
     API --> Identity["Identity and RBAC"]
     API --> Registry["Module registry"]
     API --> Vehicles["Vehicle catalogue + telemetry"]
@@ -186,6 +189,9 @@ migration Job, and application workloads into three Kustomize targets. It intent
 no Secret manifest and uses an invalid all-zero image digest until an approved release overlay
 supplies the real immutable digest. See the [Kubernetes deployment runbook](deploy/kubernetes/README.md)
 for the external secret contract, render checks, controlled rollout, evidence, and rollback rules.
+The common base leaves workload identity disabled; an environment overlay may enable the
+[SPIFFE/XFCC trust boundary](docs/workload-identity.md) only after proxy mTLS, header replacement,
+direct-path denial, and exact proxy CIDRs are configured.
 
 ## Local Python development
 
@@ -211,8 +217,8 @@ source .venv/bin/activate
 | Roles | `/api/v1/roles` and permission operations | `roles:manage` |
 | Audit | `/api/v1/audit-records` and `/export` | `audit:read`, `audit:export` |
 | Registry | `/api/v1/modules` and capability operations | `modules:read`, `modules:manage` |
-| Workload identity | module credential issuance and rotation | `modules:manage` |
-| Heartbeat | `POST /api/v1/modules/{id}/heartbeat` | `X-ATEP-Module-Token` |
+| Workload identity | module credential issuance/rotation and trusted-proxy SPIFFE authentication | `modules:manage` for administration |
+| Heartbeat | `POST /api/v1/modules/{id}/heartbeat` | token, or trusted XFCC SPIFFE identity |
 | Module health | `GET /api/v1/modules/health-summary` | `modules:read` |
 | Vehicles | `/api/v1/vehicles` and status operations | `vehicles:read`, `vehicles:manage` |
 | Telemetry ingest | `POST /api/v1/vehicles/{vehicle_id}/telemetry` | Gateway module identity + `vehicle.telemetry.publish` capability |
@@ -266,7 +272,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\run_integration_test
 
 The runner creates ephemeral credentials, uses isolated ports, applies every migration, and
 removes its containers, network, and volumes after execution. The latest local evidence records
-**103 fast tests plus one expanded Docker integration scenario** passing. The CarSystemUI
+**115 fast tests plus one expanded Docker integration scenario** passing. The CarSystemUI
 companion project also passes 27 unit tests, Android lint, and debug APK assembly for this slice.
 
 ## Engineering documentation
@@ -277,6 +283,7 @@ companion project also passes 27 unit tests, Android lint, and debug APK assembl
 - [Audit retention baseline](docs/audit-retention-policy.md)
 - [Observability baseline and runbook](docs/observability.md)
 - [Software supply-chain security](docs/software-supply-chain-security.md)
+- [Workload identity and mTLS trust boundary](docs/workload-identity.md)
 - [Engineering workbook — editable source](docs/workbook-volume-i.md)
 - [Engineering workbook — formatted document](docs/ATEP_Volume_I_Engineering_Workbook.docx)
 
@@ -321,8 +328,8 @@ hardening; local dependency/storage signals and Alertmanager delivery are implem
 
 ATEP is currently a development and portfolio platform, not a production vehicle-control system.
 Do not reuse example infrastructure credentials outside an isolated local environment. Production
-deployment still requires managed secrets, TLS/mTLS or managed workload identity, trusted-proxy
-configuration, backup/restore evidence, artifact signing and provenance verification, production
+deployment still requires managed secrets, a deployed mTLS proxy and certificate lifecycle,
+trusted-network enforcement, backup/restore evidence, artifact signing and provenance verification, production
 monitoring, and reviewed operational policies. The repository already enforces a development
 supply-chain baseline with deterministic dependency locks, immutable build inputs, SBOMs, secret
 scanning, dependency auditing, CodeQL, and high/critical container-vulnerability gates.

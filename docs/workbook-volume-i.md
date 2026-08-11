@@ -2,11 +2,11 @@
 
 **Subtitle:** Architecture, implementation record, verification strategy, and engineering evidence  
 **Project:** Automotive Test Engineering Platform (ATEP)  
-**Document version:** 0.28.0
+**Document version:** 0.29.0
 
-**Baseline date:** 4 August 2026
+**Baseline date:** 11 August 2026
 
-**Status:** Living engineering document — software supply-chain security baseline implemented
+**Status:** Living engineering document — initial SPIFFE workload-identity boundary implemented
 **Language:** English
 
 ## Document Purpose
@@ -62,6 +62,7 @@ The document distinguishes three types of statements:
 | 0.26.0 | 5 August 2026 | Added hash-locked runtime/development dependencies, digest/SHA-pinned build inputs, weekly update automation, history/secret scanning, Python dependency and CodeQL analysis, CycloneDX SBOMs, and a high/critical image vulnerability gate | 97 fast Python tests, Ruff, strict mypy, and lock-policy tests passed locally; deterministic lock regeneration, dependency audit, image scan, and CodeQL are enforced by remote CI |
 | 0.27.0 | 5 August 2026 | Migrated the runtime to official digest-pinned Python 3.14.6/Alpine 3.24 and governed three exact CPython scanner exceptions with owner, review date, expiry, and policy-as-code verification | 98 fast Python tests, Ruff, strict mypy, and four supply-chain policy tests; every other high/critical image finding remains blocking |
 | 0.28.0 | 5 August 2026 | Added phased Kubernetes/Kustomize targets for foundation, migration, and workloads; a vendor-neutral external Secret contract; Restricted pod controls; default-deny networking; probes, storage, and resource bounds; and fail-closed image substitution | 103 fast Python tests, five Kubernetes policy tests, three successful local Kustomize renders, Ruff, strict mypy, and remote render enforcement |
+| 0.29.0 | 11 August 2026 | Added an application-side SPIFFE/XFCC workload-identity boundary with exact module IDs, trusted direct-peer CIDRs, fail-closed ambiguity handling, capability preservation, and a controlled token migration path | 115 fast Python tests passed locally; Ruff and strict mypy passed; live proxy mTLS and certificate-lifecycle evidence remain pending |
 
 ## How to Use This Workbook
 
@@ -91,6 +92,8 @@ The rate-limiting slice turns Redis from a readiness-only dependency into an act
 The first Increment 3 slice establishes an authoritative catalogue for the modules delivered by later ATEP volumes. Administrators can register, inspect, page, filter, and update modules, while separately declaring or removing semantic-versioned capabilities such as `can.frames.publish`. Canonical names and uniqueness constraints keep discovery deterministic. Independent `modules:read` and `modules:manage` permissions enforce least privilege, and every effective catalogue mutation appends correlated audit evidence and a versioned outbox event in the same transaction.
 
 The operational-registry hardening slice separates human administration from workload identity. An administrator issues or rotates a high-entropy module credential whose raw value is returned once and whose SHA-256 digest is the only persisted form. The authenticated module reports `active` or `degraded` and renews a bounded 5–3,600-second lease through heartbeat. A background reconciler marks expired modules `inactive`, appends system audit evidence, and enqueues an availability event. Routine heartbeats deliberately create neither audit records nor events unless status or version changes, preventing high-volume evidence noise.
+
+The initial production-identity slice lets an approved mTLS proxy forward one canonical SPIFFE ID for registered modules. ATEP trusts XFCC only from configured direct-peer networks, accepts only `spiffe://<trust-domain>/atep/module/<module-name>`, and applies the same capability authorization used by the shared-token path. A presented invalid or mismatched identity fails without token downgrade. The feature is disabled by default; proxy deployment, certificate issuance/rotation/revocation, direct-path denial, and live mTLS evidence remain explicit production-hardening work.
 
 The initial automotive-integration slice connects the Volume I control plane to the separately deployed CarSystemUI Android Automotive project. ATEP and CarSystemUI are treated as one coordinated testing platform for electric, hybrid, and autonomous vehicles while preserving independent repositories and release histories. Administrators manage canonical vehicle records with JWT/RBAC. An unattended Vehicle Gateway authenticates with a hash-only module credential, declares `vehicle.telemetry.publish`, and sends timezone-aware observations only through the public API. Each client event ID is idempotent: an exact retry returns the original receipt, while reuse for different data returns a stable conflict. The observation and `atep.vehicle.telemetry.received.v1` outbox event are committed atomically.
 
@@ -140,7 +143,8 @@ The initial design deliberately starts as a modular monolith rather than a colle
 | Container environment | Implemented and locally executed | One-shot migration, API, worker, PostgreSQL, Redis, and RabbitMQ services verified with Docker Compose |
 | Software supply-chain security | Implemented baseline | Hash locks, immutable build inputs, Gitleaks, pip-audit, CodeQL, CycloneDX SBOMs, Grype image gate, and Dependabot |
 | Kubernetes deployment | Implemented initial hardening slice | Independently renderable foundation/migration/workload targets, external Secret contract, Restricted controls, default deny, probes, resource bounds, and fail-closed digest placeholder |
-| Automated verification | Implemented | 103 fast tests plus expanded disposable black-box and live alert-delivery scenarios, 27 Android tests, Ruff, strict mypy, Android lint/build, Kustomize rendering, and integration/security CI workflows |
+| SPIFFE workload identity | Implemented initial application slice | Exact trusted-proxy XFCC identity, no downgrade, registry match, capability preservation, and token migration; live mTLS proxy evidence pending |
+| Automated verification | Implemented | 115 fast tests plus expanded disposable black-box and live alert-delivery scenarios, 27 Android tests, Ruff, strict mypy, Android lint/build, Kustomize rendering, and integration/security CI workflows |
 
 ## 2. Scope and Boundaries
 
@@ -164,8 +168,8 @@ The initial design deliberately starts as a modular monolith rather than a colle
 - automated immutable audit archival, restore verification, legal-hold workflow, and disposition tooling;
 - proxy-aware client attribution and production rate-limit tuning;
 - production trace retention, authenticated telemetry transport, calibrated alert routing, and additional domain-specific metrics;
-- live Kubernetes provider binding, ingress/TLS, immutable release digest, workload identity, and rollout evidence;
-- secret-manager integration and service-to-service mTLS;
+- live Kubernetes provider binding, ingress/TLS, immutable release digest, validating workload-identity proxy, and rollout evidence;
+- secret-manager integration, certificate lifecycle, direct-path denial, and live service-to-service mTLS evidence;
 - vehicle, ECU, CAN, diagnostics, test execution, AI, and dashboard domain behavior.
 
 These items remain within the broader ATEP roadmap, but they must not be represented as implemented until code and evidence exist.
@@ -304,7 +308,7 @@ External dashboards, test automation clients, and future ATEP modules call the C
 
 **Rationale.** Human JWTs are inappropriate for unattended workloads, manual status declarations become stale, and emitting evidence for every heartbeat would create noise and unnecessary storage. Hash-only storage reduces disclosure impact, bounded leases turn silence into an observable state transition, and row locking permits safe concurrent reconciliation.
 
-**Consequences.** Credential distribution must be protected because possession authorizes heartbeat. Production hardening should replace or reinforce the shared secret with mTLS or managed workload identity, add lease/reconciliation metrics, and define multi-replica scheduling ownership. Instance-level registration remains necessary when one logical module has independently routable replicas.
+**Consequences.** Credential distribution must be protected because possession authorizes heartbeat. ADR-023 now defines the initial application-side mTLS identity boundary; proxy deployment and certificate-lifecycle evidence remain production work. Lease/reconciliation metrics and explicit multi-replica scheduling ownership are still required. Instance-level registration remains necessary when one logical module has independently routable replicas.
 
 ### ADR-012 — Separate Control-Plane and In-Vehicle Communication Boundaries
 
@@ -312,7 +316,7 @@ External dashboards, test automation clients, and future ATEP modules call the C
 
 **Rationale.** Android UI concerns, AOSP build cadence, and VHAL permissions differ fundamentally from control-plane persistence and orchestration. A stable public contract permits simulated, emulated, and physical vehicle sources without coupling Android code to backend infrastructure. It also creates a reusable testing boundary for electric, hybrid, and autonomous-vehicle scenarios.
 
-**Consequences.** The current shared module secret and injected development operator token must be protected on the Android side; managed OAuth2 workload tokens or mTLS remain production follow-ups. REST telemetry, command delivery, offline buffering, CarPropertyManager integration, and authenticated WebSocket test-run updates now establish the baseline. Durable command-acknowledgement buffering remains a subsequent slice.
+**Consequences.** The shared module secret and injected development operator token must be protected on the Android side until migration completes. The initial SPIFFE/XFCC boundary is implemented, while proxy and certificate lifecycle remain production follow-ups. REST telemetry, command delivery, offline buffering, CarPropertyManager integration, and authenticated WebSocket test-run updates now establish the baseline. Durable command-acknowledgement buffering remains a subsequent slice.
 
 ### ADR-013 — Leased and Allowlisted Vehicle Commands
 
@@ -394,6 +398,14 @@ External dashboards, test automation clients, and future ATEP modules call the C
 
 **Consequences.** The initial rollout accepts brief API unavailability during replacement and cannot scale horizontally. A policy-capable CNI, external dependencies, approved secret provider, release overlay, ingress/TLS, shared object storage, and operator evidence are required. Database rollback remains a separately reviewed recovery action; it is never automated by workload rollback.
 
+### ADR-023 — Accept SPIFFE Identity Only across a Trusted mTLS Proxy Boundary
+
+**Decision.** Accept exactly one `spiffe://<trust-domain>/atep/module/<module-name>` identity from XFCC only when workload identity is enabled and the direct peer is in a configured trusted-proxy CIDR. Reject ambiguous, encoded, non-canonical, untrusted, disabled, or mismatched identity without falling back to a supplied module token. Continue registry capability authorization after identity matching. Keep the token path only when XFCC is absent.
+
+**Rationale.** A certificate-validating proxy can terminate and standardize mTLS without coupling FastAPI to a specific service-mesh implementation. Exact namespace and peer validation limits header spoofing, while no-downgrade behavior prevents an attacker from hiding a bad certificate identity behind a valid shared secret.
+
+**Consequences.** ATEP does not itself prove certificate validity: production must configure proxy certificate validation, XFCC replacement, direct-path denial, separate environment trust domains, certificate lifecycle, and live rotation/revocation evidence. The feature remains disabled in the common base until those controls exist.
+
 ## 5. Technology Stack and Rationale
 
 | Technology | Role | Why it was selected | Engineering consideration |
@@ -460,6 +472,9 @@ External dashboards, test automation clients, and future ATEP modules call the C
 | `ATEP_AUTH_RATE_LIMIT_WINDOW_SECONDS` | No | `60` | Authentication counter lifetime |
 | `ATEP_API_RATE_LIMIT_REQUESTS` | No | `300` | Requests per versioned-API credential or network client in one window |
 | `ATEP_API_RATE_LIMIT_WINDOW_SECONDS` | No | `60` | Versioned-API counter lifetime |
+| `ATEP_WORKLOAD_IDENTITY_ENABLED` | No | `false` | Enable SPIFFE identity received from an approved mTLS proxy |
+| `ATEP_WORKLOAD_IDENTITY_TRUST_DOMAIN` | No | `atep.local` | Exact environment trust domain |
+| `ATEP_WORKLOAD_IDENTITY_TRUSTED_PROXY_CIDRS` | No | Empty | Comma-separated direct-peer IPv4/IPv6 networks allowed to supply XFCC |
 | `ATEP_BOOTSTRAP_ADMIN_EMAIL` | No | Empty | Explicit first-administrator email |
 | `ATEP_BOOTSTRAP_ADMIN_PASSWORD` | No | Empty | Explicit first-administrator password |
 
@@ -754,6 +769,7 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | CORE-F-076 | Kubernetes foundation, migration, and workload targets shall render independently so migration completes before application rollout. | `deploy/kubernetes/` phased Kustomize targets | K8S-001, K8S-005 |
 | CORE-F-077 | Kubernetes workloads shall consume non-sensitive configuration from a ConfigMap and credentials only from an externally materialized named Secret. | ConfigMap plus `atep-runtime-secrets` contract; no Secret manifest | K8S-002, K8S-003 |
 | CORE-F-078 | The Kubernetes API and outbox worker shall expose bounded probes and use explicit resource, storage, identity, and network controls. | Deployment, PVC, Service, and NetworkPolicy manifests | K8S-002 through K8S-004 |
+| CORE-F-079 | A registered module shall authenticate protected workload operations with one canonical SPIFFE ID forwarded by an approved mTLS proxy while capability authorization remains enforced. | Workload identity parser/dependency and module authentication | WID-001 through WID-009 |
 
 ### 8.2 Non-Functional Requirements
 
@@ -806,6 +822,8 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | CORE-NF-047 | Deployment immutability | Migration and workloads use one reviewed manifest digest; the committed zero digest prevents accidental deployment | K8S-001, K8S-005 |
 | CORE-NF-048 | Deployment ordering | A bounded migration Job completes before singleton workloads; database downgrade is never automatic | K8S-003, K8S-005 |
 | CORE-NF-049 | Kubernetes network isolation | Default-deny plus explicit DNS, dependency-port, approved API-client, and approved metrics-client access on a policy-capable CNI | K8S-002, K8S-004 |
+| CORE-NF-050 | Forwarded identity integrity | XFCC is trusted only from configured direct peers, contains exactly one canonical SPIFFE module URI, and fails without token downgrade when invalid | WID-002 through WID-006 |
+| CORE-NF-051 | Workload-identity migration safety | Disabled by default; token migration works only without XFCC; production requires proxy sanitization, mTLS validation, and direct-path denial | WID-007, WID-009 |
 
 ### 8.3 Definition of Done for an Increment
 
@@ -827,7 +845,7 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | Check | Result | Evidence summary |
 |---|---|---|
 | Python syntax compilation | Passed | Application, tests, and migrations compiled successfully |
-| Unit and API contract suite | Passed | 50 tests passed |
+| Unit and API contract suite | Passed | 115 tests passed locally; one Docker-marked scenario deselected |
 | Ruff lint | Passed | No findings after corrections |
 | mypy strict analysis | Passed | Strict analysis passed for application and test modules |
 | Alembic migration chain | Passed | Revisions `0001` through `0009` applied successfully to a clean PostgreSQL database in the disposable Docker topology |
@@ -859,6 +877,7 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | Live Android vehicle-command scenario `CT-SHOW-010` | Passed | A headless Android Automotive API 35 emulator connected to an isolated ATEP stack. Exact retry remained idempotent, changed retry returned `vehicle_command_conflict`, valid values succeeded, out-of-range and unsafe values were rejected, a capability-less module received HTTP 403, an expired lease recovered on attempt two, and explicit AAOS mode returned `read_only_vehicle_source`. The run retained 25 telemetry observations, seven requested events, eight claimed events, seven completed events, and hash-only claim-token evidence. |
 | Android lint | Passed with warnings | `lintDebug` completed with zero errors and 14 non-blocking warnings covering the AAOS reflection bridge, KTX suggestions, dependency updates, target level, backup rules, and application icon |
 | GitHub Actions workflow | Defined, not remotely executed | Fast gates and disposable integration execution are configured for pull requests and `main` pushes |
+| SPIFFE/XFCC focused verification | Passed locally | Exact identity, ambiguity rejection, trusted-peer enforcement, disabled mode, token migration, no downgrade, capability preservation, and OpenAPI headers passed; live proxy mTLS remains pending |
 
 ### 9.2 Existing Automated Tests
 
@@ -1239,6 +1258,20 @@ The fast local suite and repeated remote disposable CI runs prove clean-database
 | K8S-004 | Inspect API/worker probes, internal Service, and artifact storage. | Liveness remains process-only; readiness checks dependencies; worker process evidence uses its metrics socket; API is ClusterIP; artifacts mount the named PVC. | Automated policy test / P0 |
 | K8S-005 | Execute a staged rollout with approved digest and external Secret, retain migration evidence, and exercise rollback. | Zero digest cannot deploy; migration completes before workloads; smoke probes pass; previous workload digest can be restored without automatic database downgrade. | Manifest/runbook implemented; live cluster exercise planned / P0 |
 
+### 11.14 Workload Identity and mTLS Boundary
+
+| ID | Test and objective | Expected result | Status / priority |
+|---|---|---|---|
+| WID-001 | Present one canonical module SPIFFE ID from a trusted direct peer. | The registered module authenticates and the protected operation continues. | Implemented unit evidence / P0 |
+| WID-002 | Change the trust domain or module path. | Stable `invalid_module_credential`; no operation occurs. | Implemented unit evidence / P0 |
+| WID-003 | Present multiple XFCC elements or URI fields, percent encoding, query, fragment, non-ASCII, or alternate syntax. | Every ambiguous or non-canonical identity is rejected. | Implemented parameterized evidence / P0 |
+| WID-004 | Present XFCC from a peer outside trusted CIDRs. | Identity is rejected before registry authentication. | Implemented unit evidence / P0 |
+| WID-005 | Present XFCC while the feature is disabled. | Identity is rejected; disabled mode does not trust the header. | Implemented unit evidence / P0 |
+| WID-006 | Present a mismatched SPIFFE ID together with a valid legacy token. | Request is rejected without credential downgrade. | Implemented unit evidence / P0 |
+| WID-007 | Omit XFCC and present the existing valid module token. | Token migration path remains functional. | Implemented unit/regression evidence / P0 |
+| WID-008 | Authenticate a module identity lacking the required capability. | HTTP/domain authorization remains denied with the stable capability error. | Implemented unit evidence / P0 |
+| WID-009 | Exercise real proxy mTLS, XFCC replacement, certificate rotation/revocation, and direct-path denial. | Only a currently trusted certificate reaches ATEP with one sanitized identity. | Planned deployment evidence / P0 |
+
 ## 12. Suggested CI/CD Quality Pipeline
 
 1. **Source checks:** secret scan, license policy, dependency lock review.
@@ -1284,11 +1317,12 @@ Pipeline artifacts should include test reports, coverage, OpenAPI schema, migrat
 | R-009 | Bounded dependency and storage telemetry exists, but database-pool saturation, Redis/RabbitMQ provider internals, durable quota/retention signals, and asynchronous trace links remain incomplete. | Some saturation, capacity-policy, or cross-process failures may still require provider consoles and log-centric investigation. | Add provider exporters/pool metrics and OpenTelemetry links with load, outage, and cardinality evidence. | Medium |
 | R-010 | No formal backup/restore evidence. | Data recovery capability is unknown. | Define RPO/RTO, automated backups, restore drills, and evidence retention. | High |
 | R-011 | Rate limiting uses fixed windows and the direct network peer when no bearer credential is present. | Bursts near a window boundary may temporarily exceed the nominal rate; a shared reverse-proxy address may group unrelated clients. | Calibrate thresholds with load tests and implement a reviewed trusted-proxy attribution policy before public deployment. | High |
-| R-012 | Shared-secret workload authentication and application-process reconciliation are implemented, but mTLS, per-instance identity, and multi-replica scheduler ownership are not. | Credential theft could permit module impersonation, and operational behavior under multiple independently scheduled API replicas is not yet evidenced. | Add secret-manager delivery, mTLS or managed workload identity, instance leases, reconciliation metrics, and explicit leader/scheduler ownership before dynamic routing. | Medium |
+| R-012 | Shared-secret workload authentication, an application-side SPIFFE boundary, and reconciliation are implemented, but per-instance identity and multi-replica scheduler ownership are not. | A retained token can still be stolen during migration, and behavior under independently scheduled API replicas is not yet evidenced. | Complete token retirement after live mTLS evidence, add instance leases and reconciliation metrics, and define explicit leader/scheduler ownership before dynamic routing. | Medium |
 | R-013 | The development artifact adapter uses node-local filesystem storage and external object creation cannot share the PostgreSQL transaction. | Multiple replicas may not see the same content; a process crash between object promotion and metadata commit can leave an orphan; unscanned evidence can carry unsafe content. | Use shared encrypted S3-compatible storage in deployed environments; add orphan reconciliation, malware scanning, retention/legal-hold policy, quotas, signed internal retrieval, and lifecycle metrics. | High |
 | R-014 | Local Alertmanager routing exists, but Grafana remains anonymous, trace output is debug-only, management endpoints lack application authentication, and no production incident provider/owner is configured. | Deploying local defaults publicly could disclose operations; traces are non-durable; local webhook evidence cannot page an accountable responder. | Keep loopback/network isolation, disable anonymous access, require TLS/workload authentication, add durable traces and managed provider routing, validate escalation, delivery, cardinality, overhead, and thresholds before production. | High |
 | R-015 | Three Grype CPE findings affect the Python 3.14.6 binary and no stable fixed CPython release is available; their exact exceptions expire on 5 September 2026. | An unresolved upstream vulnerability may remain reachable before a stable update is released. | Match only the exact CVE/package/version/type, review updates weekly, remove each exception immediately when fixed, and permit no broader suppression. | High |
 | R-016 | Kubernetes manifests are rendered and policy-tested but have not been exercised against a live cluster or bound to a real image digest, secret provider, CNI, ingress, TLS policy, or shared object store. | Provider behavior, rollout timing, network reachability, storage permissions, and recovery may differ from static evidence. | Execute a staged cluster exercise with approved overlays, retain migration/smoke/rollback evidence, and resolve singleton leadership before horizontal scaling. | High |
+| R-017 | ATEP validates forwarded SPIFFE identity, but the repository does not yet deploy the certificate authority, certificate lifecycle, or validating proxy. | Misconfigured XFCC forwarding or a direct application path could permit identity spoofing despite correct application parsing. | Require proxy-side certificate validation and XFCC replacement, exact CIDRs, network-policy direct-path denial, separated trust domains, rotation/revocation drills, and retained live evidence before enablement. | High |
 
 ## 15. Roadmap and Increment Plan
 
@@ -1329,7 +1363,7 @@ Pipeline artifacts should include test reports, coverage, OpenAPI schema, migrat
 - phased Kubernetes manifests and a vendor-neutral external Secret contract — implemented initial
   baseline; approved digest overlays, provider binding, ingress/TLS, live evidence, shared storage,
   and multi-replica leadership remain;
-- workload identity and mTLS;
+- validating mTLS proxy, certificate lifecycle, direct-path denial, and live identity evidence;
 - backup, restore, retention, and disaster-recovery exercises;
 - performance, resilience, and security-policy calibration;
 - signed artifacts, verifiable provenance, long-term release evidence, and controlled promotion across environments.
@@ -1471,6 +1505,7 @@ Application rollback is safe only when the previous version is compatible with t
 | Continuous integration workflows | `.github/workflows/integration.yml` and `.github/workflows/security.yml` |
 | Supply-chain controls and evidence | `requirements.lock`, `requirements-dev.lock`, `Dockerfile`, `.grype.yaml`, `.github/dependabot.yml`, `.github/workflows/security.yml`, `docs/software-supply-chain-security.md`, and `tests/test_supply_chain_security.py` |
 | Kubernetes deployment baseline | `deploy/kubernetes/`, `deploy/kubernetes/README.md`, and `tests/test_kubernetes_manifests.py` |
+| SPIFFE/XFCC workload identity | `src/atep/registry/workload_identity.py`, `tests/test_workload_identity.py`, `docs/workload-identity.md`, configuration examples, and OpenAPI contract tests |
 | Automated tests | `tests/test_security.py`, `test_identity.py`, `test_user_administration.py`, `test_role_catalogue.py`, `test_audit_query.py`, `test_rate_limit.py`, `test_module_registry.py`, `test_module_health.py`, `test_vehicle_telemetry.py`, `test_vehicle_commands.py`, `test_test_runs.py`, `test_test_jobs.py`, `test_artifacts.py`, `test_observability.py`, `test_domain_observability.py`, `test_dependency_storage_observability.py`, `test_alert_delivery.py`, `test_observability_assets.py`, `test_supply_chain_security.py`, `test_kubernetes_manifests.py`, and `test_api_contract.py` |
 | Architecture summary | `docs/architecture.md` |
 | Requirements baseline | `docs/requirements-volume-i.md` |

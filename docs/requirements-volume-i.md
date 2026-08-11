@@ -82,6 +82,7 @@
 | CORE-F-076 | The repository shall provide separately renderable Kubernetes foundation, migration, and workload targets so schema migration is explicitly completed before application rollout. | Kustomize render and policy tests |
 | CORE-F-077 | Kubernetes workloads shall consume non-sensitive configuration from a ConfigMap and credentials only from a named Secret materialized by an approved external secret provider. | Manifest policy and secret-contract review |
 | CORE-F-078 | The Kubernetes API and outbox worker shall expose bounded liveness/readiness evidence and run with explicit resource, storage, identity, and network controls. | Manifest policy, render, and staged smoke tests |
+| CORE-F-079 | A registered module shall authenticate heartbeat, telemetry, and command operations with one canonical SPIFFE ID forwarded by an approved mTLS proxy while existing capability authorization remains enforced. | Parser, authentication, capability, API-contract, and future live proxy tests |
 
 ## Non-functional requirements
 
@@ -136,3 +137,5 @@
 | CORE-NF-047 | Deployment immutability | migration and workload overlays use the same reviewed application manifest digest; the committed zero digest prevents accidental deployment before release substitution |
 | CORE-NF-048 | Deployment ordering | the bounded migration Job completes and its evidence is retained before singleton API and worker workloads are applied; database downgrade is never automatic |
 | CORE-NF-049 | Kubernetes network isolation | default-deny ingress/egress is combined with explicit DNS, dependency-port, API-client, and metrics-client allowances on a policy-capable CNI |
+| CORE-NF-050 | Forwarded identity integrity | XFCC is accepted only from configured direct-peer CIDRs, must contain exactly one canonical SPIFFE module URI, and any presented invalid identity fails without token downgrade |
+| CORE-NF-051 | Workload-identity migration safety | Trusted-proxy identity is disabled by default; the legacy hash-only token remains valid only when XFCC is absent, and production enablement requires proxy sanitization, mTLS validation, and direct-path denial |

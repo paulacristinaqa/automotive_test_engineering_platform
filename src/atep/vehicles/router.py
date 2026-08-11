@@ -10,6 +10,7 @@ from atep.identity.models import User
 from atep.identity.permissions import PermissionName
 from atep.identity.users_router import request_correlation_id
 from atep.registry.service import authenticate_module
+from atep.registry.workload_identity import ModuleAuthentication, module_authentication
 from atep.vehicles.models import Vehicle, VehicleCommand, VehicleTelemetryEvent
 from atep.vehicles.schemas import (
     PROPERTY_NAME_PATTERN,
@@ -183,13 +184,14 @@ async def ingest_telemetry_endpoint(
     response: Response,
     session: Annotated[AsyncSession, Depends(get_session)],
     module_id: Annotated[UUID, Header(alias="X-ATEP-Module-ID")],
-    module_token: Annotated[str, Header(alias="X-ATEP-Module-Token", min_length=32)],
+    authentication: Annotated[ModuleAuthentication, Depends(module_authentication)],
 ) -> TelemetryResponse:
     vehicle = await require_vehicle(session, vehicle_id)
     module = await authenticate_module(
         session,
         module_id=module_id,
-        token=module_token,
+        token=authentication.token,
+        spiffe_module_name=authentication.spiffe_module_name,
         required_capability=TELEMETRY_PUBLISH_CAPABILITY,
     )
     event, duplicate = await ingest_telemetry(
@@ -301,13 +303,14 @@ async def claim_vehicle_command_endpoint(
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
     module_id: Annotated[UUID, Header(alias="X-ATEP-Module-ID")],
-    module_token: Annotated[str, Header(alias="X-ATEP-Module-Token", min_length=32)],
+    authentication: Annotated[ModuleAuthentication, Depends(module_authentication)],
 ) -> VehicleCommandDelivery | Response:
     vehicle = await require_vehicle(session, vehicle_id)
     module = await authenticate_module(
         session,
         module_id=module_id,
-        token=module_token,
+        token=authentication.token,
+        spiffe_module_name=authentication.spiffe_module_name,
         required_capability=COMMAND_CONSUME_CAPABILITY,
     )
     command, claim_token = await claim_next_vehicle_command(
@@ -335,7 +338,7 @@ async def acknowledge_vehicle_command_endpoint(
     request: Request,
     session: Annotated[AsyncSession, Depends(get_session)],
     module_id: Annotated[UUID, Header(alias="X-ATEP-Module-ID")],
-    module_token: Annotated[str, Header(alias="X-ATEP-Module-Token", min_length=32)],
+    authentication: Annotated[ModuleAuthentication, Depends(module_authentication)],
     command_id: Annotated[
         str,
         Path(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{7,63}$"),
@@ -345,7 +348,8 @@ async def acknowledge_vehicle_command_endpoint(
     module = await authenticate_module(
         session,
         module_id=module_id,
-        token=module_token,
+        token=authentication.token,
+        spiffe_module_name=authentication.spiffe_module_name,
         required_capability=COMMAND_CONSUME_CAPABILITY,
     )
     command, _ = await acknowledge_vehicle_command(
