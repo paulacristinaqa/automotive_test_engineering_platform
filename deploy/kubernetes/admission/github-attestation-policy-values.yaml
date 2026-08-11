@@ -1,0 +1,11 @@
+policy:
+  enabled: true
+  subjectRegExp: '^https://github[.]com/paulacristinaqa/automotive_test_engineering_platform/[.]github/workflows/release[.]yml@refs/heads/main$'
+  predicateType: https://slsa.dev/provenance/v1
+  images:
+    - 'ghcr.io/paulacristinaqa/automotive_test_engineering_platform**'
+  exemptImages: []
+  trust:
+    github: true
+    sigstorePublic: true
+    githubTrustDomain: ''

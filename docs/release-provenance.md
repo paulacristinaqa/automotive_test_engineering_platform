@@ -94,7 +94,8 @@ is an explicit operator action because it creates an externally consumable artif
 
 - move build and signing into a reviewed reusable workflow with restricted inputs;
 - generate a multi-architecture manifest when required by deployment targets;
-- enforce attestations with a Kubernetes admission controller;
+- install the reviewed GitHub/Sigstore admission charts by retained OCI digest and execute the
+  committed exact-workflow policy against positive and negative images;
 - define long-term SBOM, attestation, package, and vulnerability-evidence retention;
 - add revocation/deletion coordination for compromised images and attestations;
 - add release versioning without mutable tags and an emergency release procedure; and
@@ -105,3 +106,4 @@ is an explicit operator action because it creates an externally consumable artif
 - [GitHub artifact attestation guide](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations)
 - [GitHub CLI attestation verification](https://cli.github.com/manual/gh_attestation_verify)
 - [GitHub Container Registry guidance](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)
+- [GitHub Kubernetes attestation enforcement](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/enforce-artifact-attestations)

@@ -82,8 +82,10 @@ credentials, bootstrap credentials, external-secret values, or private endpoints
 ## Next deployment increment
 
 The next stage may perform a real development deployment only after approved workload identity and
-secret-provider bindings exist. Provenance verification and native repository/digest admission are
-implemented; that stage must exercise cluster type-checking and negative denial/audit evidence,
+secret-provider bindings exist. Provenance verification, native repository/digest admission, and
+the exact GitHub/Sigstore controller policy are implemented as configuration; that stage must
+install reviewed chart digests and exercise positive provenance plus negative signature,
+workflow, ref, repository, and image denial/audit evidence,
 run the migration once, retain its terminal
 condition and non-sensitive logs, apply workloads, run bounded
 readiness/authentication/RBAC/outbox smoke tests, and retain rollback evidence. Staging and

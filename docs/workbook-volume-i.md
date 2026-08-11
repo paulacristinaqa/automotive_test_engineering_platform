@@ -67,6 +67,7 @@ The document distinguishes three types of statements:
 | 0.31.0 | 11 August 2026 | Added ordered development/staging/production promotion validation, strict source/digest inputs, fixed fail-closed GitHub environments, immutable Kubernetes renders, versioned evidence, concurrency guards, and a production approval contract | 127 fast Python tests, Ruff, strict mypy, and a real three-target Kustomize evidence render passed locally; real deployment, signature, and provenance evidence remain gated |
 | 0.32.0 | 11 August 2026 | Added protected main-only GHCR publishing, non-replaceable commit tags, OCI source labels, signed SLSA provenance and CycloneDX SBOM attestations, aggregate release evidence, and exact provenance verification before promotion | 132 fast Python tests, Ruff, strict mypy, workflow YAML parsing, and focused provenance policy tests passed locally; first live package/attestation execution remains an explicit operator gate |
 | 0.33.0 | 11 August 2026 | Added a native Kubernetes image-admission boundary for ATEP Deployments and Jobs with explicit namespace scope, fail-closed evaluation, exact GHCR repository, non-zero lowercase SHA-256 digests, init-container coverage, denial, and audit evidence | 133 fast Python tests, Ruff, strict mypy, and six focused Kubernetes policy tests; live Kubernetes type-checking and denial evidence remain pending |
+| 0.34.0 | 11 August 2026 | Added an exact GitHub/Sigstore artifact-attestation admission contract with SLSA v1 provenance, repository/workflow/main-ref identity, namespace opt-in, official version-pinned chart procedure, and no image exemptions | 134 fast Python tests, Ruff, strict mypy, seven focused Kubernetes policy tests, and four Kustomize renders; live chart-digest approval and cluster admission evidence remain pending |
 
 ## How to Use This Workbook
 
@@ -154,11 +155,12 @@ The initial design deliberately starts as a modular monolith rather than a colle
 | Software supply-chain security | Implemented baseline | Hash locks, immutable build inputs, Gitleaks, pip-audit, CodeQL, CycloneDX SBOMs, Grype image gate, and Dependabot |
 | Kubernetes deployment | Implemented initial hardening slice | Independently renderable foundation/admission/migration/workload targets, external Secret contract, Restricted controls, default deny, probes, resource bounds, and fail-closed digest placeholder |
 | Kubernetes image admission | Implemented initial native-policy slice | Namespace-scoped fail-closed Deployment/Job and init-container repository/digest enforcement with denial and audit actions; live cluster evidence pending |
+| Cryptographic image admission | Implemented configuration slice | GitHub/Sigstore Policy Controller values restrict SLSA v1 provenance to the exact ATEP image, repository, release workflow, and main ref with no exemptions; live installation pending |
 | SPIFFE workload identity | Implemented initial application slice | Exact trusted-proxy XFCC identity, no downgrade, registry match, capability preservation, and token migration; live mTLS proxy evidence pending |
 | PostgreSQL disaster recovery | Implemented initial CI slice | Custom logical backup, isolated restore, migration/schema/count equality, aggregate evidence, and cleanup; provider PITR pending |
 | Release promotion | Implemented initial validation slice | Fixed ordered GitHub environments, main-ancestor source SHA, immutable digest, fail-closed enablement, secret-free rendered manifests, evidence retention, and production approval contract; no cluster apply |
 | Signed image provenance | Implemented initial hosted-build slice | Protected main-only release, immutable commit tag, signed SLSA and CycloneDX attestations, release report, and exact pre-promotion verification; first live publish pending |
-| Automated verification | Implemented | 133 fast tests plus expanded disposable black-box, alert-delivery, and restore-drill scenarios, 27 Android tests, Ruff, strict mypy, Android lint/build, Kustomize rendering, and integration/security/release/promotion CI workflows |
+| Automated verification | Implemented | 134 fast tests plus expanded disposable black-box, alert-delivery, and restore-drill scenarios, 27 Android tests, Ruff, strict mypy, Android lint/build, Kustomize rendering, and integration/security/release/promotion CI workflows |
 
 ## 2. Scope and Boundaries
 
@@ -182,7 +184,7 @@ The initial design deliberately starts as a modular monolith rather than a colle
 - automated immutable audit archival, restore verification, legal-hold workflow, and disposition tooling;
 - proxy-aware client attribution and production rate-limit tuning;
 - production trace retention, authenticated telemetry transport, calibrated alert routing, and additional domain-specific metrics;
-- live Kubernetes provider binding, ingress/TLS, immutable release digest, admission-policy type-checking/denial evidence, validating workload-identity proxy, and rollout evidence;
+- live Kubernetes provider binding, ingress/TLS, immutable release digest, native and cryptographic admission evidence, validating workload-identity proxy, and rollout evidence;
 - secret-manager integration, certificate lifecycle, direct-path denial, and live service-to-service mTLS evidence;
 - vehicle, ECU, CAN, diagnostics, test execution, AI, and dashboard domain behavior.
 
@@ -442,7 +444,7 @@ External dashboards, test automation clients, and future ATEP modules call the C
 
 **Rationale.** A digest alone proves content identity but not origin. GitHub artifact attestations use a short-lived OIDC identity and Sigstore signing material to bind the digest to protected workflow context. Exact signer, source, and runner constraints reduce acceptance of a valid but unauthorized attestation, while the immutable commit tag improves discovery without becoming the deployment identity.
 
-**Consequences.** The hosted workflow remains part of the trusted computing base and is not yet a separately governed reusable builder. The first publish requires explicit environment and package configuration. Long-term retention, multi-architecture output, emergency revocation, independent admission enforcement, and automotive cybersecurity evidence remain production work.
+**Consequences.** The hosted workflow remains part of the trusted computing base and is not yet a separately governed reusable builder. The first publish requires explicit environment and package configuration. Long-term retention, multi-architecture output, emergency revocation, live admission execution, and automotive cybersecurity evidence remain production work.
 
 ### ADR-027 — Enforce Reviewed Image Identity at Kubernetes Admission
 
@@ -451,6 +453,14 @@ External dashboards, test automation clients, and future ATEP modules call the C
 **Rationale.** Promotion-time verification can be bypassed if a privileged operator later applies a different workload manifest. Repeating the immutable repository/digest boundary at Kubernetes admission prevents mutable tags, foreign repositories, malformed digests, and the committed zero placeholder from reaching the ATEP namespace. Native CEL policy avoids a new webhook service and is stable from Kubernetes 1.30.
 
 **Consequences.** The admission target requires cluster-level admissionregistration privileges and Kubernetes 1.30 or later. The native policy validates identity syntax and repository scope; it does not verify GitHub/Sigstore signatures. Exact attestation verification remains mandatory before promotion, and production still requires live type-checking/denial evidence plus a separately reviewed signature-aware admission control if cryptographic verification must occur inside the cluster.
+
+### ADR-028 — Bind Cluster Admission to the Exact GitHub Release Workflow
+
+**Decision.** Opt the `atep` namespace into the official GitHub/Sigstore Policy Controller and commit its trust-policy values. Require SLSA v1 provenance, the GitHub Actions OIDC issuer, the exact `paulacristinaqa/automotive_test_engineering_platform` repository, `.github/workflows/release.yml` on `refs/heads/main`, and the exact ATEP GHCR image pattern. Permit no exempt image. Retain the native repository/digest admission policy as an independent gate.
+
+**Rationale.** Digest admission proves content identity but not who built that content. The release workflow already publishes OCI-attached GitHub/Sigstore provenance with `push-to-registry: true`, so the official controller can cryptographically evaluate the same evidence inside Kubernetes. An exact certificate-subject regular expression is narrower than trusting every repository owned by the account and supports the current personal repository owner.
+
+**Consequences.** Repository configuration alone does not deploy the controller. Operators must approve immutable OCI chart digests, install the reviewed Sigstore controller and GitHub trust policy, validate trust-root and policy status, and retain positive/negative admission evidence. Removing namespace opt-in, broadening the subject/image pattern, adding exemptions, or falling back to an unattested digest is a security-policy change requiring review. Kubernetes 1.30 remains the effective platform minimum because of the native policy.
 
 ## 5. Technology Stack and Rationale
 
@@ -475,7 +485,7 @@ External dashboards, test automation clients, and future ATEP modules call the C
 | Docker / Compose | Local topology | Repeatable development services and dependency health ordering | Production hardening requires image scanning and orchestration policies |
 | Kubernetes / Kustomize | Phased deployment baseline | Native declarative composition, renderable targets, runtime policy, and provider-neutral overlays | Real clusters require an approved digest, secret provider, CNI, ingress/TLS, storage class, and staged evidence |
 | GitHub Environments | Ordered promotion boundary | Fixed development/staging/production records, approval gates, variables, retention, and per-environment concurrency | Protection settings live outside workflow YAML and must be independently reviewed |
-| GitHub Artifact Attestations / Sigstore | Signed release identity | SLSA provenance and CycloneDX predicates bind the GHCR digest to repository, workflow, source, and hosted runner context | Workflow code remains trusted; live evidence, retention, revocation, trusted-builder separation, and admission enforcement remain |
+| GitHub Artifact Attestations / Sigstore | Signed release and admission identity | SLSA provenance and CycloneDX predicates bind the GHCR digest to repository, workflow, source, and hosted runner context; the Policy Controller contract repeats exact provenance verification in-cluster | Workflow code remains trusted; live release/admission evidence, retention, revocation, and trusted-builder separation remain |
 | pytest | Automated tests | Concise unit/integration testing and fixture ecosystem | Integration suites should use disposable infrastructure |
 | Ruff | Static quality gate | Fast linting and consistent formatting | The rule set should evolve without disabling meaningful findings globally |
 | mypy | Static type analysis | Detects interface and async/type errors before runtime | Strict mode is the baseline for application code |
@@ -828,6 +838,7 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | CORE-F-087 | Promotion shall verify repository, signer workflow, source SHA/ref, and hosted runner before development. | `gh attestation verify` gate | PROV-007 through PROV-010 |
 | CORE-F-088 | Successful release evidence shall bind source, immutable tag, digest/reference, and both attestation URLs without credentials. | Release evidence schema | PROV-011, PROV-012 |
 | CORE-F-089 | Kubernetes shall deny ATEP Deployment and Job creation/update when any application or init-container image is mutable, foreign, malformed, or uses the zero digest. | Native admission policy and binding | K8S-006, K8S-007 |
+| CORE-F-090 | The ATEP namespace shall enforce SLSA v1 provenance for the exact image, repository, `release.yml`, and `main` ref through the GitHub/Sigstore Policy Controller without exemptions. | Trust-policy values and namespace opt-in | K8S-008, K8S-009 |
 
 ### 8.2 Non-Functional Requirements
 
@@ -894,6 +905,7 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | CORE-NF-061 | Provenance trust policy | Exact repository, signer workflow, source SHA/ref, SLSA predicate, and hosted signing runner | PROV-007 through PROV-010 |
 | CORE-NF-062 | Release evidence privacy | Digests, source identity, public attestation URLs, and timestamps only; no credentials or image layers | PROV-011, PROV-012 |
 | CORE-NF-063 | Cluster image admission | Fail-closed CEL evaluation, explicit namespace scope, denial plus audit, exact GHCR repository, and non-zero lowercase SHA-256 digest | K8S-006, K8S-007 |
+| CORE-NF-064 | Cryptographic admission trust | GitHub Actions issuer, exact workflow subject, SLSA v1 predicate, GitHub/Sigstore roots, no exemptions, reviewed chart versions/digests, and promotion-identical digest | K8S-008, K8S-009 |
 
 ### 8.3 Definition of Done for an Increment
 
@@ -1330,6 +1342,8 @@ The fast local suite and repeated remote disposable CI runs prove clean-database
 | K8S-005 | Execute a staged rollout with approved digest and external Secret, retain migration evidence, and exercise rollback. | Zero digest cannot deploy; migration completes before workloads; smoke probes pass; previous workload digest can be restored without automatic database downgrade. | Manifest/runbook implemented; live cluster exercise planned / P0 |
 | K8S-006 | Inspect the image policy, binding, namespace selector, matched operations/resources, failure mode, and validation actions. | One fail-closed policy covers Deployment and Job create/update, including init containers; one binding selects only labelled namespaces and uses Deny plus Audit. | Automated policy test / P0 |
 | K8S-007 | Submit approved digest, mutable tag, foreign repository, uppercase/malformed digest, and zero-digest workloads to a Kubernetes 1.30+ test cluster. | Only the exact approved repository with a non-zero lowercase SHA-256 digest is admitted; every rejection is visible in the API result and audit evidence. | Static negative matrix passed; live cluster exercise pending / P0 |
+| K8S-008 | Inspect namespace opt-in and GitHub trust-policy values. | Enforcement is enabled; SLSA v1, exact repository/workflow/main-ref subject, exact ATEP image pattern, GitHub/Sigstore trust, and an empty exemption list are present; release publishes registry attestations. | Automated policy test / P0 |
+| K8S-009 | Install reviewed controller/chart digests and submit attested plus unsigned, wrong-repository, wrong-workflow, wrong-ref, and revoked subjects. | Only the exact valid provenance is admitted; all negative samples fail closed and retain controller plus Kubernetes audit evidence. | Runbook/configuration implemented; live cluster exercise pending / P0 |
 
 ### 11.14 Workload Identity and mTLS Boundary
 
@@ -1424,7 +1438,7 @@ Pipeline artifacts should include test reports, coverage, OpenAPI schema, migrat
 | SQL injection | SQLAlchemy expression API, parameterization, and CodeQL analysis | Maintain code review and test any raw SQL explicitly |
 | Event spoofing or tampering | Controlled exchange publication and message identity | Add broker TLS/mTLS, broker permissions, schema validation, and optional message signing |
 | Message replay | Unique event IDs and documented idempotency | Implement consumer inbox/deduplication and retention policy |
-| Dependency compromise | Hash-locked graphs, immutable inputs, scanning, signed release provenance/SBOM, and pre-promotion verification | Add trusted-builder separation, long-term release evidence, admission enforcement, and supplier-response policy |
+| Dependency compromise | Hash-locked graphs, immutable inputs, scanning, signed release provenance/SBOM, pre-promotion verification, and exact in-cluster attestation policy | Add trusted-builder separation, long-term evidence, live controller enforcement, and supplier-response policy |
 | Denial of service | Bounded readiness timeouts and distributed versioned-API limits | Add body-size/pool limits, backpressure, proxy-aware attribution, and load evidence |
 
 ## 14. Risk and Technical Debt Register
@@ -1449,7 +1463,7 @@ Pipeline artifacts should include test reports, coverage, OpenAPI schema, migrat
 | R-016 | Kubernetes manifests are rendered and policy-tested but have not been exercised against a live cluster or bound to a real image digest, secret provider, CNI, ingress, TLS policy, or shared object store. | Provider behavior, rollout timing, network reachability, storage permissions, and recovery may differ from static evidence. | Execute a staged cluster exercise with approved overlays, retain migration/smoke/rollback evidence, and resolve singleton leadership before horizontal scaling. | High |
 | R-017 | ATEP validates forwarded SPIFFE identity, but the repository does not yet deploy the certificate authority, certificate lifecycle, or validating proxy. | Misconfigured XFCC forwarding or a direct application path could permit identity spoofing despite correct application parsing. | Require proxy-side certificate validation and XFCC replacement, exact CIDRs, network-policy direct-path denial, separated trust domains, rotation/revocation drills, and retained live evidence before enablement. | High |
 | R-018 | Promotion now verifies signed source-to-image provenance, but GitHub environment protections and the first live release/promotion evidence cannot be encoded or proven by workflow YAML alone. | Weak repository settings could permit an unauthorized release or bypass separation of duties despite correct workflow logic. | Independently audit release and promotion environments, require reviewers with self-review/bypass disabled, and retain the settings plus first live evidence. | High |
-| R-019 | Release SBOM and aggregate evidence retention is 90 days; native admission now enforces repository/digest identity but does not cryptographically verify provenance. | Long-lived automotive evidence may expire, and a privileged operator could deploy an unattested digest that matches the allowed repository syntax. | Define product-lifetime retention and revocation, archive signed bundles independently, and add signature-aware admission bound to the same trust policy. | High |
+| R-019 | Release SBOM and aggregate evidence retention is 90 days; the exact cryptographic admission contract is committed but not installed or live-evidenced. | Long-lived automotive evidence may expire, and a cluster without the controller could still deploy an unattested digest that passes native syntax checks. | Define product-lifetime retention/revocation, archive signed bundles independently, approve immutable chart digests, install the controller, and retain positive/negative admission evidence. | High |
 | R-020 | The GitHub repository currently has one direct collaborator, so required independent review with self-review prevention would deadlock the first protected release. | Weakening the rule would invalidate the documented separation-of-duties control; enabling it with only the initiator would make release impossible. | Add a trusted read-or-higher collaborator as release reviewer, configure the protected `release` environment, retain settings evidence, and only then execute the first publish. | High |
 
 ## 15. Roadmap and Increment Plan
@@ -1492,14 +1506,17 @@ Pipeline artifacts should include test reports, coverage, OpenAPI schema, migrat
   baseline; approved digest overlays, provider binding, ingress/TLS, live evidence, shared storage,
   and multi-replica leadership remain;
 - native namespace-scoped Kubernetes repository/digest admission — implemented initial slice;
-  live CEL type-checking, denial/audit evidence, and signature-aware admission remain;
+  live CEL type-checking and denial/audit evidence remain;
+- exact GitHub/Sigstore artifact-attestation admission configuration — implemented initial slice;
+  immutable chart approval, controller installation, trust status, and live positive/negative
+  evidence remain;
 - validating mTLS proxy, certificate lifecycle, direct-path denial, and live identity evidence;
 - logical PostgreSQL restore drill and aggregate CI evidence — implemented initial slice;
 - provider-native encrypted backup, immutable retention, artifact coordination, PITR/WAL, and deployed disaster exercises — production hardening;
 - performance, resilience, and security-policy calibration;
 - ordered development/staging/production promotion validation and retained render evidence â€” implemented initial slice;
 - protected GHCR release, signed SLSA/CycloneDX attestations, and exact pre-promotion verification â€” implemented initial hosted-build slice;
-- reusable trusted builder, long-term release evidence, signature-aware admission, and real provider deployment across protected environments â€” production hardening.
+- reusable trusted builder, long-term release evidence, live attestation-admission evidence, and real provider deployment across protected environments â€” production hardening.
 
 ## 16. Engineering Review Worksheets
 

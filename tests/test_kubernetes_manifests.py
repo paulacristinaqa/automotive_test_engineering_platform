@@ -13,9 +13,12 @@ APPROVED_IMAGE_PATTERN = re.compile(rf"^{re.escape(APPROVED_IMAGE)}@sha256:[a-f0
 
 def load_documents(directory: str) -> list[dict[str, Any]]:
     documents: list[dict[str, Any]] = []
-    for path in sorted((KUBERNETES / directory).glob("*.yaml")):
-        if path.name == "kustomization.yaml":
-            continue
+    directory_path = KUBERNETES / directory
+    kustomization = yaml.safe_load(
+        (directory_path / "kustomization.yaml").read_text(encoding="utf-8")
+    )
+    for resource in kustomization["resources"]:
+        path = directory_path / resource
         documents.extend(
             document
             for document in yaml.safe_load_all(path.read_text(encoding="utf-8"))
@@ -60,6 +63,7 @@ def test_foundation_is_restricted_secretless_and_default_deny() -> None:
     labels = namespace["metadata"]["labels"]
     assert labels["pod-security.kubernetes.io/enforce"] == "restricted"
     assert labels["atep.dev/image-policy"] == "enforced"
+    assert labels["policy.sigstore.dev/include"] == "true"
 
     service_accounts = documents_by_kind("foundation", "ServiceAccount")
     assert {item["metadata"]["name"] for item in service_accounts} == {
@@ -131,6 +135,33 @@ def test_admission_policy_denies_unapproved_or_mutable_atep_images() -> None:
         not APPROVED_IMAGE_PATTERN.fullmatch(image) or image == f"{APPROVED_IMAGE}@{ZERO_DIGEST}"
         for image in rejected
     )
+
+
+def test_github_attestation_admission_is_exact_and_has_no_exempt_images() -> None:
+    values = yaml.safe_load(
+        (KUBERNETES / "admission" / "github-attestation-policy-values.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    policy = values["policy"]
+    assert policy == {
+        "enabled": True,
+        "subjectRegExp": (
+            "^https://github[.]com/paulacristinaqa/automotive_test_engineering_platform/"
+            "[.]github/workflows/release[.]yml@refs/heads/main$"
+        ),
+        "predicateType": "https://slsa.dev/provenance/v1",
+        "images": [f"{APPROVED_IMAGE}**"],
+        "exemptImages": [],
+        "trust": {
+            "github": True,
+            "sigstorePublic": True,
+            "githubTrustDomain": "",
+        },
+    }
+
+    release_workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    assert release_workflow.count("push-to-registry: true") == 2
 
 
 def test_workloads_apply_restricted_runtime_controls_and_external_secret_contract() -> None:

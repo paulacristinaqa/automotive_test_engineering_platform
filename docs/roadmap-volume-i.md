@@ -53,7 +53,11 @@
   evidence, and multi-replica leadership remain hardening)
 - native Kubernetes image admission for ATEP Deployments and Jobs (implemented initial slice:
   namespace-scoped fail-closed repository/digest enforcement and audit action; live cluster
-  type-checking, cryptographic admission, and denial evidence remain hardening)
+  type-checking and denial evidence remain hardening)
+- GitHub/Sigstore artifact-attestation admission contract (implemented initial configuration:
+  exact ATEP image/repository/workflow/ref, SLSA v1, no exemptions, and namespace opt-in; chart
+  digest approval, controller installation, positive verification, and negative denial evidence
+  remain hardening)
 - application-side SPIFFE/XFCC workload identity boundary (implemented initial slice: exact
   module identity, trusted proxy CIDRs, fail-closed parsing, capability preservation, and token
   migration path; proxy deployment, certificate lifecycle, direct-path denial, and live mTLS
@@ -64,7 +68,7 @@
 - SLO threshold calibration, production incident-provider routing, load tests, artifact signing,
   provenance verification, and security-policy calibration (signed GHCR provenance/SBOM and
   pre-promotion verification implemented as an initial hosted-build slice; trusted reusable
-  builder, live release evidence, signature-aware admission, and long-term retention remain)
+  builder, live release and admission execution evidence, and long-term retention remain)
 - CI/CD promotion through development, staging, and production (implemented initial validation
   slice: ordered fixed environments, strict immutable inputs, fail-closed enablement, retained
   manifest evidence, production approval contract, and signed provenance verification; real
