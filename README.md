@@ -299,6 +299,7 @@ companion project also passes 27 unit tests, Android lint, and debug APK assembl
 - [Release promotion evidence and environment gates](docs/release-promotion.md)
 - [Signed release image provenance](docs/release-provenance.md)
 - [Release evidence lifecycle and revocation](docs/release-evidence-lifecycle.md)
+- [Immutable release archive provider contract](docs/release-archive-provider-contract.md)
 - [Engineering workbook — editable source](docs/workbook-volume-i.md)
 - [Engineering workbook — formatted document](docs/ATEP_Volume_I_Engineering_Workbook.docx)
 
