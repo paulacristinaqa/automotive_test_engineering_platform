@@ -32,14 +32,14 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "httpx>=0.28,<1",
-  "mypy>=1.14,<2",
-  "pip-audit==2.10.0",
-  "pip==25.3",
+  "mypy>=1.14,<3",
+  "pip-audit==2.10.1",
+  "pip==26.2.1",
   "pip-tools==7.6.0",
-  "pytest>=8.3,<9",
-  "pytest-asyncio>=0.25,<1",
+  "pytest>=8.3,<10",
+  "pytest-asyncio>=0.25,<2",
   "ruff>=0.9,<1",
-  "websockets>=15,<17",
+  "websockets>=15,<18",
 ]
 
 [tool.hatch.build.targets.wheel]
