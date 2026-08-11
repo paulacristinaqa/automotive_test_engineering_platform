@@ -78,7 +78,7 @@ def test_image_and_update_policy_are_immutable_and_maintained() -> None:
     assert "pip install --no-cache-dir --no-deps --no-build-isolation ." in dockerfile
     assert "addgroup -S atep && adduser -S -G atep -h /home/atep atep" in dockerfile
     assert "USER atep" in dockerfile
-    assert ecosystems == {"pip", "github-actions", "docker"}
+    assert ecosystems == {"pip", "github-actions", "docker", "terraform"}
     assert all(entry["schedule"]["interval"] == "weekly" for entry in dependabot["updates"])
 
 

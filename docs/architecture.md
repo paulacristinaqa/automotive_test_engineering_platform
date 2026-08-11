@@ -204,7 +204,11 @@ flowchart LR
    encryption, workload identity, audit reference, and time ordering before emitting a
    non-replacing export receipt. The initial AWS S3 Object Lock adapter maps this boundary to an
    atomic conditional `PutObject`, `COMPLIANCE` retention, SSE-KMS, STS assumed-role identity, and
-   exact-version streamed read-back without embedding credentials or provisioning cloud state. A
+   exact-version streamed read-back without embedding credentials. Its Terraform foundation
+   declares a non-destroyable versioned Object Lock bucket, rotated customer key, exact OIDC writer
+   and separate restore roles, restrictive bucket policy, and multi-Region CloudTrail delivery to
+   independently governed audit storage. CI validates only a mocked plan and never receives AWS
+   credentials or applies the stack. A
    separately authorized revocation procedure preserves evidence before exact-digest attestation
    and package withdrawal.
 
