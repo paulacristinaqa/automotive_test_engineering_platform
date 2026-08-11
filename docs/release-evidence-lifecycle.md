@@ -6,7 +6,7 @@ bundle is historical evidence and is never, by itself, proof that an image remai
 
 ## Portable release archive
 
-Every successful reusable-builder run must retain one offline-verification package containing:
+Every successful reusable-builder run first assembles one offline-verification package containing:
 
 - `release-evidence.json`, binding source SHA/ref, immutable image digest, and attestation URLs;
 - `atep-release-image.cdx.json`, the CycloneDX SBOM generated from the published digest;
@@ -14,16 +14,21 @@ Every successful reusable-builder run must retain one offline-verification packa
 - `trusted_root.jsonl`, refreshed during the same run; and
 - `release-archive-manifest.json`, binding the four files by role, name, byte size, and SHA-256.
 
-The builder verifies the downloaded SLSA provenance with the archived bundle and trusted root
-before uploading the package. Verification keeps the same repository, reusable signer workflow,
-source SHA/ref, and hosted-runner constraints used by promotion. The package contains no registry
-token, environment value, image layer, application secret, or deployment credential.
+The builder verifies the downloaded SLSA provenance with the archived bundle and trusted root,
+then seals those files and the manifest into deterministic `atep-release-evidence.zip`. A separate
+`release-archive-receipt.json` binds its SHA-256, size, entry count, source/image identity, manifest
+hash, and content-addressed provider object key. A fresh job downloads these two transfer files and
+restores them into an empty directory before the workflow can succeed.
 
-GitHub Actions retention remains 90 days. Before expiry, an approved evidence custodian must copy
-the complete package to immutable, access-logged storage under the product evidence retention
-schedule. The destination, retention lock, encryption key ownership, restore test, and deletion
-approval remain provider-specific production controls; the repository does not pretend that a
-90-day workflow artifact is long-term automotive retention.
+Verification keeps the same repository, reusable signer workflow, source SHA/ref, and hosted-runner
+constraints used by promotion. The archive contains no registry token, environment value, image
+layer, application secret, deployment credential, or provider credential.
+
+GitHub Actions retention remains 90 days. Before expiry, an approved evidence exporter must copy
+the sealed ZIP and receipt to immutable, access-logged storage under the product evidence retention
+schedule and satisfy [`release-archive-provider-contract.md`](release-archive-provider-contract.md).
+The repository does not pretend that the workflow artifact or local restore smoke test is
+product-lifetime automotive retention.
 
 ## Offline verification
 

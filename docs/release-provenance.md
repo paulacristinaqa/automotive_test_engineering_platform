@@ -102,8 +102,10 @@ After creating both attestations, the builder downloads the digest's GitHub atte
 captures current trusted roots, and verifies the SLSA statement again using only that bundle and
 root file while retaining the exact online signer/source policy. It then creates
 `release-archive-manifest.json`, which binds the release report, CycloneDX SBOM, attestation bundle,
-and trusted roots by role, filename, SHA-256, and byte size. The portable package is retained for
-90 days for transfer to approved immutable long-term storage.
+and trusted roots by role, filename, SHA-256, and byte size. Those files are sealed into a
+deterministic ZIP with a separate content-addressed receipt. A fresh workflow job downloads and
+restores the transfer object before success. The ZIP and receipt are retained for 90 days for
+transfer under the immutable provider contract.
 
 Withdrawal is deliberately separate from archive creation. An archived signature can remain
 cryptographically valid after an artifact is no longer authorized, so consumers must also consult

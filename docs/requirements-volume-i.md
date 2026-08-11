@@ -97,6 +97,8 @@
 | CORE-F-091 | The protected manual release caller shall delegate build, publication, SBOM generation, and attestation to an input-free reusable workflow that verifies its exact workflow identity before registry authentication. | Caller/builder workflow-contract tests |
 | CORE-F-092 | A successful release shall download and verify the exact image's attestation bundle with current trusted roots and emit a manifest binding the release report, SBOM, bundle, and roots by role, name, size, and SHA-256. | Archive-manifest unit and workflow-policy tests |
 | CORE-F-093 | The platform shall document a fail-closed exact-digest revocation procedure that preserves evidence before attestation/package withdrawal and proves rejection by verification, promotion, and admission. | Revocation runbook review and future live exercise |
+| CORE-F-094 | The release workflow shall seal manifest-bound evidence into a deterministic non-replaceable archive and emit a separate receipt binding its source/image identity, object key, manifest hash, archive SHA-256, size, and entry count. | Seal/restore unit and workflow-policy tests |
+| CORE-F-095 | A fresh release job shall download the sealed transfer artifact and restore it into an empty workspace before the reusable workflow succeeds. | Cross-job artifact restore contract and hosted CI evidence |
 
 ## Non-functional requirements
 
@@ -169,3 +171,5 @@
 | CORE-NF-065 | Reusable-builder input isolation | the reusable builder accepts no workflow inputs or caller secrets, validates its exact `job.workflow_ref`, uses only the caller's reviewed main SHA, and cannot elevate permissions beyond the caller grant |
 | CORE-NF-066 | Portable evidence integrity | the archive accepts only fixed distinct evidence filenames, validates JSON/JSONL structure and source/image consistency, rejects empty/symlink inputs, and records SHA-256 plus byte size without secrets or image layers |
 | CORE-NF-067 | Revocation safety | destructive withdrawal is never automatic; it requires an exact digest, preserved evidence, incident authority, independent review, known-good replacement, and negative verification/admission evidence before release re-enablement |
+| CORE-NF-068 | Archive restoration safety | restore rejects receipt/archive mismatch, replacement, path traversal, duplicate/extra/compressed/empty/oversized entries, manifest inconsistency, and partial output; archive creation is deterministic and non-replacing |
+| CORE-NF-069 | Immutable provider boundary | product-lifetime export requires locked WORM retention, version identity, strong checksum/read-back, separate short-lived identities, independent keys/audit, deterministic object key, non-replacement, and scheduled restore evidence |

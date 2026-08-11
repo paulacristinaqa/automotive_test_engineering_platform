@@ -196,8 +196,10 @@ flowchart LR
    evidence rather than an implicit repository deployment.
 9. **Evidence lifecycle boundary:** the reusable builder downloads the exact digest's GitHub
    attestation bundle and current Sigstore roots, verifies the archived provenance, and emits a
-   hash-and-size manifest beside the release report and CycloneDX SBOM. The 90-day Actions artifact
-   is a transfer package for approved immutable storage, not the product-lifetime archive. A
+   hash-and-size manifest beside the release report and CycloneDX SBOM. It then creates a
+   deterministic sealed ZIP and content-addressed receipt; a fresh job downloads and restores both
+   before workflow success. The 90-day Actions artifact is a transfer package governed by the
+   vendor-neutral immutable provider contract, not the product-lifetime archive. A
    separately authorized revocation procedure preserves evidence before exact-digest attestation
    and package withdrawal.
 
