@@ -69,6 +69,7 @@ The document distinguishes three types of statements:
 | 0.33.0 | 11 August 2026 | Added a native Kubernetes image-admission boundary for ATEP Deployments and Jobs with explicit namespace scope, fail-closed evaluation, exact GHCR repository, non-zero lowercase SHA-256 digests, init-container coverage, denial, and audit evidence | 133 fast Python tests, Ruff, strict mypy, and six focused Kubernetes policy tests; live Kubernetes type-checking and denial evidence remain pending |
 | 0.34.0 | 11 August 2026 | Added an exact GitHub/Sigstore artifact-attestation admission contract with SLSA v1 provenance, repository/workflow/main-ref identity, namespace opt-in, official version-pinned chart procedure, and no image exemptions | 134 fast Python tests, Ruff, strict mypy, seven focused Kubernetes policy tests, and four Kustomize renders; live chart-digest approval and cluster admission evidence remain pending |
 | 0.35.0 | 11 August 2026 | Split protected release approval from an input-free reusable builder, bound the builder to its exact main-branch workflow identity, and updated promotion plus Kubernetes admission to trust that signer | 135 fast Python tests, Ruff, strict mypy, workflow YAML parsing, cross-policy signer tests, structural/a11y workbook checks, and resource monitoring; hosted CI and first live release remain the completion gates |
+| 0.36.0 | 11 August 2026 | Added a portable offline release archive with downloaded attestations, current trusted roots, exact-policy re-verification, SHA-256/size manifest, and a fail-closed evidence-preserving revocation runbook | 140 fast Python tests, Ruff, strict mypy, workflow-policy tests, structural/a11y workbook checks, and resource monitoring; live archive export, restore, and revocation exercises remain pending |
 
 ## How to Use This Workbook
 
@@ -161,7 +162,8 @@ The initial design deliberately starts as a modular monolith rather than a colle
 | PostgreSQL disaster recovery | Implemented initial CI slice | Custom logical backup, isolated restore, migration/schema/count equality, aggregate evidence, and cleanup; provider PITR pending |
 | Release promotion | Implemented initial validation slice | Fixed ordered GitHub environments, main-ancestor source SHA, immutable digest, fail-closed enablement, secret-free rendered manifests, evidence retention, and production approval contract; no cluster apply |
 | Signed image provenance | Implemented initial reusable-builder slice | Protected main-only approval, input-free exact-identity builder, immutable commit tag, signed SLSA and CycloneDX attestations, release report, and exact pre-promotion/admission verification; independently governed builder and first live publish pending |
-| Automated verification | Implemented | 135 fast tests plus expanded disposable black-box, alert-delivery, and restore-drill scenarios, 27 Android tests, Ruff, strict mypy, Android lint/build, Kustomize rendering, and integration/security/release/promotion CI workflows |
+| Release evidence lifecycle | Implemented portable archive slice | Exact-digest attestation bundle, current roots, offline verification, manifest-bound report/SBOM/bundle/root, and evidence-first revocation procedure; immutable provider export and live revocation exercise pending |
+| Automated verification | Implemented | 140 fast tests plus expanded disposable black-box, alert-delivery, restore-drill, release-archive, and workflow-policy scenarios, 27 Android tests, Ruff, strict mypy, Android lint/build, Kustomize rendering, and integration/security/release/promotion CI workflows |
 
 ## 2. Scope and Boundaries
 
@@ -470,6 +472,14 @@ External dashboards, test automation clients, and future ATEP modules call the C
 **Rationale.** GitHub identifies the workflow containing `actions/attest` as the signer. Moving build and signing together behind a narrow reusable boundary therefore gives promotion and cluster admission one explicit builder identity while eliminating arbitrary caller-controlled image, ref, registry, command, and credential inputs. The approval job cannot publish and the builder cannot elevate the caller's token permissions.
 
 **Consequences.** Promotion and Sigstore admission must trust the reusable workflow rather than its caller, and signer changes must update both gates atomically. Because caller and builder remain in the same repository and commit, this is not yet independently governed SLSA Build Level 3 isolation. A future builder repository must be protected separately and referenced by reviewed immutable SHA.
+
+### ADR-030 — Preserve Portable Evidence before Exact-Digest Revocation
+
+**Decision.** After online attestation creation, download the exact image digest's GitHub bundle and current trusted roots, verify the archived SLSA provenance against the same repository/signer/source/runner policy, and emit a schema `1.0.0` manifest that hashes and sizes the release report, CycloneDX SBOM, bundle, and roots. Treat the 90-day Actions artifact as a transfer package. Require a separate, dual-reviewed runbook to preserve evidence before deleting exact-digest attestations, package versions, or OCI referrers.
+
+**Rationale.** GitHub lifecycle guidance recommends downloading attestations before deletion, and offline verification requires both the bundle and trusted roots. Binding all evidence files detects accidental substitution or truncation and enables later verification without relying on the Actions artifact. Separating archival from revocation prevents a destructive convenience workflow from erasing evidence or withdrawing the wrong digest.
+
+**Consequences.** An archived signature remains historical cryptographic evidence and is not a current authorization decision; offline verifiers must consult current revocation state. GitHub's 90-day retention is not product-lifetime storage. Production still needs immutable provider retention, encryption and ownership controls, restore exercises, an external revocation catalogue, consumer notification, and live negative verification/admission evidence.
 
 ## 5. Technology Stack and Rationale
 
@@ -849,6 +859,8 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | CORE-F-089 | Kubernetes shall deny ATEP Deployment and Job creation/update when any application or init-container image is mutable, foreign, malformed, or uses the zero digest. | Native admission policy and binding | K8S-006, K8S-007 |
 | CORE-F-090 | The ATEP namespace shall enforce SLSA v1 provenance for the exact image, repository, reusable signer workflow, and `main` ref through the GitHub/Sigstore Policy Controller without exemptions. | Trust-policy values and namespace opt-in | K8S-008, K8S-009 |
 | CORE-F-091 | Protected approval shall delegate build, publication, SBOM, and signing to an input-free reusable workflow with exact identity validation. | Caller/builder workflow boundary | PROV-013 through PROV-015 |
+| CORE-F-092 | A successful release shall verify and manifest-bind its report, CycloneDX SBOM, attestation bundle, and current trusted roots for portable offline use. | Archive manifest and reusable builder | PROV-016 through PROV-019 |
+| CORE-F-093 | Exact-digest revocation shall preserve evidence first and prove withdrawal through online verification, promotion, and admission. | Revocation runbook | PROV-020 |
 
 ### 8.2 Non-Functional Requirements
 
@@ -917,6 +929,8 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | CORE-NF-063 | Cluster image admission | Fail-closed CEL evaluation, explicit namespace scope, denial plus audit, exact GHCR repository, and non-zero lowercase SHA-256 digest | K8S-006, K8S-007 |
 | CORE-NF-064 | Cryptographic admission trust | GitHub Actions issuer, exact workflow subject, SLSA v1 predicate, GitHub/Sigstore roots, no exemptions, reviewed chart versions/digests, and promotion-identical digest | K8S-008, K8S-009 |
 | CORE-NF-065 | Reusable-builder input isolation | No inputs or caller secrets; exact reusable workflow ref; reviewed main SHA; no permission elevation | PROV-013 through PROV-015 |
+| CORE-NF-066 | Portable evidence integrity | Fixed distinct filenames, structured JSON/JSONL, source/image consistency, regular non-empty files, SHA-256, byte size, and no secrets/layers | PROV-016 through PROV-019 |
+| CORE-NF-067 | Revocation safety | Exact digest, preserved evidence, incident authority, independent review, known-good replacement, and negative evidence before re-enablement | PROV-020 |
 
 ### 8.3 Definition of Done for an Increment
 
@@ -1423,6 +1437,11 @@ The fast local suite and repeated remote disposable CI runs prove clean-database
 | PROV-013 | Inspect the manual release caller and reusable workflow interface. | Approval uses the protected `release` environment; the builder runs only after approval and declares no workflow inputs or caller secrets. | Implemented workflow-contract test / P0 |
 | PROV-014 | Invoke or alter the builder identity/ref away from the exact workflow on `refs/heads/main`. | The builder fails before registry authentication, publication, or attestation. | Implemented static contract; live negative execution pending / P0 |
 | PROV-015 | Verify an image attested by the caller or another workflow while promotion and admission expect the reusable builder. | Both exact signer gates reject the mismatched provenance; the reusable signer is accepted only with the required source SHA/ref and hosted runner. | Automated cross-policy test; live negative evidence pending / P0 |
+| PROV-016 | Build a release archive manifest from matching report, CycloneDX SBOM, attestation JSONL, and trusted-root JSONL. | Schema `1.0.0` binds source/ref, image digest/reference, signer, timestamp, fixed roles/names, byte sizes, and SHA-256 values. | Implemented unit evidence / P0 |
+| PROV-017 | Supply malformed JSON/JSONL, empty, symlinked, duplicate, renamed, or source/image-mismatched archive inputs. | Manifest generation fails closed without producing trusted evidence. | Implemented malformed, empty, mismatch, duplicate, and rename coverage; symlink check implemented with platform-specific exercise pending / P0 |
+| PROV-018 | Inspect the reusable builder's download and verification order. | Exact-digest bundle and current roots are non-empty; archived SLSA provenance passes exact signer/source/runner policy before upload. | Implemented workflow-policy test; live GitHub evidence pending / P0 |
+| PROV-019 | Alter one byte in each archived file and restore the package on a clean verifier. | Manifest comparison detects every mutation; intact evidence verifies offline with the retained roots. | Manifest hashing implemented; live mutation/restore exercise pending / P0 |
+| PROV-020 | Revoke a disposable exact digest after preserving evidence. | Attestation and package/referrers are withdrawn under dual review; online verification, promotion, and admission reject it while another digest remains valid. | Runbook implemented; live destructive exercise pending / P0 |
 
 ## 12. Suggested CI/CD Quality Pipeline
 
@@ -1477,7 +1496,7 @@ Pipeline artifacts should include test reports, coverage, OpenAPI schema, migrat
 | R-016 | Kubernetes manifests are rendered and policy-tested but have not been exercised against a live cluster or bound to a real image digest, secret provider, CNI, ingress, TLS policy, or shared object store. | Provider behavior, rollout timing, network reachability, storage permissions, and recovery may differ from static evidence. | Execute a staged cluster exercise with approved overlays, retain migration/smoke/rollback evidence, and resolve singleton leadership before horizontal scaling. | High |
 | R-017 | ATEP validates forwarded SPIFFE identity, but the repository does not yet deploy the certificate authority, certificate lifecycle, or validating proxy. | Misconfigured XFCC forwarding or a direct application path could permit identity spoofing despite correct application parsing. | Require proxy-side certificate validation and XFCC replacement, exact CIDRs, network-policy direct-path denial, separated trust domains, rotation/revocation drills, and retained live evidence before enablement. | High |
 | R-018 | Promotion now verifies signed source-to-image provenance, but GitHub environment protections and the first live release/promotion evidence cannot be encoded or proven by workflow YAML alone. | Weak repository settings could permit an unauthorized release or bypass separation of duties despite correct workflow logic. | Independently audit release and promotion environments, require reviewers with self-review/bypass disabled, and retain the settings plus first live evidence. | High |
-| R-019 | Release SBOM and aggregate evidence retention is 90 days; the exact cryptographic admission contract is committed but not installed or live-evidenced. | Long-lived automotive evidence may expire, and a cluster without the controller could still deploy an unattested digest that passes native syntax checks. | Define product-lifetime retention/revocation, archive signed bundles independently, approve immutable chart digests, install the controller, and retain positive/negative admission evidence. | High |
+| R-019 | A portable manifest-bound offline package and revocation procedure exist, but Actions retains it for only 90 days and neither immutable provider storage nor live admission/revocation evidence exists. | Long-lived automotive evidence may still expire or become undiscoverable, and an unconfigured cluster may accept a digest without current trust or revocation enforcement. | Export each package to independently governed immutable storage, maintain an external revocation catalogue, exercise restore, approve chart digests, install the controller, and retain positive/negative/revocation evidence. | High |
 | R-020 | The GitHub repository currently has one direct collaborator, so required independent review with self-review prevention would deadlock the first protected release. | Weakening the rule would invalidate the documented separation-of-duties control; enabling it with only the initiator would make release impossible. | Add a trusted read-or-higher collaborator as release reviewer, configure the protected `release` environment, retain settings evidence, and only then execute the first publish. | High |
 
 ## 15. Roadmap and Increment Plan
@@ -1530,7 +1549,7 @@ Pipeline artifacts should include test reports, coverage, OpenAPI schema, migrat
 - performance, resilience, and security-policy calibration;
 - ordered development/staging/production promotion validation and retained render evidence â€” implemented initial slice;
 - protected GHCR release, input-free reusable builder, signed SLSA/CycloneDX attestations, and exact pre-promotion verification - implemented initial same-repository builder slice;
-- independently governed trusted builder, long-term release evidence, live attestation-admission evidence, and real provider deployment across protected environments - production hardening.
+- independently governed trusted builder, product-lifetime immutable evidence provider, live attestation-admission/revocation evidence, and real provider deployment across protected environments - production hardening.
 
 ## 16. Engineering Review Worksheets
 
@@ -1673,6 +1692,7 @@ Application rollback is safe only when the previous version is compatible with t
 | PostgreSQL backup and restore drill | `tools/run_postgres_restore_drill.py`, `tests/test_disaster_recovery.py`, `.github/workflows/integration.yml`, and `docs/disaster-recovery.md` |
 | Release promotion validation | `tools/build_promotion_evidence.py`, `tests/test_release_promotion.py`, `.github/workflows/promotion.yml`, and `docs/release-promotion.md` |
 | Signed release provenance | `tools/build_release_evidence.py`, `tests/test_release_provenance.py`, `.github/workflows/release.yml`, `.github/workflows/reusable-release-builder.yml`, `Dockerfile`, and `docs/release-provenance.md` |
+| Release evidence lifecycle | `tools/build_release_archive_manifest.py`, `tests/test_release_archive.py`, `.github/workflows/reusable-release-builder.yml`, and `docs/release-evidence-lifecycle.md` |
 | Automated tests | `tests/test_security.py`, `test_identity.py`, `test_user_administration.py`, `test_role_catalogue.py`, `test_audit_query.py`, `test_rate_limit.py`, `test_module_registry.py`, `test_module_health.py`, `test_vehicle_telemetry.py`, `test_vehicle_commands.py`, `test_test_runs.py`, `test_test_jobs.py`, `test_artifacts.py`, `test_observability.py`, `test_domain_observability.py`, `test_dependency_storage_observability.py`, `test_alert_delivery.py`, `test_observability_assets.py`, `test_supply_chain_security.py`, `test_kubernetes_manifests.py`, `test_release_promotion.py`, and `test_api_contract.py` |
 | Architecture summary | `docs/architecture.md` |
 | Requirements baseline | `docs/requirements-volume-i.md` |

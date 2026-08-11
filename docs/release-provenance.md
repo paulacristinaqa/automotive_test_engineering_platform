@@ -96,6 +96,21 @@ the workflow containing `actions/attest` as the attestation signer. A future mov
 governed builder repository must update the signer repository, workflow, admission subject, and
 verification tests atomically.
 
+## Portable archive and revocation
+
+After creating both attestations, the builder downloads the digest's GitHub attestation JSONL,
+captures current trusted roots, and verifies the SLSA statement again using only that bundle and
+root file while retaining the exact online signer/source policy. It then creates
+`release-archive-manifest.json`, which binds the release report, CycloneDX SBOM, attestation bundle,
+and trusted roots by role, filename, SHA-256, and byte size. The portable package is retained for
+90 days for transfer to approved immutable long-term storage.
+
+Withdrawal is deliberately separate from archive creation. An archived signature can remain
+cryptographically valid after an artifact is no longer authorized, so consumers must also consult
+current online verification, admission, and revocation state. Follow
+[`release-evidence-lifecycle.md`](release-evidence-lifecycle.md) before deleting an attestation or
+GHCR image/referrer.
+
 No release workflow is dispatched automatically by this increment. Publishing the first package
 is an explicit operator action because it creates an externally consumable artifact.
 
@@ -105,8 +120,8 @@ is an explicit operator action because it creates an externally consumable artif
 - generate a multi-architecture manifest when required by deployment targets;
 - install the reviewed GitHub/Sigstore admission charts by retained OCI digest and execute the
   committed exact-workflow policy against positive and negative images;
-- define long-term SBOM, attestation, package, and vulnerability-evidence retention;
-- add revocation/deletion coordination for compromised images and attestations;
+- bind the portable package to approved immutable product-lifetime storage and exercise restore;
+- connect the revocation runbook to an external catalogue and execute a disposable live exercise;
 - add release versioning without mutable tags and an emergency release procedure; and
 - calibrate the control set against the intended ISO/SAE 21434 and supplier evidence obligations.
 

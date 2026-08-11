@@ -95,6 +95,8 @@
 | CORE-F-089 | The Kubernetes API shall deny ATEP Deployment and Job creation or update when any application or init-container image uses a mutable tag, an unapproved repository, a malformed digest, or the committed zero digest. | Admission-policy structure, binding-scope, and negative image tests |
 | CORE-F-090 | The ATEP namespace shall enforce SLSA v1 provenance for the exact GHCR image, repository, `reusable-release-builder.yml` signer workflow, and `main` source ref through the GitHub/Sigstore Policy Controller without image exemptions. | Helm-values contract, reusable-builder compatibility, and future live admission tests |
 | CORE-F-091 | The protected manual release caller shall delegate build, publication, SBOM generation, and attestation to an input-free reusable workflow that verifies its exact workflow identity before registry authentication. | Caller/builder workflow-contract tests |
+| CORE-F-092 | A successful release shall download and verify the exact image's attestation bundle with current trusted roots and emit a manifest binding the release report, SBOM, bundle, and roots by role, name, size, and SHA-256. | Archive-manifest unit and workflow-policy tests |
+| CORE-F-093 | The platform shall document a fail-closed exact-digest revocation procedure that preserves evidence before attestation/package withdrawal and proves rejection by verification, promotion, and admission. | Revocation runbook review and future live exercise |
 
 ## Non-functional requirements
 
@@ -165,3 +167,5 @@
 | CORE-NF-063 | Cluster image admission | admission is fail-closed, applies only to namespaces explicitly labelled for ATEP image enforcement, records denials in audit, and requires the approved GHCR repository with a non-zero lowercase SHA-256 digest |
 | CORE-NF-064 | Cryptographic admission trust | signature verification uses the GitHub Actions issuer, exact workflow subject, SLSA v1 predicate, GitHub/Sigstore trust roots, no exempt images, reviewed chart versions/digests, and the same immutable digest used by promotion |
 | CORE-NF-065 | Reusable-builder input isolation | the reusable builder accepts no workflow inputs or caller secrets, validates its exact `job.workflow_ref`, uses only the caller's reviewed main SHA, and cannot elevate permissions beyond the caller grant |
+| CORE-NF-066 | Portable evidence integrity | the archive accepts only fixed distinct evidence filenames, validates JSON/JSONL structure and source/image consistency, rejects empty/symlink inputs, and records SHA-256 plus byte size without secrets or image layers |
+| CORE-NF-067 | Revocation safety | destructive withdrawal is never automatic; it requires an exact digest, preserved evidence, incident authority, independent review, known-good replacement, and negative verification/admission evidence before release re-enablement |

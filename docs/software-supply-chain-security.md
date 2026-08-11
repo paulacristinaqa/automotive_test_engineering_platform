@@ -27,6 +27,8 @@ graph; dependency updates are accepted only from the canonical workflow evidence
 | Container image | Syft emits a CycloneDX JSON SBOM and Grype rejects high or critical known vulnerabilities | job result and retained artifact |
 | Release provenance | A protected main-only caller gates an input-free reusable builder that publishes one non-replaceable commit tag, signs SLSA provenance and the release CycloneDX SBOM with GitHub/Sigstore, and pushes both attestations to GHCR | release run, reusable-builder identity, GitHub attestations, OCI referrers, and 90-day release evidence |
 | Promotion verification | The exact image digest must verify against this repository, the fixed reusable signer workflow, the supplied main commit/ref, and a GitHub-hosted signing runner before environment promotion | `gh attestation verify` gate and workflow-policy tests |
+| Offline release evidence | The builder downloads the exact digest's attestation bundle and current roots, verifies the archived provenance, and emits a SHA-256/size manifest for the release report, SBOM, bundle, and roots | 90-day transfer package and future immutable archive copy |
+| Revocation | Exact-digest withdrawal preserves evidence first, freezes promotion, removes attestations plus the affected package/referrers under dual review, and proves online verification/admission denial | incident record, archived package, API/package audit, and negative verification evidence |
 | Updates | Dependabot proposes weekly grouped Python updates and weekly Actions/Docker updates | reviewed pull requests |
 
 Workflow permissions are read-only by default. Only CodeQL receives `security-events: write`; the
@@ -95,6 +97,7 @@ acceptance of continued risk.
 
 - protect release environments with approvals and isolated credentials;
 - retain release SBOMs alongside immutable artifacts for the required product lifetime;
+- connect the portable archive to an immutable provider with retention locks, restore exercises, and revocation catalogue;
 - move the reusable builder to a separately governed repository, pin callers to a reviewed SHA, and retain independent provenance evidence;
 - integrate a managed secret service and define emergency credential rotation;
 - define vulnerability-response ownership, service levels, and supplier escalation;
