@@ -16,6 +16,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  terraform-archive-foundation:
+    name: terraform-archive-foundation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.15.8
+          terraform_wrapper: false
+      - name: Verify Terraform formatting
+        run: terraform fmt -check -recursive deploy/terraform
+      - name: Initialize without backend or credentials
+        run: terraform -chdir=deploy/terraform/aws-archive-foundation init -backend=false -lockfile=readonly
+      - name: Validate the archive foundation
+        run: terraform -chdir=deploy/terraform/aws-archive-foundation validate
+      - name: Test the mocked plan without creating resources
+        run: terraform -chdir=deploy/terraform/aws-archive-foundation test
+
   source-supply-chain:
     name: source-and-dependencies
     runs-on: ubuntu-latest

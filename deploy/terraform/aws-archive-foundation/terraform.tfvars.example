@@ -1,0 +1,24 @@
+aws_region         = "eu-west-1"
+archive_account_id = "123456789012"
+archive_bucket_name = "replace-with-a-globally-unique-atep-archive-name"
+
+default_retention_days = 3650
+
+github_oidc_provider_arn = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
+writer_oidc_subject      = "repo:paulacristinaqa/automotive_test_engineering_platform:environment:archive-write"
+restore_oidc_subject     = "repo:paulacristinaqa/automotive_test_engineering_platform:environment:archive-restore"
+
+kms_administrator_role_arns = [
+  "arn:aws:iam::123456789012:role/security/kms-archive-administrator",
+]
+
+audit_bucket_name = "replace-with-an-independently-governed-cloudtrail-bucket"
+audit_kms_key_arn = "arn:aws:kms:eu-west-1:210987654321:key/12345678-1234-1234-1234-1234567890ab"
+
+tags = {
+  Project            = "ATEP"
+  Environment        = "production"
+  DataClassification = "release-evidence"
+  Owner              = "automotive-quality-engineering"
+  CostCenter         = "replace-me"
+}

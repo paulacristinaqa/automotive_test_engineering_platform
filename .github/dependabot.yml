@@ -29,3 +29,11 @@ updates:
       time: "06:30"
       timezone: Europe/Lisbon
     open-pull-requests-limit: 3
+  - package-ecosystem: terraform
+    directory: /deploy/terraform/aws-archive-foundation
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:45"
+      timezone: Europe/Lisbon
+    open-pull-requests-limit: 3

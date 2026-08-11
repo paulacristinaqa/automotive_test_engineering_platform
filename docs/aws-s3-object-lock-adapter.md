@@ -1,8 +1,8 @@
 # AWS S3 Object Lock archive adapter
 
 This document defines the first concrete provider adapter for the ATEP immutable release archive.
-The repository implements and tests the adapter, but does not provision an AWS account, bucket,
-KMS key, IAM role, CloudTrail trail, retention schedule, or live upload.
+The repository implements and tests the adapter plus a Terraform foundation, but does not
+provision an AWS account or execute a live plan/apply, upload, denial, or restore exercise.
 
 ## Safety boundary
 
@@ -27,16 +27,19 @@ governance-bypass, legal-hold administration, KMS administration, or CloudTrail 
 
 ## Required AWS foundation
 
-Before live use, an independently reviewed archive account must provide:
+The declarative foundation in `deploy/terraform/aws-archive-foundation/` now defines the archive
+bucket, archive KMS key, writer/restore roles, bucket policy, and CloudTrail. Before live use, an
+independently reviewed archive account and external control owners must still provide:
 
-- a general-purpose S3 bucket with versioning and Object Lock enabled;
+- an approved account and globally unique archive bucket name for the planned versioned Object
+  Lock bucket;
 - a bucket policy that denies insecure transport, non-KMS writes, the wrong KMS key, retention
   modes other than `COMPLIANCE`, and retention shorter than the approved schedule;
-- a customer-managed symmetric KMS key whose administrators are separate from archive writers;
-- CloudTrail S3 data events and control-plane events exported to independently governed storage;
-- an OIDC-federated writer role with a short session and exact repository/workflow/environment
-  trust conditions;
-- a separate read-only restore role; and
+- existing KMS administrator roles separate from archive writers;
+- independently governed CloudTrail destination storage and encryption with the required delivery
+  policies;
+- an account-wide GitHub OIDC provider and the exact current writer/restore subject claims;
+- encrypted, locked remote Terraform state outside the archive bucket; and
 - budget, account-continuity, monitoring, legal-hold, and incident ownership.
 
 Object Lock protects individual object versions. A later write to the same key could otherwise
@@ -57,6 +60,10 @@ Do not grant `s3:DeleteObject`, `s3:DeleteObjectVersion`,
 `s3:BypassGovernanceRetention`, bucket/lifecycle/policy administration,
 `s3:PutObjectLegalHold`, KMS key administration, IAM administration, or audit administration.
 Production policy simulation must prove these denials before the first export.
+
+Routine CI uses Terraform's mock provider and `command = plan`; it has no AWS credential,
+`id-token: write`, backend initialization, or apply path. See the foundation README for the
+controlled two-reviewer live sequence.
 
 ## CLI contract
 

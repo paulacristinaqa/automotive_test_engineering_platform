@@ -16,3 +16,9 @@ build/
 .lo-profile-*/
 .atep/
 dr-evidence/
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfplan

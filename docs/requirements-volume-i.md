@@ -104,6 +104,10 @@
 | CORE-F-098 | The initial AWS adapter shall restore the local seal before issuing an atomic conditional S3 upload with full-object SHA-256, `COMPLIANCE` retention, exact KMS encryption, expected account, and deterministic object key. | Fake-client upload-contract and configuration tests |
 | CORE-F-099 | The AWS adapter shall verify the returned immutable version through retention-aware metadata and complete streamed read-back before emitting normalized provider and export receipts. | Metadata, tamper, version, retention, and receipt tests |
 | CORE-F-100 | The AWS writer shall be an STS assumed-role session in the expected archive account; permanent IAM-user and cross-account identities shall fail closed. | Identity contract tests and future live OIDC evidence |
+| CORE-F-101 | The AWS foundation shall declare a new non-destroyable, private, versioned S3 bucket with Object Lock enabled at creation, default `COMPLIANCE` retention, SSE-KMS, Bucket Key, and a fixed archive prefix. | Terraform validation, mocked plan, and policy tests |
+| CORE-F-102 | The AWS foundation shall define distinct short-lived writer and restore roles that trust exact wildcard-free GitHub OIDC subjects and grant only their required S3/KMS data-plane operations. | Terraform identity-policy tests and future live IAM simulation |
+| CORE-F-103 | Archive management and S3 object data events shall be recorded by a validated multi-Region CloudTrail delivered to externally governed audit storage and encryption. | Terraform mocked plan and future live CloudTrail evidence |
+| CORE-F-104 | Routine CI shall format, initialize without a backend, validate, and test only mocked Terraform plans without AWS credentials, OIDC issuance, or `apply`. | Security-workflow and Terraform test evidence |
 
 ## Non-functional requirements
 
@@ -183,3 +187,7 @@
 | CORE-NF-072 | AWS non-replacement | exact-prefix version-history preflight rejects versions/delete markers; `If-None-Match: *` is mandatory on the write and any conditional conflict fails without retrying under a new key/version |
 | CORE-NF-073 | AWS least privilege | writer identity is short-lived and has no delete, retention-bypass, legal-hold, lifecycle, bucket-policy, KMS-administration, IAM-administration, or audit-administration authority |
 | CORE-NF-074 | AWS bounded verification | local preflight and provider read-back are streaming, size bounded, exact-version scoped, checksum verified, and produce no cloud credential or raw response evidence |
+| CORE-NF-075 | Archive infrastructure destruction safety | the bucket and KMS key use `prevent_destroy`, the bucket forbids `force_destroy`, Object Lock is enabled at creation, and no routine workflow can apply the stack |
+| CORE-NF-076 | Archive administrative separation | writer, restore, KMS administration, audit storage/encryption, provisioning, and Terraform state are separate trust responsibilities; data-plane roles have no delete, bypass, legal-hold, IAM, KMS-administration, bucket-administration, or audit-administration authority |
+| CORE-NF-077 | Terraform reproducibility | Terraform and the AWS provider are version constrained; the provider lock includes verified Linux and Windows checksums; formatting, validation, and mocked positive/negative plans are CI gates |
+| CORE-NF-078 | Audit independence | CloudTrail log-file validation and management/object data-event coverage are enabled while its destination bucket and KMS key remain outside the archive stack |
