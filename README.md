@@ -71,7 +71,8 @@ An intended end-to-end scenario is:
 - hash-locked Python dependencies, immutable CI actions and a digest-pinned runtime base image;
 - automated secret, dependency, source and container scanning with retained CycloneDX SBOMs;
 - staged Kubernetes/Kustomize deployment targets with Restricted pod controls, default-deny
-  networking, immutable-image fail-closed placeholders, and an external secret-manager contract;
+  networking, immutable-image fail-closed placeholders, native repository/digest admission, and
+  an external secret-manager contract;
 - ordered development/staging/production promotion validation with immutable release inputs,
   fail-closed environment enablement, and retained manifest evidence;
 - protected main-only GHCR publishing with commit-addressed images, signed SLSA provenance and
@@ -189,11 +190,15 @@ PostgreSQL, Redis, and RabbitMQ include health checks used by the local topology
 
 ## Kubernetes baseline
 
-The first production-hardening deployment slice separates namespace/configuration, the Alembic
-migration Job, and application workloads into three Kustomize targets. It intentionally contains
+The first production-hardening deployment slice separates namespace/configuration, cluster-wide
+image admission, the Alembic migration Job, and application workloads into four Kustomize targets. It intentionally contains
 no Secret manifest and uses an invalid all-zero image digest until an approved release overlay
 supplies the real immutable digest. See the [Kubernetes deployment runbook](deploy/kubernetes/README.md)
 for the external secret contract, render checks, controlled rollout, evidence, and rollback rules.
+For Kubernetes 1.30 or later, a separate admission target installs a namespace-scoped, fail-closed native
+admission policy that rejects mutable, foreign, malformed, and all-zero images for ATEP
+Deployments and Jobs. Signature and provenance verification remains a mandatory pre-promotion
+control; the native policy enforces the resulting repository/digest identity inside the cluster.
 The common base leaves workload identity disabled; an environment overlay may enable the
 [SPIFFE/XFCC trust boundary](docs/workload-identity.md) only after proxy mTLS, header replacement,
 direct-path denial, and exact proxy CIDRs are configured.
@@ -341,9 +346,10 @@ trusted-network enforcement, provider-native encrypted backups and PITR evidence
 monitoring, and reviewed operational policies. The repository already enforces a development
 supply-chain baseline with deterministic dependency locks, immutable build inputs, SBOMs, secret
 scanning, dependency auditing, CodeQL, and high/critical container-vulnerability gates.
-The Kubernetes baseline and ordered promotion-evidence workflow are fail-closed and policy-tested,
+The Kubernetes baseline, native image-admission gate, and ordered promotion-evidence workflow are
+fail-closed and policy-tested,
 but no live cluster deployment is performed. Provider-specific secret binding, ingress/TLS,
-protected GitHub environment configuration, trusted-builder/admission enforcement, smoke tests, and
+protected GitHub environment configuration, trusted-builder/signature-aware admission, smoke tests, and
 staged rollout/rollback evidence remain required.
 
 ## Contributing

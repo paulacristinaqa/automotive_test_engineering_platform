@@ -29,6 +29,7 @@ jobs:
       - name: Render Kubernetes deployment targets
         run: |
           kubectl kustomize deploy/kubernetes/foundation > /dev/null
+          kubectl kustomize deploy/kubernetes/admission > /dev/null
           kubectl kustomize deploy/kubernetes/migration > /dev/null
           kubectl kustomize deploy/kubernetes/workloads > /dev/null
       - name: Generate ephemeral integration credentials
