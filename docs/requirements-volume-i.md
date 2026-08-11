@@ -83,6 +83,8 @@
 | CORE-F-077 | Kubernetes workloads shall consume non-sensitive configuration from a ConfigMap and credentials only from a named Secret materialized by an approved external secret provider. | Manifest policy and secret-contract review |
 | CORE-F-078 | The Kubernetes API and outbox worker shall expose bounded liveness/readiness evidence and run with explicit resource, storage, identity, and network controls. | Manifest policy, render, and staged smoke tests |
 | CORE-F-079 | A registered module shall authenticate heartbeat, telemetry, and command operations with one canonical SPIFFE ID forwarded by an approved mTLS proxy while existing capability authorization remains enforced. | Parser, authentication, capability, API-contract, and future live proxy tests |
+| CORE-F-080 | The repository shall provide a bounded PostgreSQL logical backup and isolated restore drill that validates archive readability, Alembic revision, schema, and per-table row counts. | Pure unit tests, workflow policy tests, and disposable CI restore evidence |
+| CORE-F-081 | A successful restore drill shall retain a versioned aggregate evidence report containing timestamps, duration, archive integrity, migration revision, and fingerprints without retaining the database archive or domain records. | Report contract, privacy test, and CI artifact review |
 
 ## Non-functional requirements
 
@@ -139,3 +141,7 @@
 | CORE-NF-049 | Kubernetes network isolation | default-deny ingress/egress is combined with explicit DNS, dependency-port, API-client, and metrics-client allowances on a policy-capable CNI |
 | CORE-NF-050 | Forwarded identity integrity | XFCC is accepted only from configured direct-peer CIDRs, must contain exactly one canonical SPIFFE module URI, and any presented invalid identity fails without token downgrade |
 | CORE-NF-051 | Workload-identity migration safety | Trusted-proxy identity is disabled by default; the legacy hash-only token remains valid only when XFCC is absent, and production enablement requires proxy sanitization, mTLS validation, and direct-path denial |
+| CORE-NF-052 | Backup secret isolation | Database credentials remain in the PostgreSQL service environment and must not appear in process arguments, reports, logs, or retained CI artifacts |
+| CORE-NF-053 | Restore evidence integrity | The dump is non-empty and SHA-256 identified; restore fails on the first database error; revision, ordered schema, and every public-table count must match |
+| CORE-NF-054 | Recovery isolation | Restore targets a randomly named empty database created from `template0`, application writers are quiesced for exact comparison, and temporary archive/database state is removed |
+| CORE-NF-055 | Recovery objectives | Initial database targets are RPO 24 hours and RTO 4 hours until business impact analysis and deployed provider exercises establish approved values |

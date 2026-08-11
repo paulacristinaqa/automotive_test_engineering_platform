@@ -2,11 +2,11 @@
 
 **Subtitle:** Architecture, implementation record, verification strategy, and engineering evidence  
 **Project:** Automotive Test Engineering Platform (ATEP)  
-**Document version:** 0.29.0
+**Document version:** 0.30.0
 
 **Baseline date:** 11 August 2026
 
-**Status:** Living engineering document — initial SPIFFE workload-identity boundary implemented
+**Status:** Living engineering document — initial PostgreSQL restore-drill baseline implemented
 **Language:** English
 
 ## Document Purpose
@@ -63,6 +63,7 @@ The document distinguishes three types of statements:
 | 0.27.0 | 5 August 2026 | Migrated the runtime to official digest-pinned Python 3.14.6/Alpine 3.24 and governed three exact CPython scanner exceptions with owner, review date, expiry, and policy-as-code verification | 98 fast Python tests, Ruff, strict mypy, and four supply-chain policy tests; every other high/critical image finding remains blocking |
 | 0.28.0 | 5 August 2026 | Added phased Kubernetes/Kustomize targets for foundation, migration, and workloads; a vendor-neutral external Secret contract; Restricted pod controls; default-deny networking; probes, storage, and resource bounds; and fail-closed image substitution | 103 fast Python tests, five Kubernetes policy tests, three successful local Kustomize renders, Ruff, strict mypy, and remote render enforcement |
 | 0.29.0 | 11 August 2026 | Added an application-side SPIFFE/XFCC workload-identity boundary with exact module IDs, trusted direct-peer CIDRs, fail-closed ambiguity handling, capability preservation, and a controlled token migration path | 115 fast Python tests passed locally; Ruff and strict mypy passed; live proxy mTLS and certificate-lifecycle evidence remain pending |
+| 0.30.0 | 11 August 2026 | Added a PostgreSQL custom-format backup and isolated restore drill, streamed SHA-256 evidence, Alembic/schema/table-count equality, secret-safe aggregate reporting, initial RPO/RTO targets, and CI retention policy | 123 fast Python tests passed locally; disposable Docker restore evidence is delegated to CI |
 
 ## How to Use This Workbook
 
@@ -94,6 +95,8 @@ The first Increment 3 slice establishes an authoritative catalogue for the modul
 The operational-registry hardening slice separates human administration from workload identity. An administrator issues or rotates a high-entropy module credential whose raw value is returned once and whose SHA-256 digest is the only persisted form. The authenticated module reports `active` or `degraded` and renews a bounded 5–3,600-second lease through heartbeat. A background reconciler marks expired modules `inactive`, appends system audit evidence, and enqueues an availability event. Routine heartbeats deliberately create neither audit records nor events unless status or version changes, preventing high-volume evidence noise.
 
 The initial production-identity slice lets an approved mTLS proxy forward one canonical SPIFFE ID for registered modules. ATEP trusts XFCC only from configured direct-peer networks, accepts only `spiffe://<trust-domain>/atep/module/<module-name>`, and applies the same capability authorization used by the shared-token path. A presented invalid or mismatched identity fails without token downgrade. The feature is disabled by default; proxy deployment, certificate issuance/rotation/revocation, direct-path denial, and live mTLS evidence remain explicit production-hardening work.
+
+The first disaster-recovery slice turns backup from a policy statement into executable restore evidence. After the disposable integration scenario, CI quiesces application writers, creates and validates a portable PostgreSQL custom archive, hashes it in bounded chunks, restores it into a random database created from `template0`, and compares Alembic revision, ordered schema, and every public-table row count. The dump and temporary database are deleted; a versioned aggregate report retained for 14 days contains no credentials, table names, identifiers, or domain rows. Initial 24-hour RPO and four-hour RTO values remain engineering targets until provider-native encrypted backup, immutable retention, WAL/PITR, artifact coordination, and deployed exercises exist.
 
 The initial automotive-integration slice connects the Volume I control plane to the separately deployed CarSystemUI Android Automotive project. ATEP and CarSystemUI are treated as one coordinated testing platform for electric, hybrid, and autonomous vehicles while preserving independent repositories and release histories. Administrators manage canonical vehicle records with JWT/RBAC. An unattended Vehicle Gateway authenticates with a hash-only module credential, declares `vehicle.telemetry.publish`, and sends timezone-aware observations only through the public API. Each client event ID is idempotent: an exact retry returns the original receipt, while reuse for different data returns a stable conflict. The observation and `atep.vehicle.telemetry.received.v1` outbox event are committed atomically.
 
@@ -144,7 +147,8 @@ The initial design deliberately starts as a modular monolith rather than a colle
 | Software supply-chain security | Implemented baseline | Hash locks, immutable build inputs, Gitleaks, pip-audit, CodeQL, CycloneDX SBOMs, Grype image gate, and Dependabot |
 | Kubernetes deployment | Implemented initial hardening slice | Independently renderable foundation/migration/workload targets, external Secret contract, Restricted controls, default deny, probes, resource bounds, and fail-closed digest placeholder |
 | SPIFFE workload identity | Implemented initial application slice | Exact trusted-proxy XFCC identity, no downgrade, registry match, capability preservation, and token migration; live mTLS proxy evidence pending |
-| Automated verification | Implemented | 115 fast tests plus expanded disposable black-box and live alert-delivery scenarios, 27 Android tests, Ruff, strict mypy, Android lint/build, Kustomize rendering, and integration/security CI workflows |
+| PostgreSQL disaster recovery | Implemented initial CI slice | Custom logical backup, isolated restore, migration/schema/count equality, aggregate evidence, and cleanup; provider PITR pending |
+| Automated verification | Implemented | 123 fast tests plus expanded disposable black-box, alert-delivery, and restore-drill scenarios, 27 Android tests, Ruff, strict mypy, Android lint/build, Kustomize rendering, and integration/security CI workflows |
 
 ## 2. Scope and Boundaries
 
@@ -405,6 +409,14 @@ External dashboards, test automation clients, and future ATEP modules call the C
 **Rationale.** A certificate-validating proxy can terminate and standardize mTLS without coupling FastAPI to a specific service-mesh implementation. Exact namespace and peer validation limits header spoofing, while no-downgrade behavior prevents an attacker from hiding a bad certificate identity behind a valid shared secret.
 
 **Consequences.** ATEP does not itself prove certificate validity: production must configure proxy certificate validation, XFCC replacement, direct-path denial, separate environment trust domains, certificate lifecycle, and live rotation/revocation evidence. The feature remains disabled in the common base until those controls exist.
+
+### ADR-024 — Prove Database Backups through Isolated Restore
+
+**Decision.** Treat archive creation as incomplete evidence. After application writers are quiesced in the disposable environment, create a PostgreSQL custom-format logical dump without ownership or ACLs, validate its catalogue, restore it into a random empty database created from `template0`, and require equality of Alembic revision, ordered schema fingerprint, and every public-table row count. Hash the archive in streaming chunks, then delete both archive and restore database. Retain only a versioned aggregate report.
+
+**Rationale.** A successful `pg_dump` exit cannot prove that an archive is readable, complete for the application, or operationally restorable. An isolated restore exercises the recovery path. Aggregate hashes and totals provide reviewable evidence without uploading a dump that contains protected data.
+
+**Consequences.** The CI drill proves logical portability in a disposable PostgreSQL environment, not production RPO/RTO. Production requires provider-native encryption, immutability, base backups and WAL/PITR, independent keys and ownership, coordinated artifact-object recovery, monitoring, and scheduled operator exercises. Cluster-global roles and tablespaces remain infrastructure/provider responsibilities because the portable application dump intentionally excludes ownership and privileges.
 
 ## 5. Technology Stack and Rationale
 
@@ -770,6 +782,8 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | CORE-F-077 | Kubernetes workloads shall consume non-sensitive configuration from a ConfigMap and credentials only from an externally materialized named Secret. | ConfigMap plus `atep-runtime-secrets` contract; no Secret manifest | K8S-002, K8S-003 |
 | CORE-F-078 | The Kubernetes API and outbox worker shall expose bounded probes and use explicit resource, storage, identity, and network controls. | Deployment, PVC, Service, and NetworkPolicy manifests | K8S-002 through K8S-004 |
 | CORE-F-079 | A registered module shall authenticate protected workload operations with one canonical SPIFFE ID forwarded by an approved mTLS proxy while capability authorization remains enforced. | Workload identity parser/dependency and module authentication | WID-001 through WID-009 |
+| CORE-F-080 | The repository shall exercise a bounded PostgreSQL logical backup and isolated restore and validate archive, migration, schema, and table-count integrity. | Restore-drill tool and CI workflow | DR-001 through DR-010 |
+| CORE-F-081 | Successful recovery evidence shall be versioned and aggregate-only, excluding credentials, archives, table names, identifiers, and domain rows. | JSON report and retention policy | DR-007, DR-008, DR-010 |
 
 ### 8.2 Non-Functional Requirements
 
@@ -824,6 +838,10 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | CORE-NF-049 | Kubernetes network isolation | Default-deny plus explicit DNS, dependency-port, approved API-client, and approved metrics-client access on a policy-capable CNI | K8S-002, K8S-004 |
 | CORE-NF-050 | Forwarded identity integrity | XFCC is trusted only from configured direct peers, contains exactly one canonical SPIFFE module URI, and fails without token downgrade when invalid | WID-002 through WID-006 |
 | CORE-NF-051 | Workload-identity migration safety | Disabled by default; token migration works only without XFCC; production requires proxy sanitization, mTLS validation, and direct-path denial | WID-007, WID-009 |
+| CORE-NF-052 | Backup secret isolation | Credentials remain in the PostgreSQL environment and are absent from arguments, reports, logs, and CI artifacts | DR-008, DR-010 |
+| CORE-NF-053 | Restore evidence integrity | Non-empty SHA-256 archive; first-error restore; equal revision, schema, and all table counts | DR-002 through DR-007 |
+| CORE-NF-054 | Recovery isolation | Random `template0` database, quiesced comparison, and cleanup on success/failure | DR-004, DR-009, DR-010 |
+| CORE-NF-055 | Recovery objectives | Initial database RPO 24 hours and RTO 4 hours remain targets until provider exercises establish approved evidence | DR-011, DR-012 |
 
 ### 8.3 Definition of Done for an Increment
 
@@ -845,7 +863,7 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | Check | Result | Evidence summary |
 |---|---|---|
 | Python syntax compilation | Passed | Application, tests, and migrations compiled successfully |
-| Unit and API contract suite | Passed | 115 tests passed locally; one Docker-marked scenario deselected |
+| Unit and API contract suite | Passed | 123 tests passed locally; one Docker-marked scenario deselected |
 | Ruff lint | Passed | No findings after corrections |
 | mypy strict analysis | Passed | Strict analysis passed for application and test modules |
 | Alembic migration chain | Passed | Revisions `0001` through `0009` applied successfully to a clean PostgreSQL database in the disposable Docker topology |
@@ -878,6 +896,7 @@ Requirements use stable identifiers. Tests should reference requirement IDs, and
 | Android lint | Passed with warnings | `lintDebug` completed with zero errors and 14 non-blocking warnings covering the AAOS reflection bridge, KTX suggestions, dependency updates, target level, backup rules, and application icon |
 | GitHub Actions workflow | Defined, not remotely executed | Fast gates and disposable integration execution are configured for pull requests and `main` pushes |
 | SPIFFE/XFCC focused verification | Passed locally | Exact identity, ambiguity rejection, trusted-peer enforcement, disabled mode, token migration, no downgrade, capability preservation, and OpenAPI headers passed; live proxy mTLS remains pending |
+| Disaster-recovery focused verification | Passed locally | Identifier boundaries, deterministic fingerprints, streamed archive hash/size, secret-free Compose arguments, and CI evidence policy passed; live disposable restore delegated to remote CI |
 
 ### 9.2 Existing Automated Tests
 
@@ -1272,6 +1291,23 @@ The fast local suite and repeated remote disposable CI runs prove clean-database
 | WID-008 | Authenticate a module identity lacking the required capability. | HTTP/domain authorization remains denied with the stable capability error. | Implemented unit evidence / P0 |
 | WID-009 | Exercise real proxy mTLS, XFCC replacement, certificate rotation/revocation, and direct-path denial. | Only a currently trusted certificate reaches ATEP with one sanitized identity. | Planned deployment evidence / P0 |
 
+### 11.15 PostgreSQL Backup and Disaster Recovery
+
+| ID | Test and objective | Expected result | Status / priority |
+|---|---|---|---|
+| DR-001 | Validate every database, Compose, service, and table identifier used in commands. | Unsafe case, punctuation, length, or command syntax is rejected before subprocess execution. | Implemented unit evidence / P0 |
+| DR-002 | Create a custom-format logical backup without owners or privileges. | Archive is non-empty, bounded-hashable, and portable to the restore operator. | Tool implemented; disposable CI execution pending / P0 |
+| DR-003 | Inspect the archive with `pg_restore --list`. | Unreadable or malformed archive fails before database creation or validation. | Tool implemented; disposable CI execution pending / P0 |
+| DR-004 | Create a random database from `template0` and restore with first-error failure. | Restore completes only when every archive command succeeds in isolation. | Tool implemented; disposable CI execution pending / P0 |
+| DR-005 | Compare source and restored Alembic revisions. | Exactly one identical revision is present in both databases. | Parser unit evidence; disposable equality pending / P0 |
+| DR-006 | Compare ordered public schema fingerprints. | Table/column metadata hashes and table catalogues match exactly. | Fingerprint implementation; disposable equality pending / P0 |
+| DR-007 | Compare every public-table row count. | All counts match; report retains only table total, row total, and count-map SHA-256. | Deterministic fingerprint test; disposable equality pending / P0 |
+| DR-008 | Inspect commands, report, workflow, and artifacts for secrets or domain content. | Credentials stay in the container environment; no dump, table name, identifier, or row is retained. | Unit and workflow-policy evidence / P0 |
+| DR-009 | Force success and failure cleanup paths. | Temporary local/remote dump and random restore database are removed without hiding the primary error. | Implementation review; failure-injection expansion planned / P0 |
+| DR-010 | Run the drill after quiescing API and outbox writers and retain the aggregate report. | CI uploads only `atep-dr-report.json` for 14 days and always removes the disposable stack. | Workflow policy evidence; remote execution pending / P0 |
+| DR-011 | Restore a provider base backup plus WAL to a selected timestamp. | Verified recovery point meets approved RPO with encrypted immutable source evidence. | Planned production exercise / P0 |
+| DR-012 | Execute post-recovery application smoke tests. | Readiness, authentication, outbox publication, audit search, and artifact consistency pass within approved RTO. | Planned deployed exercise / P0 |
+
 ## 12. Suggested CI/CD Quality Pipeline
 
 1. **Source checks:** secret scan, license policy, dependency lock review.
@@ -1315,7 +1351,7 @@ Pipeline artifacts should include test reports, coverage, OpenAPI schema, migrat
 | R-007 | The global API error schema is not snapshot/version compatibility tested. | An accidental shape change may break clients. | Add OpenAPI snapshots and consumer contract checks. | Medium |
 | R-008 | Dependency locks, immutable inputs, update automation, SBOMs, and scanning are implemented, but release signing and verifiable provenance are not. | A compromised authorised build or unsigned artifact may still be substituted downstream. | Add isolated release builders, signatures, attestations, verification policy, and long-term release evidence. | Medium |
 | R-009 | Bounded dependency and storage telemetry exists, but database-pool saturation, Redis/RabbitMQ provider internals, durable quota/retention signals, and asynchronous trace links remain incomplete. | Some saturation, capacity-policy, or cross-process failures may still require provider consoles and log-centric investigation. | Add provider exporters/pool metrics and OpenTelemetry links with load, outage, and cardinality evidence. | Medium |
-| R-010 | No formal backup/restore evidence. | Data recovery capability is unknown. | Define RPO/RTO, automated backups, restore drills, and evidence retention. | High |
+| R-010 | The logical PostgreSQL restore drill and initial RPO/RTO targets are implemented, but provider-native backup, immutable retention, WAL/PITR, artifact-object coordination, and deployed recovery exercises are not. | CI proves portable logical restore only; regional failure, point-in-time loss, key access, and full platform recovery remain unproven. | Configure encrypted independent backups and WAL, align artifact snapshots, alert on age/failure, and retain quarterly restore plus annual disaster evidence against approved objectives. | High |
 | R-011 | Rate limiting uses fixed windows and the direct network peer when no bearer credential is present. | Bursts near a window boundary may temporarily exceed the nominal rate; a shared reverse-proxy address may group unrelated clients. | Calibrate thresholds with load tests and implement a reviewed trusted-proxy attribution policy before public deployment. | High |
 | R-012 | Shared-secret workload authentication, an application-side SPIFFE boundary, and reconciliation are implemented, but per-instance identity and multi-replica scheduler ownership are not. | A retained token can still be stolen during migration, and behavior under independently scheduled API replicas is not yet evidenced. | Complete token retirement after live mTLS evidence, add instance leases and reconciliation metrics, and define explicit leader/scheduler ownership before dynamic routing. | Medium |
 | R-013 | The development artifact adapter uses node-local filesystem storage and external object creation cannot share the PostgreSQL transaction. | Multiple replicas may not see the same content; a process crash between object promotion and metadata commit can leave an orphan; unscanned evidence can carry unsafe content. | Use shared encrypted S3-compatible storage in deployed environments; add orphan reconciliation, malware scanning, retention/legal-hold policy, quotas, signed internal retrieval, and lifecycle metrics. | High |
@@ -1364,7 +1400,8 @@ Pipeline artifacts should include test reports, coverage, OpenAPI schema, migrat
   baseline; approved digest overlays, provider binding, ingress/TLS, live evidence, shared storage,
   and multi-replica leadership remain;
 - validating mTLS proxy, certificate lifecycle, direct-path denial, and live identity evidence;
-- backup, restore, retention, and disaster-recovery exercises;
+- logical PostgreSQL restore drill and aggregate CI evidence — implemented initial slice;
+- provider-native encrypted backup, immutable retention, artifact coordination, PITR/WAL, and deployed disaster exercises — production hardening;
 - performance, resilience, and security-policy calibration;
 - signed artifacts, verifiable provenance, long-term release evidence, and controlled promotion across environments.
 
@@ -1506,6 +1543,7 @@ Application rollback is safe only when the previous version is compatible with t
 | Supply-chain controls and evidence | `requirements.lock`, `requirements-dev.lock`, `Dockerfile`, `.grype.yaml`, `.github/dependabot.yml`, `.github/workflows/security.yml`, `docs/software-supply-chain-security.md`, and `tests/test_supply_chain_security.py` |
 | Kubernetes deployment baseline | `deploy/kubernetes/`, `deploy/kubernetes/README.md`, and `tests/test_kubernetes_manifests.py` |
 | SPIFFE/XFCC workload identity | `src/atep/registry/workload_identity.py`, `tests/test_workload_identity.py`, `docs/workload-identity.md`, configuration examples, and OpenAPI contract tests |
+| PostgreSQL backup and restore drill | `tools/run_postgres_restore_drill.py`, `tests/test_disaster_recovery.py`, `.github/workflows/integration.yml`, and `docs/disaster-recovery.md` |
 | Automated tests | `tests/test_security.py`, `test_identity.py`, `test_user_administration.py`, `test_role_catalogue.py`, `test_audit_query.py`, `test_rate_limit.py`, `test_module_registry.py`, `test_module_health.py`, `test_vehicle_telemetry.py`, `test_vehicle_commands.py`, `test_test_runs.py`, `test_test_jobs.py`, `test_artifacts.py`, `test_observability.py`, `test_domain_observability.py`, `test_dependency_storage_observability.py`, `test_alert_delivery.py`, `test_observability_assets.py`, `test_supply_chain_security.py`, `test_kubernetes_manifests.py`, and `test_api_contract.py` |
 | Architecture summary | `docs/architecture.md` |
 | Requirements baseline | `docs/requirements-volume-i.md` |

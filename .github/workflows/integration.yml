@@ -126,6 +126,21 @@ jobs:
           exit 1
       - name: Run integration tests
         run: python -m pytest -p no:cacheprovider -o addopts= -m integration tests/integration
+      - name: Quiesce application writers for restore evidence
+        run: docker compose -p atep-integration -f compose.integration.yaml stop api outbox-worker
+      - name: Exercise PostgreSQL logical backup and isolated restore
+        run: |
+          python tools/run_postgres_restore_drill.py \
+            --compose-file compose.integration.yaml \
+            --project-name atep-integration \
+            --output-directory dr-evidence
+      - name: Retain non-sensitive disaster-recovery evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: atep-postgres-restore-drill
+          path: dr-evidence/atep-dr-report.json
+          if-no-files-found: error
+          retention-days: 14
       - name: Show service logs on failure
         if: failure()
         run: docker compose -p atep-integration -f compose.integration.yaml -f compose.observability.yaml --profile observability logs --no-color --tail 200
