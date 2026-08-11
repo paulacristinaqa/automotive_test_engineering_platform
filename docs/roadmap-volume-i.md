@@ -55,7 +55,9 @@
   module identity, trusted proxy CIDRs, fail-closed parsing, capability preservation, and token
   migration path; proxy deployment, certificate lifecycle, direct-path denial, and live mTLS
   evidence remain hardening)
-- backup, restore, retention, and disaster-recovery exercises
+- PostgreSQL logical backup, isolated restore, aggregate integrity evidence, and initial RPO/RTO
+  policy (implemented initial CI slice; provider-native encrypted backup, immutable retention,
+  artifact-store coordination, PITR/WAL, and deployed disaster exercises remain hardening)
 - SLO threshold calibration, production incident-provider routing, load tests, artifact signing,
   provenance verification, and security-policy calibration
 - CI/CD promotion through development, staging, and production

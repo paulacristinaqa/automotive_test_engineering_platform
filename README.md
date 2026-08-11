@@ -52,6 +52,7 @@ An intended end-to-end scenario is:
 - persistent module and versioned capability catalogue;
 - raw-once, hash-only module workload credentials;
 - exact SPIFFE module identity from configured trusted mTLS proxies, disabled by default;
+- automated PostgreSQL logical backup and isolated restore evidence in disposable CI;
 - authenticated module heartbeats with bounded availability leases;
 - automatic reconciliation of expired modules to `inactive`;
 - permission-protected aggregate module health with configurable availability objective;
@@ -272,7 +273,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\run_integration_test
 
 The runner creates ephemeral credentials, uses isolated ports, applies every migration, and
 removes its containers, network, and volumes after execution. The latest local evidence records
-**115 fast tests plus one expanded Docker integration scenario** passing. The CarSystemUI
+**123 fast tests plus one expanded Docker integration and restore-drill scenario** passing. The CarSystemUI
 companion project also passes 27 unit tests, Android lint, and debug APK assembly for this slice.
 
 ## Engineering documentation
@@ -284,6 +285,7 @@ companion project also passes 27 unit tests, Android lint, and debug APK assembl
 - [Observability baseline and runbook](docs/observability.md)
 - [Software supply-chain security](docs/software-supply-chain-security.md)
 - [Workload identity and mTLS trust boundary](docs/workload-identity.md)
+- [PostgreSQL backup and disaster-recovery baseline](docs/disaster-recovery.md)
 - [Engineering workbook — editable source](docs/workbook-volume-i.md)
 - [Engineering workbook — formatted document](docs/ATEP_Volume_I_Engineering_Workbook.docx)
 
@@ -329,7 +331,7 @@ hardening; local dependency/storage signals and Alertmanager delivery are implem
 ATEP is currently a development and portfolio platform, not a production vehicle-control system.
 Do not reuse example infrastructure credentials outside an isolated local environment. Production
 deployment still requires managed secrets, a deployed mTLS proxy and certificate lifecycle,
-trusted-network enforcement, backup/restore evidence, artifact signing and provenance verification, production
+trusted-network enforcement, provider-native encrypted backups and PITR evidence, artifact signing and provenance verification, production
 monitoring, and reviewed operational policies. The repository already enforces a development
 supply-chain baseline with deterministic dependency locks, immutable build inputs, SBOMs, secret
 scanning, dependency auditing, CodeQL, and high/critical container-vulnerability gates.

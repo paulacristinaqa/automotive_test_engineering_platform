@@ -55,6 +55,19 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw "Integration test suite failed."
     }
+
+    docker compose -p $ProjectName -f $composeFile stop api outbox-worker
+    if ($LASTEXITCODE -ne 0) {
+        throw "Application writers could not be quiesced before the restore drill."
+    }
+
+    & $python tools\run_postgres_restore_drill.py `
+        --compose-file $composeFile `
+        --project-name $ProjectName `
+        --output-directory (Join-Path $root "dr-evidence")
+    if ($LASTEXITCODE -ne 0) {
+        throw "PostgreSQL backup and restore drill failed."
+    }
     $failed = $false
 }
 finally {

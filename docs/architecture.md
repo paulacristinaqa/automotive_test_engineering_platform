@@ -171,6 +171,13 @@ flowchart LR
    verification and header replacement; ATEP owns canonical identity-to-registry matching and
    capability authorization. The shared module token remains a migration path only when XFCC is
    absent.
+32. **Recovery is evidenced by restore, not archive creation alone.** The initial application
+   database drill creates a portable custom-format PostgreSQL dump, validates the archive, restores
+   it into a random empty database, and compares Alembic revision, ordered schema, and every public
+   table count. Application writers are quiesced only for deterministic comparison. CI retains an
+   aggregate hash report, never the protected dump. Provider-native encrypted backups, immutable
+   retention, WAL/PITR, artifact-object coordination, and deployed RPO/RTO evidence remain separate
+   production controls.
 
 ## Initial bounded contexts
 
@@ -226,6 +233,8 @@ contracts live under an explicit version and remain backward compatible during m
   status cannot be asserted through the administrative update API.
 - SPIFFE module identity is accepted only through a configured trusted mTLS proxy. XFCC input is
   canonical, single-valued, fail-closed, and cannot grant capabilities absent from the registry.
+- PostgreSQL recovery evidence requires an isolated successful restore and equality checks. CI
+  deletes the logical dump and temporary database and retains no credentials, table names, or rows.
 - Vehicle Gateway telemetry requires both a valid module credential and the
   `vehicle.telemetry.publish` capability. Replayed event IDs cannot create duplicate evidence.
 - Vehicle command claim and acknowledgement require the `vehicle.commands.consume` capability;

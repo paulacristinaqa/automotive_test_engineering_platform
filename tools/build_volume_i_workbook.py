@@ -285,7 +285,7 @@ def configure_sections(doc: Document) -> None:
             Inches(6.5), WD_TAB_ALIGNMENT.RIGHT
         )
         set_font(
-            footer_paragraph.add_run("ATEP Engineering Workbook  |  Version 0.29.0"),
+            footer_paragraph.add_run("ATEP Engineering Workbook  |  Version 0.30.0"),
             8.5,
             MUTED,
         )
@@ -327,9 +327,9 @@ def add_cover(doc: Document) -> None:
 
     meta = doc.add_table(rows=4, cols=2)
     rows = [
-        ("Document version", "0.29.0"),
+        ("Document version", "0.30.0"),
         ("Baseline date", "11 August 2026"),
-        ("Status", "Living document - initial SPIFFE workload identity implemented"),
+        ("Status", "Living document - initial PostgreSQL restore drill implemented"),
         ("Language", "English"),
     ]
     for row, (label, value) in zip(meta.rows, rows, strict=True):
