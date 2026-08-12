@@ -19,6 +19,136 @@ class VehicleStatus(StrEnum):
     INACTIVE = "inactive"
 
 
+class VehicleOperationalMode(StrEnum):
+    PARKED = "parked"
+    READY = "ready"
+    DRIVING = "driving"
+    CHARGING = "charging"
+    FAULT = "fault"
+
+
+class TransmissionGear(StrEnum):
+    PARK = "park"
+    REVERSE = "reverse"
+    NEUTRAL = "neutral"
+    DRIVE = "drive"
+
+
+class ChargingStatus(StrEnum):
+    DISCONNECTED = "disconnected"
+    CONNECTED = "connected"
+    CHARGING = "charging"
+    COMPLETE = "complete"
+    FAULT = "fault"
+
+
+class ExteriorLightMode(StrEnum):
+    OFF = "off"
+    POSITION = "position"
+    LOW_BEAM = "low_beam"
+    HIGH_BEAM = "high_beam"
+    AUTO = "auto"
+
+
+class IndicatorMode(StrEnum):
+    OFF = "off"
+    LEFT = "left"
+    RIGHT = "right"
+    HAZARD = "hazard"
+
+
+class BatteryState(BaseModel):
+    state_of_charge_pct: float = Field(default=80.0, ge=0, le=100)
+    state_of_health_pct: float = Field(default=100.0, ge=0, le=100)
+    pack_voltage_v: float = Field(default=400.0, ge=0, le=1000)
+    pack_current_a: float = Field(default=0.0, ge=-2000, le=2000)
+    temperature_c: float = Field(default=22.0, ge=-50, le=120)
+    contactors_closed: bool = False
+    charging_status: ChargingStatus = ChargingStatus.DISCONNECTED
+
+
+class PowertrainState(BaseModel):
+    motor_enabled: bool = False
+    gear: TransmissionGear = TransmissionGear.PARK
+    speed_kph: float = Field(default=0.0, ge=0, le=400)
+    requested_torque_nm: float = Field(default=0.0, ge=-3000, le=3000)
+    delivered_torque_nm: float = Field(default=0.0, ge=-3000, le=3000)
+
+
+class BrakeState(BaseModel):
+    pedal_pct: float = Field(default=0.0, ge=0, le=100)
+    hydraulic_pressure_bar: float = Field(default=0.0, ge=0, le=300)
+    parking_brake_applied: bool = True
+    abs_active: bool = False
+
+
+class SteeringState(BaseModel):
+    wheel_angle_deg: float = Field(default=0.0, ge=-720, le=720)
+    assist_active: bool = False
+
+
+class LightingState(BaseModel):
+    exterior_mode: ExteriorLightMode = ExteriorLightMode.OFF
+    brake_lights: bool = False
+    indicator: IndicatorMode = IndicatorMode.OFF
+
+
+class DigitalVehicleStatePayload(BaseModel):
+    operational_mode: VehicleOperationalMode = VehicleOperationalMode.PARKED
+    battery: BatteryState = Field(default_factory=BatteryState)
+    powertrain: PowertrainState = Field(default_factory=PowertrainState)
+    brakes: BrakeState = Field(default_factory=BrakeState)
+    steering: SteeringState = Field(default_factory=SteeringState)
+    lighting: LightingState = Field(default_factory=LightingState)
+
+    @model_validator(mode="after")
+    def enforce_vehicle_invariants(self) -> "DigitalVehicleStatePayload":
+        moving = self.powertrain.speed_kph > 0
+        if moving and self.operational_mode is not VehicleOperationalMode.DRIVING:
+            raise ValueError("a moving vehicle must be in driving mode")
+        if moving and self.powertrain.gear not in {
+            TransmissionGear.DRIVE,
+            TransmissionGear.REVERSE,
+        }:
+            raise ValueError("a moving vehicle must use drive or reverse gear")
+        if moving and (
+            not self.powertrain.motor_enabled
+            or not self.battery.contactors_closed
+            or self.brakes.parking_brake_applied
+        ):
+            raise ValueError(
+                "a moving vehicle requires motor, contactors, and released parking brake"
+            )
+        charging = self.battery.charging_status is ChargingStatus.CHARGING
+        if charging and (
+            self.operational_mode is not VehicleOperationalMode.CHARGING
+            or moving
+            or self.powertrain.gear is not TransmissionGear.PARK
+            or self.powertrain.motor_enabled
+            or not self.battery.contactors_closed
+        ):
+            raise ValueError(
+                "charging requires stationary park mode with motor off and contactors closed"
+            )
+        if self.operational_mode is VehicleOperationalMode.PARKED and moving:
+            raise ValueError("a parked vehicle cannot be moving")
+        if not self.powertrain.motor_enabled and (
+            self.powertrain.requested_torque_nm != 0 or self.powertrain.delivered_torque_nm != 0
+        ):
+            raise ValueError("a disabled motor cannot request or deliver torque")
+        return self
+
+
+class DigitalVehicleStateReplace(DigitalVehicleStatePayload):
+    expected_version: int = Field(ge=1)
+
+
+class DigitalVehicleStateResponse(DigitalVehicleStatePayload):
+    vehicle_id: str
+    version: int
+    updated_at: datetime
+
+
 class VehicleCommandKind(StrEnum):
     SET_PROPERTY = "set_property"
 

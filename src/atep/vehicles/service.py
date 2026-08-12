@@ -14,12 +14,15 @@ from atep.core.errors import (
     TelemetryEventConflictError,
     VehicleCommandConflictError,
     VehicleCommandStateError,
+    VehicleStateVersionConflictError,
 )
 from atep.core.security import generate_module_token, hash_module_token, verify_module_token
 from atep.events.outbox import enqueue_event
 from atep.registry.models import PlatformModule
-from atep.vehicles.models import Vehicle, VehicleCommand, VehicleTelemetryEvent
+from atep.vehicles.models import Vehicle, VehicleCommand, VehicleDigitalState, VehicleTelemetryEvent
 from atep.vehicles.schemas import (
+    DigitalVehicleStatePayload,
+    DigitalVehicleStateReplace,
     TelemetryIngest,
     VehicleCommandAcknowledge,
     VehicleCommandCreate,
@@ -47,6 +50,16 @@ async def create_vehicle(
         model=command.model,
         description=command.description,
         status=VehicleStatus.REGISTERED.value,
+    )
+    baseline = DigitalVehicleStatePayload()
+    vehicle.digital_state = VehicleDigitalState(
+        operational_mode=baseline.operational_mode.value,
+        battery_state=baseline.battery.model_dump(mode="json"),
+        powertrain_state=baseline.powertrain.model_dump(mode="json"),
+        brake_state=baseline.brakes.model_dump(mode="json"),
+        steering_state=baseline.steering.model_dump(mode="json"),
+        lighting_state=baseline.lighting.model_dump(mode="json"),
+        version=1,
     )
     try:
         async with session.begin_nested():
@@ -80,6 +93,93 @@ async def require_vehicle(session: AsyncSession, identifier: str) -> Vehicle:
     if vehicle is None:
         raise ResourceNotFoundError("vehicle")
     return vehicle
+
+
+async def require_vehicle_digital_state(
+    session: AsyncSession, *, vehicle: Vehicle, for_update: bool = False
+) -> VehicleDigitalState:
+    query = select(VehicleDigitalState).where(VehicleDigitalState.vehicle_id == vehicle.id)
+    if for_update:
+        query = query.with_for_update()
+    state = await session.scalar(query)
+    if state is None:
+        raise ResourceNotFoundError("vehicle_state")
+    return state
+
+
+def digital_state_payload(state: VehicleDigitalState) -> DigitalVehicleStatePayload:
+    return DigitalVehicleStatePayload.model_validate(
+        {
+            "operational_mode": state.operational_mode,
+            "battery": state.battery_state,
+            "powertrain": state.powertrain_state,
+            "brakes": state.brake_state,
+            "steering": state.steering_state,
+            "lighting": state.lighting_state,
+        }
+    )
+
+
+async def replace_vehicle_digital_state(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    command: DigitalVehicleStateReplace,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> tuple[VehicleDigitalState, bool]:
+    state = await require_vehicle_digital_state(session, vehicle=vehicle, for_update=True)
+    requested = DigitalVehicleStatePayload.model_validate(
+        command.model_dump(exclude={"expected_version"})
+    )
+    current = digital_state_payload(state)
+    if command.expected_version != state.version:
+        if command.expected_version == state.version - 1 and requested == current:
+            return state, True
+        raise VehicleStateVersionConflictError(current_version=state.version)
+    if requested == current:
+        return state, True
+
+    previous_version = state.version
+    state.operational_mode = requested.operational_mode.value
+    state.battery_state = requested.battery.model_dump(mode="json")
+    state.powertrain_state = requested.powertrain.model_dump(mode="json")
+    state.brake_state = requested.brakes.model_dump(mode="json")
+    state.steering_state = requested.steering.model_dump(mode="json")
+    state.lighting_state = requested.lighting.model_dump(mode="json")
+    state.version += 1
+    await session.flush()
+    await session.refresh(state, attribute_names=["updated_at"])
+    payload = {
+        "vehicle_id": vehicle.identifier,
+        "previous_version": previous_version,
+        "version": state.version,
+        "operational_mode": state.operational_mode,
+        "state": requested.model_dump(mode="json"),
+    }
+    enqueue_event(
+        session,
+        event_type="atep.digital_vehicle.state.updated.v1",
+        aggregate_type="digital_vehicle",
+        aggregate_id=vehicle.id,
+        payload=payload,
+        correlation_id=correlation_id,
+    )
+    record_audit(
+        session,
+        actor_user_id=actor_user_id,
+        action="digital_vehicle.state_updated",
+        resource_type="vehicle",
+        resource_id=vehicle.id,
+        correlation_id=correlation_id,
+        details={
+            "vehicle_id": vehicle.identifier,
+            "previous_version": previous_version,
+            "version": state.version,
+            "operational_mode": state.operational_mode,
+        },
+    )
+    return state, False
 
 
 async def list_vehicles(

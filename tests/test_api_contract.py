@@ -165,6 +165,11 @@ def test_vehicle_gateway_contracts_and_safe_pagination_are_published() -> None:
     assert telemetry_parameters["limit"]["maximum"] == 500
     assert telemetry_parameters["offset"]["maximum"] == 1_000_000
 
+    state_path = paths["/api/v1/vehicles/{vehicle_id}/state"]
+    assert {"get", "put"} <= set(state_path)
+    replace_schema = state_path["put"]["requestBody"]["content"]["application/json"]["schema"]
+    assert replace_schema["$ref"].endswith("/DigitalVehicleStateReplace")
+
 
 def test_vehicle_command_delivery_contracts_are_published() -> None:
     paths = core_app.openapi()["paths"]

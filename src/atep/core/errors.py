@@ -112,6 +112,16 @@ class VehicleCommandStateError(ApplicationError):
         )
 
 
+class VehicleStateVersionConflictError(ApplicationError):
+    def __init__(self, *, current_version: int) -> None:
+        super().__init__(
+            code="vehicle_state_version_conflict",
+            message="The digital vehicle state was changed by another operation.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_version": current_version},
+        )
+
+
 class TestRunConflictError(ApplicationError):
     def __init__(self) -> None:
         super().__init__(

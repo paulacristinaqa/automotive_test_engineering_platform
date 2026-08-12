@@ -12,7 +12,8 @@ the integrated QA ecosystem of an automotive manufacturer: virtual vehicles and 
 networks, diagnostics, electric-powertrain behavior, automated testing, observability, AI-assisted
 analysis, and enterprise fleet capabilities.
 
-The repository currently contains the executable foundation of **Volume I — Core Platform**.
+The repository contains the executable foundation of **Volume I — Core Platform** and the
+first bounded increment of **Volume II — Digital Vehicle**.
 Implemented behavior is backed by requirements, architecture decisions, migrations, automated
 tests, a disposable integration environment, and an English engineering workbook.
 
@@ -57,6 +58,8 @@ An intended end-to-end scenario is:
 - automatic reconciliation of expired modules to `inactive`;
 - permission-protected aggregate module health with configurable availability objective;
 - versioned vehicle catalogue with independent read/manage permissions;
+- versioned digital-vehicle state for battery, powertrain, brakes, steering, lighting, and
+  operational mode, with cross-component safety invariants and optimistic concurrency;
 - capability-protected Android Automotive telemetry ingestion with idempotent retry handling;
 - persistent vehicle-scoped test runs with controlled, optimistic lifecycle transitions;
 - authenticated Redis-backed WebSocket snapshots and live test-run updates for CarSystemUI;
@@ -94,6 +97,7 @@ flowchart LR
     API --> Identity["Identity and RBAC"]
     API --> Registry["Module registry"]
     API --> Vehicles["Vehicle catalogue + telemetry"]
+    API --> DigitalVehicle["Digital vehicle state"]
     API --> TestRuns["Test runs + live projection"]
     API --> Profiles["Environment profiles"]
     API --> Audit["Immutable audit"]
@@ -138,7 +142,7 @@ src/atep/
 ├── events/      transactional outbox and RabbitMQ worker
 ├── identity/    authentication, users, roles, permissions, and sessions
 ├── registry/    modules, capabilities, workload credentials, and leases
-├── vehicles/    vehicle catalogue and idempotent gateway telemetry
+├── vehicles/    catalogue, digital state, gateway telemetry, and commands
 ├── api/         shared API and health boundaries
 └── main.py      application composition and lifecycle
 
@@ -232,6 +236,7 @@ source .venv/bin/activate
 | Heartbeat | `POST /api/v1/modules/{id}/heartbeat` | token, or trusted XFCC SPIFFE identity |
 | Module health | `GET /api/v1/modules/health-summary` | `modules:read` |
 | Vehicles | `/api/v1/vehicles` and status operations | `vehicles:read`, `vehicles:manage` |
+| Digital vehicle state | `GET/PUT /api/v1/vehicles/{vehicle_id}/state` | `digital_vehicle:read`, `digital_vehicle:write` |
 | Telemetry ingest | `POST /api/v1/vehicles/{vehicle_id}/telemetry` | Gateway module identity + `vehicle.telemetry.publish` capability |
 | Telemetry query | `GET /api/v1/vehicles/{vehicle_id}/telemetry` | `telemetry:read` |
 | Test runs | `POST/GET /api/v1/test-runs`, status updates | `test_runs:read`, `test_runs:write` |
@@ -283,7 +288,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\run_integration_test
 
 The runner creates ephemeral credentials, uses isolated ports, applies every migration, and
 removes its containers, network, and volumes after execution. The latest local evidence records
-**185 fast tests plus expanded Docker integration, restore-drill, mocked Terraform-plan, and read-only AWS-audit scenarios** passing. The CarSystemUI
+**193 fast tests plus expanded Docker integration, restore-drill, mocked Terraform-plan, and read-only AWS-audit scenarios** passing. The CarSystemUI
 companion project also passes 27 unit tests, Android lint, and debug APK assembly for this slice.
 
 ## Engineering documentation
@@ -291,6 +296,9 @@ companion project also passes 27 unit tests, Android lint, and debug APK assembl
 - [Architecture and decisions](docs/architecture.md)
 - [Volume I requirements](docs/requirements-volume-i.md)
 - [Volume I delivery roadmap](docs/roadmap-volume-i.md)
+- [Volume II digital-vehicle state design](docs/digital-vehicle-state.md)
+- [Volume II requirements](docs/requirements-volume-ii.md)
+- [Volume II delivery roadmap](docs/roadmap-volume-ii.md)
 - [Audit retention baseline](docs/audit-retention-policy.md)
 - [Observability baseline and runbook](docs/observability.md)
 - [Software supply-chain security](docs/software-supply-chain-security.md)
@@ -316,7 +324,7 @@ operational guidance, and review worksheets.
 | Volume | Domain | Status |
 |---|---|---|
 | I | Core Platform | In progress |
-| II | Digital Vehicle | Planned |
+| II | Digital Vehicle | In progress — versioned state aggregate implemented |
 | III | ECU Simulator | Planned |
 | IV | CAN Network | Planned |
 | V | Diagnostics | Planned |

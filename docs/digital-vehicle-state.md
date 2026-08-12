@@ -1,0 +1,77 @@
+# Digital Vehicle State
+
+## Purpose
+
+This is the first executable increment of Volume II. It gives every ATEP vehicle one authoritative,
+versioned state aggregate while keeping simulation physics, ECUs, networks, and diagnostics outside
+the boundary until their dedicated volumes.
+
+## Aggregate
+
+| Component | Representative state |
+|---|---|
+| Operational mode | `parked`, `ready`, `driving`, `charging`, or `fault` |
+| Battery | SOC, SOH, voltage, current, temperature, contactors, charging status |
+| Powertrain | motor enablement, gear, speed, requested and delivered torque |
+| Brakes | pedal position, hydraulic pressure, parking brake, ABS activity |
+| Steering | wheel angle and assist status |
+| Lighting | exterior-light mode, brake lamps, and indicators |
+
+Numeric fields have explicit contract bounds. Vehicle creation also creates a safe baseline:
+parked, stationary, traction motor disabled, contactors open, parking brake applied, and lights off.
+
+## API and authorization
+
+| Operation | Permission | Purpose |
+|---|---|---|
+| `GET /api/v1/vehicles/{vehicle_id}/state` | `digital_vehicle:read` | Read the complete current aggregate |
+| `PUT /api/v1/vehicles/{vehicle_id}/state` | `digital_vehicle:write` | Replace the aggregate using `expected_version` |
+
+These permissions are independent from vehicle catalogue administration. Clients use the public
+API; they never connect directly to PostgreSQL, Redis, or RabbitMQ.
+
+## Consistency and safety rules
+
+- A moving vehicle must be in `driving` mode, use drive or reverse gear, have the motor enabled,
+  battery contactors closed, and parking brake released.
+- Charging requires `charging` mode, zero speed, park gear, disabled traction motor, and closed
+  contactors.
+- A parked vehicle cannot be moving.
+- A disabled motor cannot request or deliver torque.
+
+The full aggregate is validated together so one component cannot create an impossible combination
+with another.
+
+## Concurrency, retry, and evidence
+
+The client supplies `expected_version`. The service locks the state row before evaluating the
+request. A new valid state increments the version. An exact retry of the immediately preceding
+replacement returns the current representation without producing duplicate evidence. A stale
+request that differs from current state returns HTTP 409 with code
+`vehicle_state_version_conflict` and `current_version` in the error details.
+
+Each real transition commits the new state, an audit record named
+`digital_vehicle.state_updated`, and an outbox event named
+`atep.digital_vehicle.state.updated.v1` in the same PostgreSQL transaction. Audit details contain
+identifiers and the state version rather than copying the complete state payload.
+
+## Verification catalogue
+
+| Test | Objective |
+|---|---|
+| Safe baseline | Prove vehicle registration creates a deterministic non-moving state |
+| Field bounds | Reject invalid SOC, SOH, temperature, speed, torque, steering, and brake values |
+| Cross-component invariants | Reject contradictory moving, parked, motor, brake, and charging combinations |
+| Positive replacement | Persist a valid aggregate and increment its version |
+| Atomic evidence | Prove state, audit, and outbox records commit together |
+| Exact retry | Prove a repeated request does not duplicate state transitions or evidence |
+| Stale conflict | Return a stable 409 contract and expose only the current version |
+| Independent RBAC | Prove read and write permissions are enforced separately |
+| API contract | Keep OpenAPI request/response schemas and routes versioned and discoverable |
+| Migration integration | Apply the migration and backfill safe state for pre-existing vehicles |
+
+## Current limitations
+
+This increment stores snapshots; it does not integrate equations over time, simulate hardware
+latency, publish CAN frames, raise DTCs, or write Android VHAL properties. Those capabilities will
+be layered behind the aggregate contract in subsequent Volume II through Volume V increments.

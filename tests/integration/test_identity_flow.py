@@ -127,6 +127,8 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                 "vehicles:read",
                 "vehicles:manage",
                 "telemetry:read",
+                "digital_vehicle:read",
+                "digital_vehicle:write",
                 "test_runs:read",
                 "test_runs:write",
             } <= permission_names
@@ -300,6 +302,74 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             )
             assert active_vehicle.status_code == 200, active_vehicle.text
             assert active_vehicle.json()["status"] == "active"
+
+            initial_state = await client.get(
+                f"/api/v1/vehicles/{vehicle_identifier}/state", headers=admin_headers
+            )
+            assert initial_state.status_code == 200, initial_state.text
+            assert initial_state.json()["version"] == 1
+            assert initial_state.json()["operational_mode"] == "parked"
+            assert initial_state.json()["brakes"]["parking_brake_applied"] is True
+
+            driving_state_payload = {
+                "expected_version": 1,
+                "operational_mode": "driving",
+                "battery": {
+                    "state_of_charge_pct": 79.5,
+                    "state_of_health_pct": 99.8,
+                    "pack_voltage_v": 398.0,
+                    "pack_current_a": 120.0,
+                    "temperature_c": 31.0,
+                    "contactors_closed": True,
+                    "charging_status": "disconnected",
+                },
+                "powertrain": {
+                    "motor_enabled": True,
+                    "gear": "drive",
+                    "speed_kph": 45.0,
+                    "requested_torque_nm": 180.0,
+                    "delivered_torque_nm": 176.0,
+                },
+                "brakes": {
+                    "pedal_pct": 0.0,
+                    "hydraulic_pressure_bar": 0.0,
+                    "parking_brake_applied": False,
+                    "abs_active": False,
+                },
+                "steering": {"wheel_angle_deg": 3.5, "assist_active": True},
+                "lighting": {
+                    "exterior_mode": "auto",
+                    "brake_lights": False,
+                    "indicator": "off",
+                },
+            }
+            driving_state = await client.put(
+                f"/api/v1/vehicles/{vehicle_identifier}/state",
+                headers=admin_headers,
+                json=driving_state_payload,
+            )
+            assert driving_state.status_code == 200, driving_state.text
+            assert driving_state.json()["version"] == 2
+            assert driving_state.json()["powertrain"]["speed_kph"] == 45.0
+
+            repeated_state = await client.put(
+                f"/api/v1/vehicles/{vehicle_identifier}/state",
+                headers=admin_headers,
+                json=driving_state_payload,
+            )
+            assert repeated_state.status_code == 200, repeated_state.text
+            assert repeated_state.json()["version"] == 2
+
+            stale_state = await expected_error(
+                client,
+                "PUT",
+                f"/api/v1/vehicles/{vehicle_identifier}/state",
+                409,
+                headers=admin_headers,
+                json={"expected_version": 1},
+            )
+            assert stale_state["code"] == "vehicle_state_version_conflict"
+            assert stale_state["details"] == {"current_version": 2}
 
             test_run_id = uuid4().hex
             test_run_payload = {
