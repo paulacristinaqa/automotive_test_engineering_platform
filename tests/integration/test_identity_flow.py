@@ -1290,13 +1290,21 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             )
             == 1
         )
-        assert (
-            await database.fetchval(
-                "SELECT count(*) FROM outbox_events WHERE aggregate_id = $1::uuid",
-                vehicle_uuid,
-            )
-            == 3
+        vehicle_event_types = await database.fetch(
+            """
+            SELECT event_type
+            FROM outbox_events
+            WHERE aggregate_id = $1::uuid
+            ORDER BY created_at, id
+            """,
+            vehicle_uuid,
         )
+        assert [row["event_type"] for row in vehicle_event_types] == [
+            "atep.vehicle.registered.v1",
+            "atep.vehicle.status-changed.v1",
+            "atep.digital_vehicle.state.updated.v1",
+            "atep.vehicle.telemetry.received.v1",
+        ]
         vehicle_audit_actions = await database.fetch(
             """
             SELECT action
