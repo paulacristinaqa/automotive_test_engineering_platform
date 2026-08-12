@@ -26,6 +26,7 @@ parked, stationary, traction motor disabled, contactors open, parking brake appl
 |---|---|---|
 | `GET /api/v1/vehicles/{vehicle_id}/state` | `digital_vehicle:read` | Read the complete current aggregate |
 | `PUT /api/v1/vehicles/{vehicle_id}/state` | `digital_vehicle:write` | Replace the aggregate using `expected_version` |
+| `POST /api/v1/vehicles/{vehicle_id}/simulation/transitions` | `digital_vehicle:write` | Execute one deterministic, idempotent transition |
 
 These permissions are independent from vehicle catalogue administration. Clients use the public
 API; they never connect directly to PostgreSQL, Redis, or RabbitMQ.
@@ -75,3 +76,18 @@ identifiers and the state version rather than copying the complete state payload
 This increment stores snapshots; it does not integrate equations over time, simulate hardware
 latency, publish CAN frames, raise DTCs, or write Android VHAL properties. Those capabilities will
 be layered behind the aggregate contract in subsequent Volume II through Volume V increments.
+
+## Deterministic transition engine
+
+The simulation clock is an integer number of milliseconds stored with the aggregate. It advances
+only when an accepted command supplies a bounded `duration_ms`; it never reads wall-clock time and
+does not start a background loop. The initial state machine is deliberately small:
+
+`parked → ready → driving → parked`
+
+Each command carries a vehicle-scoped `command_id`, `expected_version`, target mode, duration, and
+speed only when entering driving. A repeated identical command returns the original transition and
+does not advance time or duplicate evidence. Reusing the identifier differently, skipping a state,
+or submitting a stale version returns a stable conflict. Accepted transitions atomically update the
+aggregate, persist replay metadata, audit the action, and publish
+`atep.digital_vehicle.simulation.transitioned.v1`.

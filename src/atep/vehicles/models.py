@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import JSON, BigInteger, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -33,6 +33,9 @@ class Vehicle(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         lazy="raise",
         uselist=False,
     )
+    simulation_transitions: Mapped[list["VehicleSimulationTransition"]] = relationship(
+        back_populates="vehicle", cascade="all, delete-orphan", lazy="raise"
+    )
 
 
 class VehicleDigitalState(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -51,7 +54,33 @@ class VehicleDigitalState(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     steering_state: Mapped[dict[str, Any]] = mapped_column(JSON)
     lighting_state: Mapped[dict[str, Any]] = mapped_column(JSON)
     version: Mapped[int] = mapped_column(Integer, default=1)
+    simulation_time_ms: Mapped[int] = mapped_column(BigInteger, default=0)
     vehicle: Mapped[Vehicle] = relationship(back_populates="digital_state", lazy="raise")
+
+
+class VehicleSimulationTransition(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "vehicle_simulation_transitions"
+    __table_args__ = (
+        UniqueConstraint(
+            "vehicle_id", "command_id", name="uq_vehicle_simulation_transition_command"
+        ),
+    )
+
+    vehicle_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("vehicles.id", ondelete="CASCADE"), index=True
+    )
+    command_id: Mapped[str] = mapped_column(String(64))
+    from_mode: Mapped[str] = mapped_column(String(20))
+    to_mode: Mapped[str] = mapped_column(String(20))
+    duration_ms: Mapped[int] = mapped_column(Integer)
+    requested_speed_kph: Mapped[float | None] = mapped_column()
+    previous_state_version: Mapped[int] = mapped_column(Integer)
+    state_version: Mapped[int] = mapped_column(Integer)
+    simulation_time_ms: Mapped[int] = mapped_column(BigInteger)
+    requested_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    vehicle: Mapped[Vehicle] = relationship(back_populates="simulation_transitions", lazy="raise")
 
 
 class VehicleTelemetryEvent(UUIDPrimaryKeyMixin, Base):

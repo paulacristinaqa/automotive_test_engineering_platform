@@ -14,12 +14,20 @@ from atep.core.errors import (
     TelemetryEventConflictError,
     VehicleCommandConflictError,
     VehicleCommandStateError,
+    VehicleSimulationStateError,
+    VehicleSimulationTransitionConflictError,
     VehicleStateVersionConflictError,
 )
 from atep.core.security import generate_module_token, hash_module_token, verify_module_token
 from atep.events.outbox import enqueue_event
 from atep.registry.models import PlatformModule
-from atep.vehicles.models import Vehicle, VehicleCommand, VehicleDigitalState, VehicleTelemetryEvent
+from atep.vehicles.models import (
+    Vehicle,
+    VehicleCommand,
+    VehicleDigitalState,
+    VehicleSimulationTransition,
+    VehicleTelemetryEvent,
+)
 from atep.vehicles.schemas import (
     DigitalVehicleStatePayload,
     DigitalVehicleStateReplace,
@@ -28,6 +36,8 @@ from atep.vehicles.schemas import (
     VehicleCommandCreate,
     VehicleCommandStatus,
     VehicleCreate,
+    VehicleOperationalMode,
+    VehicleSimulationTransitionCommand,
     VehicleStatus,
 )
 
@@ -60,6 +70,7 @@ async def create_vehicle(
         steering_state=baseline.steering.model_dump(mode="json"),
         lighting_state=baseline.lighting.model_dump(mode="json"),
         version=1,
+        simulation_time_ms=0,
     )
     try:
         async with session.begin_nested():
@@ -180,6 +191,157 @@ async def replace_vehicle_digital_state(
         },
     )
     return state, False
+
+
+_SIMULATION_TRANSITIONS = {
+    VehicleOperationalMode.PARKED: VehicleOperationalMode.READY,
+    VehicleOperationalMode.READY: VehicleOperationalMode.DRIVING,
+    VehicleOperationalMode.DRIVING: VehicleOperationalMode.PARKED,
+}
+
+
+def _transition_matches(
+    transition: VehicleSimulationTransition, command: VehicleSimulationTransitionCommand
+) -> bool:
+    return (
+        transition.to_mode == command.target_mode.value
+        and transition.duration_ms == command.duration_ms
+        and transition.requested_speed_kph == command.speed_kph
+        and transition.previous_state_version == command.expected_version
+    )
+
+
+def _apply_simulation_mode(
+    current: DigitalVehicleStatePayload, command: VehicleSimulationTransitionCommand
+) -> DigitalVehicleStatePayload:
+    payload = current.model_dump(mode="json")
+    if command.target_mode is VehicleOperationalMode.READY:
+        payload["operational_mode"] = "ready"
+        payload["battery"]["contactors_closed"] = True
+        payload["powertrain"].update(
+            motor_enabled=True,
+            gear="park",
+            speed_kph=0.0,
+            requested_torque_nm=0.0,
+            delivered_torque_nm=0.0,
+        )
+        payload["brakes"]["parking_brake_applied"] = True
+    elif command.target_mode is VehicleOperationalMode.DRIVING:
+        payload["operational_mode"] = "driving"
+        payload["battery"]["contactors_closed"] = True
+        payload["powertrain"].update(
+            motor_enabled=True,
+            gear="drive",
+            speed_kph=command.speed_kph,
+            requested_torque_nm=120.0,
+            delivered_torque_nm=120.0,
+        )
+        payload["brakes"]["parking_brake_applied"] = False
+    else:
+        payload["operational_mode"] = "parked"
+        payload["battery"].update(contactors_closed=False, pack_current_a=0.0)
+        payload["powertrain"].update(
+            motor_enabled=False,
+            gear="park",
+            speed_kph=0.0,
+            requested_torque_nm=0.0,
+            delivered_torque_nm=0.0,
+        )
+        payload["brakes"].update(
+            pedal_pct=0.0,
+            hydraulic_pressure_bar=0.0,
+            parking_brake_applied=True,
+            abs_active=False,
+        )
+    return DigitalVehicleStatePayload.model_validate(payload)
+
+
+async def execute_vehicle_simulation_transition(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    command: VehicleSimulationTransitionCommand,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> tuple[VehicleSimulationTransition, bool]:
+    existing = await session.scalar(
+        select(VehicleSimulationTransition).where(
+            VehicleSimulationTransition.vehicle_id == vehicle.id,
+            VehicleSimulationTransition.command_id == command.command_id,
+        )
+    )
+    if existing is not None:
+        if _transition_matches(existing, command):
+            return existing, True
+        raise VehicleSimulationTransitionConflictError()
+
+    state = await require_vehicle_digital_state(session, vehicle=vehicle, for_update=True)
+    if command.expected_version != state.version:
+        raise VehicleStateVersionConflictError(current_version=state.version)
+    current = digital_state_payload(state)
+    expected_target = _SIMULATION_TRANSITIONS.get(current.operational_mode)
+    if expected_target is not command.target_mode:
+        raise VehicleSimulationStateError(
+            current_mode=current.operational_mode.value,
+            requested_mode=command.target_mode.value,
+        )
+    requested = _apply_simulation_mode(current, command)
+    previous_version = state.version
+    state.operational_mode = requested.operational_mode.value
+    state.battery_state = requested.battery.model_dump(mode="json")
+    state.powertrain_state = requested.powertrain.model_dump(mode="json")
+    state.brake_state = requested.brakes.model_dump(mode="json")
+    state.steering_state = requested.steering.model_dump(mode="json")
+    state.lighting_state = requested.lighting.model_dump(mode="json")
+    state.version += 1
+    state.simulation_time_ms += command.duration_ms
+    transition = VehicleSimulationTransition(
+        vehicle_id=vehicle.id,
+        command_id=command.command_id,
+        from_mode=current.operational_mode.value,
+        to_mode=command.target_mode.value,
+        duration_ms=command.duration_ms,
+        requested_speed_kph=command.speed_kph,
+        previous_state_version=previous_version,
+        state_version=state.version,
+        simulation_time_ms=state.simulation_time_ms,
+        requested_by_user_id=actor_user_id,
+    )
+    session.add(transition)
+    await session.flush()
+    enqueue_event(
+        session,
+        event_type="atep.digital_vehicle.simulation.transitioned.v1",
+        aggregate_type="digital_vehicle",
+        aggregate_id=vehicle.id,
+        payload={
+            "command_id": command.command_id,
+            "vehicle_id": vehicle.identifier,
+            "from_mode": transition.from_mode,
+            "to_mode": transition.to_mode,
+            "duration_ms": transition.duration_ms,
+            "state_version": transition.state_version,
+            "simulation_time_ms": transition.simulation_time_ms,
+        },
+        correlation_id=correlation_id,
+    )
+    record_audit(
+        session,
+        actor_user_id=actor_user_id,
+        action="digital_vehicle.simulation_transitioned",
+        resource_type="vehicle",
+        resource_id=vehicle.id,
+        correlation_id=correlation_id,
+        details={
+            "command_id": transition.command_id,
+            "from_mode": transition.from_mode,
+            "to_mode": transition.to_mode,
+            "duration_ms": transition.duration_ms,
+            "state_version": transition.state_version,
+            "simulation_time_ms": transition.simulation_time_ms,
+        },
+    )
+    return transition, False
 
 
 async def list_vehicles(

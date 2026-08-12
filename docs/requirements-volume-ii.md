@@ -12,6 +12,10 @@
 | DV-F-006 | Replacement shall use optimistic version control and report stale updates with a stable conflict error. | Service and integration tests |
 | DV-F-007 | An exact retry shall be idempotent and shall not duplicate transition evidence. | Retry test |
 | DV-F-008 | A real transition shall atomically persist state, audit evidence, and a versioned outbox event. | Transaction test |
+| DV-F-009 | Simulation time shall advance only by an explicitly commanded bounded duration. | Deterministic sequence test |
+| DV-F-010 | The initial transition engine shall enforce `parked → ready → driving → parked`. | State-machine tests |
+| DV-F-011 | Simulation commands shall be vehicle-scoped and idempotent by command identifier. | Retry and conflict tests |
+| DV-F-012 | Accepted transitions shall persist replay metadata and atomic audit/outbox evidence. | Service and integration tests |
 
 ## Non-functional requirements
 
@@ -23,3 +27,4 @@
 | DV-NF-004 | Audit details shall avoid copying the complete state payload. | Audit assertions |
 | DV-NF-005 | The migration shall backfill existing vehicles without requiring cloud infrastructure. | Alembic and disposable integration |
 | DV-NF-006 | The increment shall pass Ruff, strict mypy, unit/contract tests, and disposable integration. | CI quality gates |
+| DV-NF-007 | Deterministic simulation shall not depend on wall-clock time, timers, background loops, GPU, or cloud infrastructure. | Design and tests |

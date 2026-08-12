@@ -76,6 +76,7 @@ The document distinguishes three types of statements:
 | 0.40.0 | 11 August 2026 | Added a Terraform AWS archive foundation with a non-destroyable versioned Object Lock bucket, default/minimum `COMPLIANCE` retention, rotated SSE-KMS key, fixed-prefix bucket denials, exact separate OIDC writer/restore roles, and externally delivered validated CloudTrail | 175 fast Python tests, Terraform 1.15.8 validation, five mocked positive/negative plans, AWS provider 6.58.0 Linux/Windows lock, Ruff, strict mypy, structural/a11y/visual workbook checks, and resource monitoring; live account review, apply, IAM simulation, upload/denial/restore, and CloudTrail correlation remain pending |
 | 0.41.0 | 12 August 2026 | Added an operator-only read-only AWS foundation auditor for exact account, S3 Object Lock/encryption/private ownership/deny policy, KMS state/rotation, separate OIDC IAM roles, and external CloudTrail delivery with bounded non-replacing evidence | 185 fast Python tests, ten focused positive/negative/read-only auditor scenarios, Ruff, strict mypy, structural/a11y/visual workbook checks, and resource monitoring; approved apply, effective IAM simulation, retained upload/denial/restore, and CloudTrail event correlation remain pending |
 | 0.42.0 | 12 August 2026 | Initiated Volume II with one versioned digital-vehicle state aggregate covering operational mode, battery, powertrain, brakes, steering, and lighting; added safe defaults, cross-component invariants, independent RBAC, optimistic concurrency, audit, and outbox evidence | 193 fast Python tests, Ruff, strict mypy, API-contract coverage, migration backfill, structural/a11y/visual workbook checks, and disposable integration delegated to hosted CI |
+| 0.43.0 | 12 August 2026 | Added a command-driven deterministic simulation clock and persisted `parked → ready → driving → parked` transition engine with vehicle-scoped idempotency, optimistic versioning, replay metadata, audit, and outbox evidence | 199 fast Python tests, Ruff, strict mypy, API/state-machine/retry/conflict coverage, migration `0014`, Alembic revision-length guard, structural/a11y/visual workbook checks, and disposable integration delegated to hosted CI |
 
 ## How to Use This Workbook
 
@@ -547,6 +548,21 @@ visible and prevents partial component writes from creating contradictory vehicl
 **Consequences.** The current model is an authoritative snapshot rather than a time-stepped
 simulation. Clients must handle version conflicts. Future engines and gateways must translate
 through this public contract instead of accessing persistence directly.
+
+### ADR-037 — Advance Simulation Time Only through Persisted Commands
+
+**Decision.** Store simulation time as integer milliseconds in the vehicle aggregate and advance
+it only when a bounded transition command is accepted. Persist each command by vehicle and
+identifier, enforce the initial `parked → ready → driving → parked` state machine, and commit the
+new state, replay metadata, audit record, and versioned outbox event atomically.
+
+**Rationale.** Wall-clock loops introduce scheduling jitter, background resource use, and
+non-repeatable tests. A command-driven logical clock makes the same ordered inputs produce the same
+state versions and timestamps, while persisted command identity makes network retries safe.
+
+**Consequences.** Time does not pass unless a client advances it. The first engine models discrete
+mode changes rather than continuous physics. Future sensor integration, seeded noise, and fault
+injection must derive from the logical clock and retain explicit scenario inputs.
 
 ## 5. Technology Stack and Rationale
 
@@ -1576,6 +1592,19 @@ The fast local suite and repeated remote disposable CI runs prove clean-database
 | DVS-009 | Exercise read and write with separately scoped roles | Each permission grants only its intended operation; missing permission returns HTTP 403 | Automated / P0 |
 | DVS-010 | Apply migration `0013` over an existing vehicle catalogue | Every existing vehicle receives one safe state aggregate and the schema reaches the expected head | CI integration / P0 |
 
+### 11.19 Deterministic Vehicle Simulation
+
+| ID | Test and objective | Expected result | Status / priority |
+|---|---|---|---|
+| SIM-001 | Execute `parked → ready → driving → parked` with explicit durations | Modes, state versions, and cumulative logical milliseconds are exact and repeatable | Automated / P0 |
+| SIM-002 | Repeat the same vehicle-scoped command identifier and payload | Original result returns with `duplicate=true`; time and evidence do not advance | Automated / P0 |
+| SIM-003 | Reuse a command identifier with different parameters | Stable simulation-command conflict; no mutation | Automated / P0 |
+| SIM-004 | Skip a required mode or request an unsupported target | Stable state conflict reports current and requested mode | Automated / P0 |
+| SIM-005 | Submit a stale expected aggregate version | Stable vehicle-state version conflict reports current version | Automated / P0 |
+| SIM-006 | Inspect a successful transition transaction | Aggregate, replay row, audit, and `atep.digital_vehicle.simulation.transitioned.v1` event commit together | Automated / P0 |
+| SIM-007 | Validate transition input bounds | Reject missing driving speed, speed on non-driving targets, or duration outside 1–600,000 ms | Automated / P0 |
+| SIM-008 | Apply migration `0014` to existing digital states | Logical time backfills to zero and transition schema reaches the expected head | CI integration / P0 |
+
 ## 12. Suggested CI/CD Quality Pipeline
 
 1. **Source checks:** secret scan, license policy, dependency lock review.
@@ -1805,6 +1834,7 @@ Application rollback is safe only when the previous version is compatible with t
 | Module registry, heartbeat, and reconciliation | `src/atep/registry/`, including `src/atep/registry/reconciler.py`; migrations `0005_module_registry.py` and `0006_module_heartbeat_leases.py`; and module API contracts |
 | Vehicle catalogue, telemetry, and leased commands | `src/atep/vehicles/`, migrations `0007_vehicle_telemetry.py` and `0008_vehicle_command_delivery.py`, API contracts, `tests/test_vehicle_telemetry.py`, and `tests/test_vehicle_commands.py` |
 | Digital vehicle state | `src/atep/vehicles/`, migration `0013_digital_vehicle_state.py`, `tests/test_digital_vehicle_state.py`, API/integration contracts, and `docs/digital-vehicle-state.md` |
+| Deterministic vehicle simulation | transition engine in `src/atep/vehicles/`, migration `0014_deterministic_vehicle_simulation.py` with bounded revision `0014_vehicle_simulation`, `tests/test_digital_vehicle_state.py`, and Volume II requirements/roadmap |
 | Test-run lifecycle and live updates | `src/atep/test_runs/`, migration `0009_test_runs.py`, `tests/test_test_runs.py`, and the WebSocket path in `tests/integration/test_identity_flow.py` |
 | Environment profiles and TestRun snapshots | `src/atep/environment_profiles/`, migration `0010_environment_profiles.py`, and `tests/test_environment_profiles.py` |
 | Persistent test-job scheduling | `src/atep/test_jobs/`, migration `0011_test_jobs.py`, `tests/test_test_jobs.py`, and the disposable integration scenario |
@@ -1812,7 +1842,7 @@ Application rollback is safe only when the previous version is compatible with t
 | Android Vehicle Gateway, property sources, retry worker, operator evidence, and command executor | `CarSystemUI_android/showcase/app/.../gateway/`, `showcase/app/.../vehicle/`, Android unit tests, `docs/ATEP_VEHICLE_GATEWAY.md`, and `docs/TEST_CASE_CT_SHOW_006.md` through `docs/TEST_CASE_CT_SHOW_010.md` in the companion repository |
 | Immutable audit model, query/export APIs, and recorder | `src/atep/audit/` |
 | Event outbox and worker | `src/atep/events/` |
-| Database migrations | `migrations/versions/0001_core_platform.py` through `0013_digital_vehicle_state.py` |
+| Database migrations | `migrations/versions/0001_core_platform.py` through `0014_deterministic_vehicle_simulation.py` |
 | Refresh-session implementation | `src/atep/identity/sessions.py`, identity models, schemas, and router |
 | Local service topology | `compose.yaml` and `Dockerfile` |
 | Optional observability topology | `compose.observability.yaml`, `deploy/observability/`, `src/atep/core/observability.py`, and `docs/observability.md` |

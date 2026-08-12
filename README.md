@@ -60,6 +60,8 @@ An intended end-to-end scenario is:
 - versioned vehicle catalogue with independent read/manage permissions;
 - versioned digital-vehicle state for battery, powertrain, brakes, steering, lighting, and
   operational mode, with cross-component safety invariants and optimistic concurrency;
+- deterministic command-driven simulation time with idempotent parked, ready, driving, and
+  parked transitions and no wall-clock loop;
 - capability-protected Android Automotive telemetry ingestion with idempotent retry handling;
 - persistent vehicle-scoped test runs with controlled, optimistic lifecycle transitions;
 - authenticated Redis-backed WebSocket snapshots and live test-run updates for CarSystemUI;
@@ -237,6 +239,7 @@ source .venv/bin/activate
 | Module health | `GET /api/v1/modules/health-summary` | `modules:read` |
 | Vehicles | `/api/v1/vehicles` and status operations | `vehicles:read`, `vehicles:manage` |
 | Digital vehicle state | `GET/PUT /api/v1/vehicles/{vehicle_id}/state` | `digital_vehicle:read`, `digital_vehicle:write` |
+| Deterministic simulation | `POST /api/v1/vehicles/{vehicle_id}/simulation/transitions` | `digital_vehicle:write` |
 | Telemetry ingest | `POST /api/v1/vehicles/{vehicle_id}/telemetry` | Gateway module identity + `vehicle.telemetry.publish` capability |
 | Telemetry query | `GET /api/v1/vehicles/{vehicle_id}/telemetry` | `telemetry:read` |
 | Test runs | `POST/GET /api/v1/test-runs`, status updates | `test_runs:read`, `test_runs:write` |
@@ -288,7 +291,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\run_integration_test
 
 The runner creates ephemeral credentials, uses isolated ports, applies every migration, and
 removes its containers, network, and volumes after execution. The latest local evidence records
-**193 fast tests plus expanded Docker integration, restore-drill, mocked Terraform-plan, and read-only AWS-audit scenarios** passing. The CarSystemUI
+**199 fast tests plus expanded Docker integration, restore-drill, mocked Terraform-plan, and read-only AWS-audit scenarios** passing. The CarSystemUI
 companion project also passes 27 unit tests, Android lint, and debug APK assembly for this slice.
 
 ## Engineering documentation
@@ -324,7 +327,7 @@ operational guidance, and review worksheets.
 | Volume | Domain | Status |
 |---|---|---|
 | I | Core Platform | In progress |
-| II | Digital Vehicle | In progress — versioned state aggregate implemented |
+| II | Digital Vehicle | In progress — state aggregate and deterministic transition engine implemented |
 | III | ECU Simulator | Planned |
 | IV | CAN Network | Planned |
 | V | Diagnostics | Planned |

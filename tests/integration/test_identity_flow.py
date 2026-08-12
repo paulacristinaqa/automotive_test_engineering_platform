@@ -371,6 +371,41 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             assert stale_state["code"] == "vehicle_state_version_conflict"
             assert stale_state["details"] == {"current_version": 2}
 
+            simulation_command = {
+                "command_id": f"simulation-{uuid4().hex}",
+                "expected_version": 2,
+                "target_mode": "parked",
+                "duration_ms": 750,
+            }
+            simulation_transition = await client.post(
+                f"/api/v1/vehicles/{vehicle_identifier}/simulation/transitions",
+                headers=admin_headers,
+                json=simulation_command,
+            )
+            assert simulation_transition.status_code == 201, simulation_transition.text
+            assert simulation_transition.json()["from_mode"] == "driving"
+            assert simulation_transition.json()["to_mode"] == "parked"
+            assert simulation_transition.json()["state_version"] == 3
+            assert simulation_transition.json()["simulation_time_ms"] == 750
+            assert simulation_transition.json()["duplicate"] is False
+
+            repeated_transition = await client.post(
+                f"/api/v1/vehicles/{vehicle_identifier}/simulation/transitions",
+                headers=admin_headers,
+                json=simulation_command,
+            )
+            assert repeated_transition.status_code == 200, repeated_transition.text
+            assert repeated_transition.json()["duplicate"] is True
+            assert repeated_transition.json()["simulation_time_ms"] == 750
+
+            parked_state = await client.get(
+                f"/api/v1/vehicles/{vehicle_identifier}/state", headers=admin_headers
+            )
+            assert parked_state.status_code == 200, parked_state.text
+            assert parked_state.json()["version"] == 3
+            assert parked_state.json()["simulation_time_ms"] == 750
+            assert parked_state.json()["operational_mode"] == "parked"
+
             test_run_id = uuid4().hex
             test_run_payload = {
                 "run_id": test_run_id,
@@ -1303,7 +1338,21 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             "atep.vehicle.registered.v1",
             "atep.vehicle.status-changed.v1",
             "atep.digital_vehicle.state.updated.v1",
+            "atep.digital_vehicle.simulation.transitioned.v1",
             "atep.vehicle.telemetry.received.v1",
+        ]
+        simulation_audit_actions = await database.fetch(
+            """
+            SELECT action
+            FROM audit_records
+            WHERE resource_id = $1::uuid AND action LIKE 'digital_vehicle.%'
+            ORDER BY created_at, id
+            """,
+            vehicle_uuid,
+        )
+        assert [row["action"] for row in simulation_audit_actions] == [
+            "digital_vehicle.state_updated",
+            "digital_vehicle.simulation_transitioned",
         ]
         vehicle_audit_actions = await database.fetch(
             """

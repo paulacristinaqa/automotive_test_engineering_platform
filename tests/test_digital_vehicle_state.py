@@ -13,13 +13,18 @@ from atep.core.errors import VehicleStateVersionConflictError
 from atep.events.models import OutboxEvent
 from atep.identity.dependencies import require_permissions
 from atep.identity.permissions import PermissionName
-from atep.vehicles.models import Vehicle, VehicleDigitalState
+from atep.vehicles.models import Vehicle, VehicleDigitalState, VehicleSimulationTransition
 from atep.vehicles.schemas import (
     DigitalVehicleStatePayload,
     DigitalVehicleStateReplace,
     VehicleCreate,
+    VehicleSimulationTransitionCommand,
 )
-from atep.vehicles.service import create_vehicle, replace_vehicle_digital_state
+from atep.vehicles.service import (
+    create_vehicle,
+    execute_vehicle_simulation_transition,
+    replace_vehicle_digital_state,
+)
 
 
 class FakeSession:
@@ -79,6 +84,7 @@ def state() -> VehicleDigitalState:
         steering_state=baseline.steering.model_dump(mode="json"),
         lighting_state=baseline.lighting.model_dump(mode="json"),
         version=1,
+        simulation_time_ms=0,
         created_at=now,
         updated_at=now,
     )
@@ -236,3 +242,192 @@ def test_digital_vehicle_permissions_are_independent() -> None:
     assert PermissionName.DIGITAL_VEHICLE_READ.value == "digital_vehicle:read"
     assert PermissionName.DIGITAL_VEHICLE_WRITE.value == "digital_vehicle:write"
     assert require_permissions(PermissionName.DIGITAL_VEHICLE_READ.value) is not None
+
+
+def transition_command(
+    *,
+    command_id: str,
+    expected_version: int,
+    target_mode: str,
+    duration_ms: int = 1000,
+    speed_kph: float | None = None,
+) -> VehicleSimulationTransitionCommand:
+    return VehicleSimulationTransitionCommand(
+        command_id=command_id,
+        expected_version=expected_version,
+        target_mode=target_mode,
+        duration_ms=duration_ms,
+        speed_kph=speed_kph,
+    )
+
+
+@pytest.mark.asyncio
+async def test_deterministic_transition_sequence_advances_only_logical_time() -> None:
+    target = vehicle()
+    current = state()
+    current.vehicle_id = target.id
+    actor_id = uuid4()
+    sequence = [
+        transition_command(
+            command_id="transition-ready-001",
+            expected_version=1,
+            target_mode="ready",
+            duration_ms=500,
+        ),
+        transition_command(
+            command_id="transition-drive-001",
+            expected_version=2,
+            target_mode="driving",
+            duration_ms=1500,
+            speed_kph=36,
+        ),
+        transition_command(
+            command_id="transition-park-001",
+            expected_version=3,
+            target_mode="parked",
+            duration_ms=700,
+        ),
+    ]
+    transitions: list[VehicleSimulationTransition] = []
+    for command in sequence:
+        session = FakeSession(None, current)
+        transition, duplicate = await execute_vehicle_simulation_transition(
+            cast(AsyncSession, session),
+            vehicle=target,
+            command=command,
+            actor_user_id=actor_id,
+            correlation_id=uuid4(),
+        )
+        assert duplicate is False
+        transitions.append(transition)
+        events = [item for item in session.added if isinstance(item, OutboxEvent)]
+        audits = [item for item in session.added if isinstance(item, AuditRecord)]
+        assert [item.event_type for item in events] == [
+            "atep.digital_vehicle.simulation.transitioned.v1"
+        ]
+        assert [item.action for item in audits] == ["digital_vehicle.simulation_transitioned"]
+
+    assert [(item.from_mode, item.to_mode) for item in transitions] == [
+        ("parked", "ready"),
+        ("ready", "driving"),
+        ("driving", "parked"),
+    ]
+    assert [item.simulation_time_ms for item in transitions] == [500, 2000, 2700]
+    assert current.simulation_time_ms == 2700
+    assert current.version == 4
+    assert current.operational_mode == "parked"
+    assert current.powertrain_state["speed_kph"] == 0
+    assert current.powertrain_state["motor_enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_exact_simulation_transition_retry_is_idempotent() -> None:
+    target = vehicle()
+    command = transition_command(
+        command_id="transition-ready-002", expected_version=1, target_mode="ready"
+    )
+    existing = VehicleSimulationTransition(
+        id=uuid4(),
+        vehicle_id=target.id,
+        command_id=command.command_id,
+        from_mode="parked",
+        to_mode="ready",
+        duration_ms=command.duration_ms,
+        requested_speed_kph=None,
+        previous_state_version=1,
+        state_version=2,
+        simulation_time_ms=1000,
+        requested_by_user_id=uuid4(),
+        created_at=datetime(2026, 8, 12, 11, 0, tzinfo=UTC),
+        updated_at=datetime(2026, 8, 12, 11, 0, tzinfo=UTC),
+    )
+    session = FakeSession(existing)
+    returned, duplicate = await execute_vehicle_simulation_transition(
+        cast(AsyncSession, session),
+        vehicle=target,
+        command=command,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert returned is existing
+    assert duplicate is True
+    assert session.added == []
+
+
+@pytest.mark.asyncio
+async def test_simulation_command_identifier_cannot_be_reused_differently() -> None:
+    from atep.core.errors import VehicleSimulationTransitionConflictError
+
+    target = vehicle()
+    existing = VehicleSimulationTransition(
+        id=uuid4(),
+        vehicle_id=target.id,
+        command_id="transition-ready-004",
+        from_mode="parked",
+        to_mode="ready",
+        duration_ms=1000,
+        requested_speed_kph=None,
+        previous_state_version=1,
+        state_version=2,
+        simulation_time_ms=1000,
+        requested_by_user_id=uuid4(),
+    )
+    with pytest.raises(VehicleSimulationTransitionConflictError):
+        await execute_vehicle_simulation_transition(
+            cast(AsyncSession, FakeSession(existing)),
+            vehicle=target,
+            command=transition_command(
+                command_id=existing.command_id,
+                expected_version=1,
+                target_mode="ready",
+                duration_ms=2000,
+            ),
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+
+
+def test_simulation_transition_parameters_are_bounded_by_target() -> None:
+    with pytest.raises(ValidationError, match="require speed_kph"):
+        transition_command(
+            command_id="transition-drive-005", expected_version=1, target_mode="driving"
+        )
+    with pytest.raises(ValidationError, match="only valid for driving"):
+        transition_command(
+            command_id="transition-ready-005",
+            expected_version=1,
+            target_mode="ready",
+            speed_kph=10,
+        )
+
+
+@pytest.mark.asyncio
+async def test_simulation_rejects_skipped_transition_and_stale_version() -> None:
+    from atep.core.errors import VehicleSimulationStateError
+
+    target = vehicle()
+    current = state()
+    current.vehicle_id = target.id
+    with pytest.raises(VehicleSimulationStateError):
+        await execute_vehicle_simulation_transition(
+            cast(AsyncSession, FakeSession(None, current)),
+            vehicle=target,
+            command=transition_command(
+                command_id="transition-drive-003",
+                expected_version=1,
+                target_mode="driving",
+                speed_kph=20,
+            ),
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+    with pytest.raises(VehicleStateVersionConflictError):
+        await execute_vehicle_simulation_transition(
+            cast(AsyncSession, FakeSession(None, current)),
+            vehicle=target,
+            command=transition_command(
+                command_id="transition-ready-003", expected_version=2, target_mode="ready"
+            ),
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )

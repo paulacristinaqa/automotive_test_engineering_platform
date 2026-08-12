@@ -122,6 +122,25 @@ class VehicleStateVersionConflictError(ApplicationError):
         )
 
 
+class VehicleSimulationTransitionConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="vehicle_simulation_transition_conflict",
+            message="The simulation command identifier was already used differently.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class VehicleSimulationStateError(ApplicationError):
+    def __init__(self, *, current_mode: str, requested_mode: str) -> None:
+        super().__init__(
+            code="vehicle_simulation_state_conflict",
+            message="The requested deterministic simulation transition is not allowed.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_mode": current_mode, "requested_mode": requested_mode},
+        )
+
+
 class TestRunConflictError(ApplicationError):
     def __init__(self) -> None:
         super().__init__(
