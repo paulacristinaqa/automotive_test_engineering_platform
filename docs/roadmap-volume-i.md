@@ -74,8 +74,9 @@
   release/admission/revocation/export evidence remain. An AWS S3 Object Lock adapter is implemented
   with fake-client contract evidence, and its Terraform foundation now declares the locked bucket,
   KMS, exact OIDC roles, restrictive policy, and independent CloudTrail delivery with mocked-plan
-  CI evidence. Live account review, approved apply, IAM simulation, upload/denial/restore, and
-  CloudTrail correlation remain)
+  CI evidence. An operator-only read-only auditor now verifies observed account, S3, KMS,
+  IAM/OIDC, and CloudTrail controls into bounded non-sensitive evidence. Approved apply, effective
+  IAM simulation, upload/denial/restore, and CloudTrail event correlation remain)
 - CI/CD promotion through development, staging, and production (implemented initial validation
   slice: ordered fixed environments, strict immutable inputs, fail-closed enablement, retained
   manifest evidence, production approval contract, and signed provenance verification; real
