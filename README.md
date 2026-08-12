@@ -317,8 +317,11 @@ companion project also passes 27 unit tests, Android lint, and debug APK assembl
 - [AWS S3 Object Lock archive adapter](docs/aws-s3-object-lock-adapter.md)
 - [AWS immutable archive Terraform foundation](deploy/terraform/aws-archive-foundation/README.md)
 - [AWS archive foundation read-only audit](docs/aws-archive-foundation-audit.md)
-- [Engineering workbook — editable source](docs/workbook-volume-i.md)
-- [Engineering workbook — formatted document](docs/ATEP_Volume_I_Engineering_Workbook.docx)
+- [Engineering workbook index](docs/workbooks.md)
+- [Volume I — Core Platform editable source](docs/workbook-volume-i.md)
+- [Volume I — Core Platform formatted workbook](docs/ATEP_Volume_I_Core_Platform_Engineering_Workbook.docx)
+- [Volume II — Digital Vehicle editable source](docs/workbook-volume-ii.md)
+- [Volume II — Digital Vehicle formatted workbook](docs/ATEP_Volume_II_Digital_Vehicle_Engineering_Workbook.docx)
 
 The workbook is a living English-language engineering record containing requirements,
 architecture decisions, implementation evidence, test objectives, risks, technical debt,
