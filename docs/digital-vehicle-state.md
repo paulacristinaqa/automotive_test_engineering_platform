@@ -27,6 +27,7 @@ parked, stationary, traction motor disabled, contactors open, parking brake appl
 | `GET /api/v1/vehicles/{vehicle_id}/state` | `digital_vehicle:read` | Read the complete current aggregate |
 | `PUT /api/v1/vehicles/{vehicle_id}/state` | `digital_vehicle:write` | Replace the aggregate using `expected_version` |
 | `POST /api/v1/vehicles/{vehicle_id}/simulation/transitions` | `digital_vehicle:write` | Execute one deterministic, idempotent transition |
+| `POST /api/v1/vehicles/{vehicle_id}/simulation/steps` | `digital_vehicle:write` | Apply bounded actuators and capture seeded sensor readings |
 
 These permissions are independent from vehicle catalogue administration. Clients use the public
 API; they never connect directly to PostgreSQL, Redis, or RabbitMQ.
@@ -91,3 +92,20 @@ does not advance time or duplicate evidence. Reusing the identifier differently,
 or submitting a stale version returns a stable conflict. Accepted transitions atomically update the
 aggregate, persist replay metadata, audit the action, and publish
 `atep.digital_vehicle.simulation.transitioned.v1`.
+
+## Deterministic sensors and actuators
+
+A simulation step accepts bounded accelerator, brake, and steering inputs and a duration of up to
+60 seconds. Accelerator and brake cannot be applied together. Non-zero actuator inputs require the
+vehicle to be in `driving` mode. The model updates speed, torque, hydraulic pressure, steering,
+brake lamps, battery SOC, current, and temperature without reading wall-clock time.
+
+Speed, battery SOC, and battery-temperature readings support bounded seeded noise plus explicit
+`stuck` and `offset` faults. The noise value is derived from the supplied integer seed and sensor
+name, so the same state and command always reproduce the same evidence. Sensor faults affect the
+reported reading, while the authoritative physical state remains independently bounded.
+
+Each accepted step advances simulation time, increments the aggregate version, persists command
+inputs/configuration/readings for replay, records `digital_vehicle.simulation_stepped`, and enqueues
+`atep.digital_vehicle.simulation.stepped.v1` in the same transaction. An exact retry returns the
+stored result without repeating these effects.

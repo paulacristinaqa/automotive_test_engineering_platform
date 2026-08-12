@@ -179,6 +179,74 @@ class VehicleSimulationTransitionResponse(BaseModel):
     created_at: datetime
 
 
+class SensorFaultMode(StrEnum):
+    NONE = "none"
+    STUCK = "stuck"
+    OFFSET = "offset"
+
+
+class SensorConfiguration(BaseModel):
+    noise_amplitude: float = Field(default=0.0, ge=0, le=10)
+    fault_mode: SensorFaultMode = SensorFaultMode.NONE
+    fault_value: float | None = Field(default=None, ge=-1000, le=1000)
+
+    @model_validator(mode="after")
+    def validate_fault_value(self) -> "SensorConfiguration":
+        if self.fault_mode is SensorFaultMode.NONE and self.fault_value is not None:
+            raise ValueError("fault_value requires a sensor fault mode")
+        if self.fault_mode is not SensorFaultMode.NONE and self.fault_value is None:
+            raise ValueError("sensor fault modes require fault_value")
+        return self
+
+
+class VehicleActuatorInputs(BaseModel):
+    accelerator_pct: float = Field(default=0.0, ge=0, le=100)
+    brake_pct: float = Field(default=0.0, ge=0, le=100)
+    steering_angle_deg: float = Field(default=0.0, ge=-720, le=720)
+
+    @model_validator(mode="after")
+    def reject_conflicting_pedals(self) -> "VehicleActuatorInputs":
+        if self.accelerator_pct > 0 and self.brake_pct > 0:
+            raise ValueError("accelerator and brake cannot be applied together")
+        return self
+
+
+class VehicleSensorConfiguration(BaseModel):
+    speed: SensorConfiguration = Field(default_factory=SensorConfiguration)
+    battery_soc: SensorConfiguration = Field(default_factory=SensorConfiguration)
+    battery_temperature: SensorConfiguration = Field(default_factory=SensorConfiguration)
+
+
+class VehicleSimulationStepCommand(BaseModel):
+    command_id: str = Field(min_length=8, max_length=64, pattern=EVENT_ID_PATTERN.pattern)
+    expected_version: int = Field(ge=1)
+    duration_ms: int = Field(ge=1, le=60_000)
+    seed: int = Field(default=0, ge=0, le=2_147_483_647)
+    inputs: VehicleActuatorInputs = Field(default_factory=VehicleActuatorInputs)
+    sensors: VehicleSensorConfiguration = Field(default_factory=VehicleSensorConfiguration)
+
+
+class VehicleSensorReadings(BaseModel):
+    speed_kph: float
+    battery_soc_pct: float
+    battery_temperature_c: float
+
+
+class VehicleSimulationStepResponse(BaseModel):
+    command_id: str
+    vehicle_id: str
+    duration_ms: int
+    seed: int
+    inputs: VehicleActuatorInputs
+    sensors: VehicleSensorConfiguration
+    readings: VehicleSensorReadings
+    previous_state_version: int
+    state_version: int
+    simulation_time_ms: int
+    duplicate: bool = False
+    created_at: datetime
+
+
 class VehicleCommandKind(StrEnum):
     SET_PROPERTY = "set_property"
 

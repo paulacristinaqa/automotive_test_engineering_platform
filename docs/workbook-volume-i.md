@@ -2,7 +2,7 @@
 
 **Subtitle:** Architecture, implementation record, verification strategy, and engineering evidence  
 **Project:** Automotive Test Engineering Platform (ATEP)  
-**Document version:** 0.32.0
+**Document version:** 0.44.0
 
 **Baseline date:** 11 August 2026
 
@@ -77,6 +77,7 @@ The document distinguishes three types of statements:
 | 0.41.0 | 12 August 2026 | Added an operator-only read-only AWS foundation auditor for exact account, S3 Object Lock/encryption/private ownership/deny policy, KMS state/rotation, separate OIDC IAM roles, and external CloudTrail delivery with bounded non-replacing evidence | 185 fast Python tests, ten focused positive/negative/read-only auditor scenarios, Ruff, strict mypy, structural/a11y/visual workbook checks, and resource monitoring; approved apply, effective IAM simulation, retained upload/denial/restore, and CloudTrail event correlation remain pending |
 | 0.42.0 | 12 August 2026 | Initiated Volume II with one versioned digital-vehicle state aggregate covering operational mode, battery, powertrain, brakes, steering, and lighting; added safe defaults, cross-component invariants, independent RBAC, optimistic concurrency, audit, and outbox evidence | 193 fast Python tests, Ruff, strict mypy, API-contract coverage, migration backfill, structural/a11y/visual workbook checks, and disposable integration delegated to hosted CI |
 | 0.43.0 | 12 August 2026 | Added a command-driven deterministic simulation clock and persisted `parked → ready → driving → parked` transition engine with vehicle-scoped idempotency, optimistic versioning, replay metadata, audit, and outbox evidence | 199 fast Python tests, Ruff, strict mypy, API/state-machine/retry/conflict coverage, migration `0014`, Alembic revision-length guard, structural/a11y/visual workbook checks, and disposable integration delegated to hosted CI |
+| 0.44.0 | 12 August 2026 | Added deterministic accelerator, brake, and steering actuators plus seeded speed, battery SOC, and temperature sensors with noise, stuck, and offset modes | 201 fast Python tests, Ruff, strict mypy, contract/bounds/seed/fault/retry/evidence coverage, migration `0015`, and hosted disposable integration |
 
 ## How to Use This Workbook
 
@@ -563,6 +564,20 @@ state versions and timestamps, while persisted command identity makes network re
 **Consequences.** Time does not pass unless a client advances it. The first engine models discrete
 mode changes rather than continuous physics. Future sensor integration, seeded noise, and fault
 injection must derive from the logical clock and retain explicit scenario inputs.
+
+### ADR-038 — Make Sensor Variance Seeded and Faults Explicit
+
+**Decision:** Sensor variance is derived from a persisted integer seed and sensor name. Faults are
+explicit command configuration (`stuck` or `offset`) and affect readings without silently changing
+the authoritative physical state.
+
+**Rationale:** Reproducible QA evidence requires identical state, command, and seed inputs to yield
+identical readings. Separating physical state from observed sensor values also supports diagnostic
+and plausibility tests in later volumes.
+
+**Consequences:** Every accepted step persists actuator inputs, sensor configuration, readings,
+state version, and simulation time. The initial equations are intentionally simple and bounded;
+more realistic coupled behavior belongs to Increment II-4.
 
 ## 5. Technology Stack and Rationale
 
@@ -1604,6 +1619,26 @@ The fast local suite and repeated remote disposable CI runs prove clean-database
 | SIM-006 | Inspect a successful transition transaction | Aggregate, replay row, audit, and `atep.digital_vehicle.simulation.transitioned.v1` event commit together | Automated / P0 |
 | SIM-007 | Validate transition input bounds | Reject missing driving speed, speed on non-driving targets, or duration outside 1–600,000 ms | Automated / P0 |
 | SIM-008 | Apply migration `0014` to existing digital states | Logical time backfills to zero and transition schema reaches the expected head | CI integration / P0 |
+
+### 11.20 Deterministic Sensors and Actuators
+
+| Test | Objective |
+|---|---|
+| Actuator bounds | Reject accelerator, brake, steering, duration, and seed values outside the public contract |
+| Pedal conflict | Prevent simultaneous positive accelerator and brake commands |
+| Operational safety | Reject non-zero actuator commands unless the vehicle is in driving mode |
+| Deterministic integration | Prove actuator inputs update speed, torque, brakes, steering, lighting, SOC, and temperature predictably |
+| Seed replay | Prove equal state, command, and seed inputs produce equal readings |
+| Noise boundary | Keep configured noise and final readings inside documented safe bounds |
+| Stuck fault | Prove a sensor can report a fixed configured reading while physical state evolves independently |
+| Offset fault | Prove a sensor applies the configured offset to its physical value |
+| Optimistic conflict | Reject stale expected versions with the stable global error contract |
+| Exact retry | Return the persisted step without advancing time or duplicating evidence |
+| Command conflict | Reject reuse of a vehicle-scoped command ID with different inputs or sensor configuration |
+| Atomic evidence | Commit state, replay record, audit, and outbox event together |
+| RBAC | Require `digital_vehicle:write` and deny unauthorized callers |
+| OpenAPI contract | Publish the versioned step request and response schemas |
+| Migration | Apply and reverse migration `0015` in the disposable PostgreSQL environment |
 
 ## 12. Suggested CI/CD Quality Pipeline
 

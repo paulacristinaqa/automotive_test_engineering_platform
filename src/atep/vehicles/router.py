@@ -15,6 +15,7 @@ from atep.vehicles.models import (
     Vehicle,
     VehicleCommand,
     VehicleDigitalState,
+    VehicleSimulationStep,
     VehicleSimulationTransition,
     VehicleTelemetryEvent,
 )
@@ -25,6 +26,7 @@ from atep.vehicles.schemas import (
     TelemetryIngest,
     TelemetryPage,
     TelemetryResponse,
+    VehicleActuatorInputs,
     VehicleCommandAcknowledge,
     VehicleCommandClaim,
     VehicleCommandCreate,
@@ -36,6 +38,10 @@ from atep.vehicles.schemas import (
     VehicleCreate,
     VehiclePage,
     VehicleResponse,
+    VehicleSensorConfiguration,
+    VehicleSensorReadings,
+    VehicleSimulationStepCommand,
+    VehicleSimulationStepResponse,
     VehicleSimulationTransitionCommand,
     VehicleSimulationTransitionResponse,
     VehicleStatus,
@@ -48,6 +54,7 @@ from atep.vehicles.service import (
     create_vehicle,
     create_vehicle_command,
     digital_state_payload,
+    execute_vehicle_simulation_step,
     execute_vehicle_simulation_transition,
     ingest_telemetry,
     list_telemetry,
@@ -228,6 +235,25 @@ def simulation_transition_response(
     )
 
 
+def simulation_step_response(
+    step: VehicleSimulationStep, vehicle: Vehicle, *, duplicate: bool = False
+) -> VehicleSimulationStepResponse:
+    return VehicleSimulationStepResponse(
+        command_id=step.command_id,
+        vehicle_id=vehicle.identifier,
+        duration_ms=step.duration_ms,
+        seed=step.seed,
+        inputs=VehicleActuatorInputs.model_validate(step.inputs),
+        sensors=VehicleSensorConfiguration.model_validate(step.sensor_configuration),
+        readings=VehicleSensorReadings.model_validate(step.sensor_readings),
+        previous_state_version=step.previous_state_version,
+        state_version=step.state_version,
+        simulation_time_ms=step.simulation_time_ms,
+        duplicate=duplicate,
+        created_at=step.created_at,
+    )
+
+
 @router.post(
     "/{vehicle_id}/simulation/transitions",
     response_model=VehicleSimulationTransitionResponse,
@@ -254,6 +280,34 @@ async def execute_simulation_transition_endpoint(
     if duplicate:
         response.status_code = status.HTTP_200_OK
     return simulation_transition_response(transition, vehicle, duplicate=duplicate)
+
+
+@router.post(
+    "/{vehicle_id}/simulation/steps",
+    response_model=VehicleSimulationStepResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def execute_simulation_step_endpoint(
+    vehicle_id: str,
+    command: VehicleSimulationStepCommand,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(digital_vehicle_write)],
+) -> VehicleSimulationStepResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    step, duplicate = await execute_vehicle_simulation_step(
+        session,
+        vehicle=vehicle,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(step, attribute_names=["created_at"])
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+    return simulation_step_response(step, vehicle, duplicate=duplicate)
 
 
 @router.put("/{vehicle_id}/state", response_model=DigitalVehicleStateResponse)

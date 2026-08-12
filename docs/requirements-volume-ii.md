@@ -16,6 +16,9 @@
 | DV-F-010 | The initial transition engine shall enforce `parked → ready → driving → parked`. | State-machine tests |
 | DV-F-011 | Simulation commands shall be vehicle-scoped and idempotent by command identifier. | Retry and conflict tests |
 | DV-F-012 | Accepted transitions shall persist replay metadata and atomic audit/outbox evidence. | Service and integration tests |
+| DV-F-013 | Simulation steps shall model bounded accelerator, brake, and steering actuator inputs. | Contract and deterministic-step tests |
+| DV-F-014 | Speed, battery SOC, and battery-temperature sensors shall support seeded noise and explicit stuck/offset fault modes. | Seed replay and fault tests |
+| DV-F-015 | Simulation steps shall be vehicle-scoped, versioned, idempotent, and persisted for replay. | Retry, conflict, migration, and evidence tests |
 
 ## Non-functional requirements
 
@@ -28,3 +31,4 @@
 | DV-NF-005 | The migration shall backfill existing vehicles without requiring cloud infrastructure. | Alembic and disposable integration |
 | DV-NF-006 | The increment shall pass Ruff, strict mypy, unit/contract tests, and disposable integration. | CI quality gates |
 | DV-NF-007 | Deterministic simulation shall not depend on wall-clock time, timers, background loops, GPU, or cloud infrastructure. | Design and tests |
+| DV-NF-008 | Equal state, command, and seed inputs shall produce equal sensor readings across runs. | Deterministic seed test |

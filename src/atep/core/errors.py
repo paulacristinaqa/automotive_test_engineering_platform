@@ -131,6 +131,15 @@ class VehicleSimulationTransitionConflictError(ApplicationError):
         )
 
 
+class VehicleSimulationStepConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="vehicle_simulation_step_conflict",
+            message="The simulation step command ID is already associated with another request.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
 class VehicleSimulationStateError(ApplicationError):
     def __init__(self, *, current_mode: str, requested_mode: str) -> None:
         super().__init__(

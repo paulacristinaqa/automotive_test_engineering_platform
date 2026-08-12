@@ -175,6 +175,10 @@ def test_vehicle_gateway_contracts_and_safe_pagination_are_published() -> None:
         "schema"
     ]
     assert transition_schema["$ref"].endswith("/VehicleSimulationTransitionCommand")
+    step_path = paths["/api/v1/vehicles/{vehicle_id}/simulation/steps"]
+    assert "post" in step_path
+    step_schema = step_path["post"]["requestBody"]["content"]["application/json"]["schema"]
+    assert step_schema["$ref"].endswith("/VehicleSimulationStepCommand")
 
 
 def test_vehicle_command_delivery_contracts_are_published() -> None:

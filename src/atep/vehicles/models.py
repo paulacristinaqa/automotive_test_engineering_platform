@@ -36,6 +36,9 @@ class Vehicle(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     simulation_transitions: Mapped[list["VehicleSimulationTransition"]] = relationship(
         back_populates="vehicle", cascade="all, delete-orphan", lazy="raise"
     )
+    simulation_steps: Mapped[list["VehicleSimulationStep"]] = relationship(
+        back_populates="vehicle", cascade="all, delete-orphan", lazy="raise"
+    )
 
 
 class VehicleDigitalState(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -81,6 +84,30 @@ class VehicleSimulationTransition(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
     )
     vehicle: Mapped[Vehicle] = relationship(back_populates="simulation_transitions", lazy="raise")
+
+
+class VehicleSimulationStep(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "vehicle_simulation_steps"
+    __table_args__ = (
+        UniqueConstraint("vehicle_id", "command_id", name="uq_vehicle_simulation_step_command"),
+    )
+
+    vehicle_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("vehicles.id", ondelete="CASCADE"), index=True
+    )
+    command_id: Mapped[str] = mapped_column(String(64))
+    duration_ms: Mapped[int] = mapped_column(Integer)
+    seed: Mapped[int] = mapped_column(Integer)
+    inputs: Mapped[dict[str, Any]] = mapped_column(JSON)
+    sensor_configuration: Mapped[dict[str, Any]] = mapped_column(JSON)
+    sensor_readings: Mapped[dict[str, Any]] = mapped_column(JSON)
+    previous_state_version: Mapped[int] = mapped_column(Integer)
+    state_version: Mapped[int] = mapped_column(Integer)
+    simulation_time_ms: Mapped[int] = mapped_column(BigInteger)
+    requested_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    vehicle: Mapped[Vehicle] = relationship(back_populates="simulation_steps", lazy="raise")
 
 
 class VehicleTelemetryEvent(UUIDPrimaryKeyMixin, Base):
