@@ -56,6 +56,7 @@ class VehicleDigitalState(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     brake_state: Mapped[dict[str, Any]] = mapped_column(JSON)
     steering_state: Mapped[dict[str, Any]] = mapped_column(JSON)
     lighting_state: Mapped[dict[str, Any]] = mapped_column(JSON)
+    suspension_state: Mapped[dict[str, Any]] = mapped_column(JSON)
     version: Mapped[int] = mapped_column(Integer, default=1)
     simulation_time_ms: Mapped[int] = mapped_column(BigInteger, default=0)
     vehicle: Mapped[Vehicle] = relationship(back_populates="digital_state", lazy="raise")

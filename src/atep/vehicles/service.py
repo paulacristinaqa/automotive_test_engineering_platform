@@ -74,6 +74,7 @@ async def create_vehicle(
         brake_state=baseline.brakes.model_dump(mode="json"),
         steering_state=baseline.steering.model_dump(mode="json"),
         lighting_state=baseline.lighting.model_dump(mode="json"),
+        suspension_state=baseline.suspension.model_dump(mode="json"),
         version=1,
         simulation_time_ms=0,
     )
@@ -132,6 +133,7 @@ def digital_state_payload(state: VehicleDigitalState) -> DigitalVehicleStatePayl
             "brakes": state.brake_state,
             "steering": state.steering_state,
             "lighting": state.lighting_state,
+            "suspension": state.suspension_state,
         }
     )
 
@@ -163,6 +165,7 @@ async def replace_vehicle_digital_state(
     state.brake_state = requested.brakes.model_dump(mode="json")
     state.steering_state = requested.steering.model_dump(mode="json")
     state.lighting_state = requested.lighting.model_dump(mode="json")
+    state.suspension_state = requested.suspension.model_dump(mode="json")
     state.version += 1
     await session.flush()
     await session.refresh(state, attribute_names=["updated_at"])
@@ -298,6 +301,7 @@ async def execute_vehicle_simulation_transition(
     state.brake_state = requested.brakes.model_dump(mode="json")
     state.steering_state = requested.steering.model_dump(mode="json")
     state.lighting_state = requested.lighting.model_dump(mode="json")
+    state.suspension_state = requested.suspension.model_dump(mode="json")
     state.version += 1
     state.simulation_time_ms += command.duration_ms
     transition = VehicleSimulationTransition(
@@ -388,15 +392,20 @@ def _apply_simulation_step(
     seconds = command.duration_ms / 1000
     inputs = command.inputs
     speed = current.powertrain.speed_kph
+    energy_used_wh = 0.0
+    energy_recovered_wh = 0.0
     if current.operational_mode is VehicleOperationalMode.DRIVING:
-        acceleration = inputs.accelerator_pct * 0.05
+        grade_resistance = inputs.road_grade_pct * 0.025
+        acceleration = inputs.accelerator_pct * 0.05 - grade_resistance
         deceleration = inputs.brake_pct * 0.08
         speed = min(250.0, max(0.0, speed + (acceleration - deceleration) * seconds))
-        torque = inputs.accelerator_pct * 12.0
+        torque = min(3000.0, max(0.0, inputs.accelerator_pct * 12.0 + inputs.road_grade_pct * 8.0))
+        regen_torque = min(600.0, inputs.brake_pct * 6.0)
+        delivered_torque = torque - regen_torque
         payload["powertrain"].update(
             speed_kph=round(speed, 6),
             requested_torque_nm=round(torque, 6),
-            delivered_torque_nm=round(torque, 6),
+            delivered_torque_nm=round(delivered_torque, 6),
         )
         payload["brakes"].update(
             pedal_pct=inputs.brake_pct,
@@ -407,15 +416,49 @@ def _apply_simulation_step(
             assist_active=True,
         )
         payload["lighting"]["brake_lights"] = inputs.brake_pct > 0
-        energy_use = inputs.accelerator_pct * seconds / 360_000
-        thermal_gain = (inputs.accelerator_pct + inputs.brake_pct * 0.25) * seconds / 10_000
+        payload["lighting"]["exterior_mode"] = (
+            "low_beam" if inputs.ambient_light_lux < 1000 else "auto"
+        )
+        traction_power_w = max(0.0, inputs.accelerator_pct * 1000 + inputs.road_grade_pct * 250)
+        auxiliary_power_w = 500.0
+        energy_used_wh = (traction_power_w + auxiliary_power_w) * seconds / 3600
+        regen_power_w = inputs.brake_pct * max(current.powertrain.speed_kph, speed) * 45
+        energy_recovered_wh = min(energy_used_wh * 0.8, regen_power_w * seconds / 3600)
+        net_energy_wh = round(max(0.0, round(energy_used_wh, 6) - round(energy_recovered_wh, 6)), 6)
+        usable_energy_wh = max(0.0, current.battery.usable_energy_wh - net_energy_wh)
+        payload["battery"]["usable_energy_wh"] = round(usable_energy_wh, 6)
+        capacity_wh = 75000.0
         payload["battery"]["state_of_charge_pct"] = round(
-            max(0.0, current.battery.state_of_charge_pct - energy_use), 6
+            min(100.0, usable_energy_wh / capacity_wh * 100), 6
+        )
+        thermal_generation = (abs(delivered_torque) * 0.0008 + inputs.brake_pct * 0.002) * seconds
+        thermal_cooling = (
+            (current.battery.temperature_c - inputs.ambient_temperature_c) * 0.002 * seconds
         )
         payload["battery"]["temperature_c"] = round(
-            min(120.0, current.battery.temperature_c + thermal_gain), 6
+            min(
+                120.0,
+                max(-50.0, current.battery.temperature_c + thermal_generation - thermal_cooling),
+            ),
+            6,
         )
-        payload["battery"]["pack_current_a"] = round(inputs.accelerator_pct * 4.0, 6)
+        payload["battery"]["pack_current_a"] = round(
+            inputs.accelerator_pct * 4.0 - inputs.brake_pct * 1.5, 6
+        )
+        speed_mps = speed / 3.6
+        lateral_acceleration = min(
+            20.0, max(-20.0, speed_mps * speed_mps * inputs.steering_angle_deg / 12000)
+        )
+        roughness_travel = inputs.road_roughness_pct * 0.6
+        payload["suspension"].update(
+            front_travel_mm=round(
+                min(120.0, max(-120.0, roughness_travel + inputs.brake_pct * 0.35)), 6
+            ),
+            rear_travel_mm=round(
+                min(120.0, max(-120.0, roughness_travel + inputs.accelerator_pct * 0.2)), 6
+            ),
+            lateral_acceleration_mps2=round(lateral_acceleration, 6),
+        )
     elif inputs.accelerator_pct > 0 or inputs.brake_pct > 0 or inputs.steering_angle_deg != 0:
         raise VehicleSimulationStateError(
             current_mode=current.operational_mode.value, requested_mode="actuated"
@@ -468,6 +511,11 @@ def _apply_simulation_step(
             ),
             6,
         ),
+        energy_used_wh=round(energy_used_wh, 6),
+        energy_recovered_wh=round(energy_recovered_wh, 6),
+        net_energy_wh=(
+            net_energy_wh if current.operational_mode is VehicleOperationalMode.DRIVING else 0.0
+        ),
     )
     return requested, readings
 
@@ -501,6 +549,7 @@ async def execute_vehicle_simulation_step(
     state.brake_state = requested.brakes.model_dump(mode="json")
     state.steering_state = requested.steering.model_dump(mode="json")
     state.lighting_state = requested.lighting.model_dump(mode="json")
+    state.suspension_state = requested.suspension.model_dump(mode="json")
     state.version += 1
     state.simulation_time_ms += command.duration_ms
     step = VehicleSimulationStep(
