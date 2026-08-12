@@ -11,7 +11,13 @@ from atep.identity.permissions import PermissionName
 from atep.identity.users_router import request_correlation_id
 from atep.registry.service import authenticate_module
 from atep.registry.workload_identity import ModuleAuthentication, module_authentication
-from atep.vehicles.models import Vehicle, VehicleCommand, VehicleDigitalState, VehicleTelemetryEvent
+from atep.vehicles.models import (
+    Vehicle,
+    VehicleCommand,
+    VehicleDigitalState,
+    VehicleSimulationTransition,
+    VehicleTelemetryEvent,
+)
 from atep.vehicles.schemas import (
     PROPERTY_NAME_PATTERN,
     DigitalVehicleStateReplace,
@@ -30,6 +36,8 @@ from atep.vehicles.schemas import (
     VehicleCreate,
     VehiclePage,
     VehicleResponse,
+    VehicleSimulationTransitionCommand,
+    VehicleSimulationTransitionResponse,
     VehicleStatus,
     VehicleStatusUpdate,
 )
@@ -40,6 +48,7 @@ from atep.vehicles.service import (
     create_vehicle,
     create_vehicle_command,
     digital_state_payload,
+    execute_vehicle_simulation_transition,
     ingest_telemetry,
     list_telemetry,
     list_vehicle_commands,
@@ -122,6 +131,7 @@ def digital_vehicle_state_response(
     return DigitalVehicleStateResponse(
         vehicle_id=vehicle.identifier,
         version=state.version,
+        simulation_time_ms=state.simulation_time_ms,
         updated_at=state.updated_at,
         **digital_state_payload(state).model_dump(),
     )
@@ -199,6 +209,51 @@ async def get_digital_vehicle_state_endpoint(
     vehicle = await require_vehicle(session, vehicle_id)
     state = await require_vehicle_digital_state(session, vehicle=vehicle)
     return digital_vehicle_state_response(state, vehicle)
+
+
+def simulation_transition_response(
+    transition: VehicleSimulationTransition, vehicle: Vehicle, *, duplicate: bool = False
+) -> VehicleSimulationTransitionResponse:
+    return VehicleSimulationTransitionResponse(
+        command_id=transition.command_id,
+        vehicle_id=vehicle.identifier,
+        from_mode=transition.from_mode,
+        to_mode=transition.to_mode,
+        duration_ms=transition.duration_ms,
+        previous_state_version=transition.previous_state_version,
+        state_version=transition.state_version,
+        simulation_time_ms=transition.simulation_time_ms,
+        duplicate=duplicate,
+        created_at=transition.created_at,
+    )
+
+
+@router.post(
+    "/{vehicle_id}/simulation/transitions",
+    response_model=VehicleSimulationTransitionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def execute_simulation_transition_endpoint(
+    vehicle_id: str,
+    command: VehicleSimulationTransitionCommand,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(digital_vehicle_write)],
+) -> VehicleSimulationTransitionResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    transition, duplicate = await execute_vehicle_simulation_transition(
+        session,
+        vehicle=vehicle,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(transition, attribute_names=["created_at"])
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+    return simulation_transition_response(transition, vehicle, duplicate=duplicate)
 
 
 @router.put("/{vehicle_id}/state", response_model=DigitalVehicleStateResponse)

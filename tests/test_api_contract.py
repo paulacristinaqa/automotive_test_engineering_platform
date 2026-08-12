@@ -169,6 +169,12 @@ def test_vehicle_gateway_contracts_and_safe_pagination_are_published() -> None:
     assert {"get", "put"} <= set(state_path)
     replace_schema = state_path["put"]["requestBody"]["content"]["application/json"]["schema"]
     assert replace_schema["$ref"].endswith("/DigitalVehicleStateReplace")
+    transition_path = paths["/api/v1/vehicles/{vehicle_id}/simulation/transitions"]
+    assert "post" in transition_path
+    transition_schema = transition_path["post"]["requestBody"]["content"]["application/json"][
+        "schema"
+    ]
+    assert transition_schema["$ref"].endswith("/VehicleSimulationTransitionCommand")
 
 
 def test_vehicle_command_delivery_contracts_are_published() -> None:

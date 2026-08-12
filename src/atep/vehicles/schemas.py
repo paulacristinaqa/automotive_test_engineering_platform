@@ -146,7 +146,37 @@ class DigitalVehicleStateReplace(DigitalVehicleStatePayload):
 class DigitalVehicleStateResponse(DigitalVehicleStatePayload):
     vehicle_id: str
     version: int
+    simulation_time_ms: int
     updated_at: datetime
+
+
+class VehicleSimulationTransitionCommand(BaseModel):
+    command_id: str = Field(min_length=8, max_length=64, pattern=EVENT_ID_PATTERN.pattern)
+    expected_version: int = Field(ge=1)
+    target_mode: VehicleOperationalMode
+    duration_ms: int = Field(ge=1, le=600_000)
+    speed_kph: float | None = Field(default=None, gt=0, le=250)
+
+    @model_validator(mode="after")
+    def validate_target_parameters(self) -> "VehicleSimulationTransitionCommand":
+        if self.target_mode is VehicleOperationalMode.DRIVING and self.speed_kph is None:
+            raise ValueError("driving transitions require speed_kph")
+        if self.target_mode is not VehicleOperationalMode.DRIVING and self.speed_kph is not None:
+            raise ValueError("speed_kph is only valid for driving transitions")
+        return self
+
+
+class VehicleSimulationTransitionResponse(BaseModel):
+    command_id: str
+    vehicle_id: str
+    from_mode: VehicleOperationalMode
+    to_mode: VehicleOperationalMode
+    duration_ms: int
+    previous_state_version: int
+    state_version: int
+    simulation_time_ms: int
+    duplicate: bool = False
+    created_at: datetime
 
 
 class VehicleCommandKind(StrEnum):
