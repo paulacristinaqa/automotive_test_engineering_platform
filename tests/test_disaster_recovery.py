@@ -36,7 +36,7 @@ class DrillPostgres:
 
     def psql(self, database: str, statement: str) -> str:
         if "version_num" in statement:
-            return "0016_vehicle_dynamics\n"
+            return "0017_simulation_sessions\n"
         if "tablename" in statement:
             return "roles\nusers\n"
         if "information_schema.columns" in statement:
@@ -86,14 +86,14 @@ def test_safe_identifier_and_normalized_lines_reject_injection_boundaries() -> N
 def test_database_evidence_is_ordered_and_requires_one_revision() -> None:
     target = postgres(
         {
-            "version_num": "0016_vehicle_dynamics\n",
+            "version_num": "0017_simulation_sessions\n",
             "tablename": "audit_records\nusers\n",
             "information_schema.columns": "audit_records|1|id|uuid|NO|\nusers|1|id|uuid|NO|\n",
         }
     )
     revision, tables, schema_hash = database_evidence(target, "atep")
 
-    assert revision == "0016_vehicle_dynamics"
+    assert revision == "0017_simulation_sessions"
     assert tables == ["audit_records", "users"]
     assert len(schema_hash) == 64
 

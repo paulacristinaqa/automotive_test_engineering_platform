@@ -262,6 +262,48 @@ class VehicleSimulationStepResponse(BaseModel):
     created_at: datetime
 
 
+class SimulationSessionCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    vehicle_ids: list[str] = Field(min_length=1, max_length=20)
+
+    @field_validator("name")
+    @classmethod
+    def strip_session_name(cls, value: str) -> str:
+        return value.strip()
+
+    @model_validator(mode="after")
+    def require_unique_vehicles(self) -> "SimulationSessionCreate":
+        if len(set(self.vehicle_ids)) != len(self.vehicle_ids):
+            raise ValueError("simulation session vehicles must be unique")
+        return self
+
+
+class SimulationSessionResponse(BaseModel):
+    id: UUID
+    name: str
+    vehicle_ids: list[str]
+    created_at: datetime
+
+
+class SimulationSnapshotCreate(BaseModel):
+    snapshot_id: str = Field(min_length=8, max_length=64, pattern=EVENT_ID_PATTERN.pattern)
+
+
+class SimulationSnapshotResponse(BaseModel):
+    id: UUID
+    session_id: UUID
+    snapshot_id: str
+    vehicle_count: int
+    content_sha256: str
+    created_at: datetime
+
+
+class SimulationSnapshotRestoreResponse(BaseModel):
+    session_id: UUID
+    snapshot_id: str
+    restored_vehicle_ids: list[str]
+
+
 class VehicleCommandKind(StrEnum):
     SET_PROPERTY = "set_property"
 

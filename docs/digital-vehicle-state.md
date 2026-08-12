@@ -124,3 +124,14 @@ cooling, and steering plus speed produces bounded lateral acceleration. Road rou
 longitudinal inputs produce front/rear suspension travel. Brake lamps follow pedal input and low
 ambient light selects low beam. The model is deliberately deterministic and scenario-oriented; it
 is not a high-fidelity tyre, chassis, or thermal solver.
+
+## Multi-vehicle sessions and snapshots
+
+`POST /api/v1/simulation-sessions` creates a bounded composition of 1–20 unique registered
+vehicles. Snapshots capture every member's aggregate version, logical time, and state in canonical
+vehicle-identifier order and publish a SHA-256 digest over canonical JSON.
+
+Restore locks matching members in deterministic order, applies each saved state only to its own
+vehicle, restores logical time, and increments each current version. Session creation, snapshot,
+and restore use `digital_vehicle:write`; session inspection uses `digital_vehicle:read`. Every
+mutation records bounded audit and transactional outbox evidence.
