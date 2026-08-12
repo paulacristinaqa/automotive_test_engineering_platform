@@ -13,15 +13,22 @@ from atep.core.errors import VehicleStateVersionConflictError
 from atep.events.models import OutboxEvent
 from atep.identity.dependencies import require_permissions
 from atep.identity.permissions import PermissionName
-from atep.vehicles.models import Vehicle, VehicleDigitalState, VehicleSimulationTransition
+from atep.vehicles.models import (
+    Vehicle,
+    VehicleDigitalState,
+    VehicleSimulationStep,
+    VehicleSimulationTransition,
+)
 from atep.vehicles.schemas import (
     DigitalVehicleStatePayload,
     DigitalVehicleStateReplace,
     VehicleCreate,
+    VehicleSimulationStepCommand,
     VehicleSimulationTransitionCommand,
 )
 from atep.vehicles.service import (
     create_vehicle,
+    execute_vehicle_simulation_step,
     execute_vehicle_simulation_transition,
     replace_vehicle_digital_state,
 )
@@ -392,6 +399,93 @@ def test_simulation_transition_parameters_are_bounded_by_target() -> None:
         transition_command(
             command_id="transition-drive-005", expected_version=1, target_mode="driving"
         )
+
+
+def test_simulation_step_contract_rejects_conflicting_inputs_and_invalid_faults() -> None:
+    with pytest.raises(ValidationError, match="cannot be applied together"):
+        VehicleSimulationStepCommand(
+            command_id="step-command-001",
+            expected_version=1,
+            duration_ms=1000,
+            inputs={"accelerator_pct": 10, "brake_pct": 20},
+        )
+    with pytest.raises(ValidationError, match="require fault_value"):
+        VehicleSimulationStepCommand(
+            command_id="step-command-001",
+            expected_version=1,
+            duration_ms=1000,
+            sensors={"speed": {"fault_mode": "stuck"}},
+        )
+
+
+@pytest.mark.asyncio
+async def test_seeded_sensor_and_actuator_step_is_deterministic_and_atomic() -> None:
+    current = state()
+    current.operational_mode = "driving"
+    current.battery_state.update(contactors_closed=True)
+    current.powertrain_state.update(motor_enabled=True, gear="drive", speed_kph=20.0)
+    current.brake_state.update(parking_brake_applied=False)
+    session = FakeSession(None, current)
+    command = VehicleSimulationStepCommand(
+        command_id="step-command-001",
+        expected_version=1,
+        duration_ms=2000,
+        seed=42,
+        inputs={"accelerator_pct": 20, "steering_angle_deg": 5},
+        sensors={
+            "speed": {"noise_amplitude": 0.5},
+            "battery_soc": {"fault_mode": "offset", "fault_value": -2},
+            "battery_temperature": {"fault_mode": "stuck", "fault_value": 48},
+        },
+    )
+    step, duplicate = await execute_vehicle_simulation_step(
+        cast(AsyncSession, session),
+        vehicle=vehicle(),
+        command=command,
+        actor_user_id=uuid4(),
+        correlation_id=uuid4(),
+    )
+    assert duplicate is False
+    assert step.state_version == 2
+    assert step.simulation_time_ms == 2000
+    assert step.sensor_readings["battery_temperature_c"] == 48
+    assert step.sensor_readings["battery_soc_pct"] < current.battery_state["state_of_charge_pct"]
+    assert current.powertrain_state["speed_kph"] == 22.0
+    assert current.steering_state["wheel_angle_deg"] == 5
+    assert current.version == 2
+    assert [type(item) for item in session.added] == [
+        VehicleSimulationStep,
+        OutboxEvent,
+        AuditRecord,
+    ]
+    assert session.added[1].event_type == "atep.digital_vehicle.simulation.stepped.v1"
+    assert session.added[2].action == "digital_vehicle.simulation_stepped"
+
+    replay = VehicleSimulationStep(
+        id=step.id,
+        vehicle_id=step.vehicle_id,
+        command_id=step.command_id,
+        duration_ms=step.duration_ms,
+        seed=step.seed,
+        inputs=step.inputs,
+        sensor_configuration=step.sensor_configuration,
+        sensor_readings=step.sensor_readings,
+        previous_state_version=step.previous_state_version,
+        state_version=step.state_version,
+        simulation_time_ms=step.simulation_time_ms,
+        requested_by_user_id=step.requested_by_user_id,
+        created_at=datetime(2026, 8, 12, 10, 1, tzinfo=UTC),
+        updated_at=datetime(2026, 8, 12, 10, 1, tzinfo=UTC),
+    )
+    returned, duplicate = await execute_vehicle_simulation_step(
+        cast(AsyncSession, FakeSession(replay)),
+        vehicle=vehicle(),
+        command=command,
+        actor_user_id=uuid4(),
+        correlation_id=uuid4(),
+    )
+    assert returned is replay
+    assert duplicate is True
     with pytest.raises(ValidationError, match="only valid for driving"):
         transition_command(
             command_id="transition-ready-005",

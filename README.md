@@ -62,6 +62,8 @@ An intended end-to-end scenario is:
   operational mode, with cross-component safety invariants and optimistic concurrency;
 - deterministic command-driven simulation time with idempotent parked, ready, driving, and
   parked transitions and no wall-clock loop;
+- deterministic accelerator, brake, and steering actuators with seeded speed, battery SOC, and
+  temperature sensors, explicit noise/fault modes, and replayable evidence;
 - capability-protected Android Automotive telemetry ingestion with idempotent retry handling;
 - persistent vehicle-scoped test runs with controlled, optimistic lifecycle transitions;
 - authenticated Redis-backed WebSocket snapshots and live test-run updates for CarSystemUI;
@@ -291,7 +293,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\run_integration_test
 
 The runner creates ephemeral credentials, uses isolated ports, applies every migration, and
 removes its containers, network, and volumes after execution. The latest local evidence records
-**199 fast tests plus expanded Docker integration, restore-drill, mocked Terraform-plan, and read-only AWS-audit scenarios** passing. The CarSystemUI
+**201 fast tests plus expanded Docker integration, restore-drill, mocked Terraform-plan, and read-only AWS-audit scenarios** passing. The CarSystemUI
 companion project also passes 27 unit tests, Android lint, and debug APK assembly for this slice.
 
 ## Engineering documentation

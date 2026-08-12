@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from hashlib import sha256
 from uuid import UUID
 
 from sqlalchemy import func, or_, select
@@ -15,6 +16,7 @@ from atep.core.errors import (
     VehicleCommandConflictError,
     VehicleCommandStateError,
     VehicleSimulationStateError,
+    VehicleSimulationStepConflictError,
     VehicleSimulationTransitionConflictError,
     VehicleStateVersionConflictError,
 )
@@ -25,6 +27,7 @@ from atep.vehicles.models import (
     Vehicle,
     VehicleCommand,
     VehicleDigitalState,
+    VehicleSimulationStep,
     VehicleSimulationTransition,
     VehicleTelemetryEvent,
 )
@@ -37,6 +40,8 @@ from atep.vehicles.schemas import (
     VehicleCommandStatus,
     VehicleCreate,
     VehicleOperationalMode,
+    VehicleSensorReadings,
+    VehicleSimulationStepCommand,
     VehicleSimulationTransitionCommand,
     VehicleStatus,
 )
@@ -342,6 +347,204 @@ async def execute_vehicle_simulation_transition(
         },
     )
     return transition, False
+
+
+def _step_matches(step: VehicleSimulationStep, command: VehicleSimulationStepCommand) -> bool:
+    return (
+        step.duration_ms == command.duration_ms
+        and step.seed == command.seed
+        and step.inputs == command.inputs.model_dump(mode="json")
+        and step.sensor_configuration == command.sensors.model_dump(mode="json")
+        and step.previous_state_version == command.expected_version
+    )
+
+
+def _seeded_noise(seed: int, sensor: str, amplitude: float) -> float:
+    if amplitude == 0:
+        return 0.0
+    digest = sha256(f"{seed}:{sensor}".encode()).digest()
+    fraction = int.from_bytes(digest[:8], "big") / ((1 << 64) - 1)
+    return (fraction * 2 - 1) * amplitude
+
+
+def _sensor_value(value: float, *, seed: int, name: str, configuration: object) -> float:
+    from atep.vehicles.schemas import SensorConfiguration, SensorFaultMode
+
+    sensor = SensorConfiguration.model_validate(configuration)
+    if sensor.fault_mode is SensorFaultMode.STUCK:
+        assert sensor.fault_value is not None
+        return sensor.fault_value
+    measured = value + _seeded_noise(seed, name, sensor.noise_amplitude)
+    if sensor.fault_mode is SensorFaultMode.OFFSET:
+        assert sensor.fault_value is not None
+        measured += sensor.fault_value
+    return measured
+
+
+def _apply_simulation_step(
+    current: DigitalVehicleStatePayload, command: VehicleSimulationStepCommand
+) -> tuple[DigitalVehicleStatePayload, VehicleSensorReadings]:
+    payload = current.model_dump(mode="json")
+    seconds = command.duration_ms / 1000
+    inputs = command.inputs
+    speed = current.powertrain.speed_kph
+    if current.operational_mode is VehicleOperationalMode.DRIVING:
+        acceleration = inputs.accelerator_pct * 0.05
+        deceleration = inputs.brake_pct * 0.08
+        speed = min(250.0, max(0.0, speed + (acceleration - deceleration) * seconds))
+        torque = inputs.accelerator_pct * 12.0
+        payload["powertrain"].update(
+            speed_kph=round(speed, 6),
+            requested_torque_nm=round(torque, 6),
+            delivered_torque_nm=round(torque, 6),
+        )
+        payload["brakes"].update(
+            pedal_pct=inputs.brake_pct,
+            hydraulic_pressure_bar=round(inputs.brake_pct * 2.5, 6),
+        )
+        payload["steering"].update(
+            wheel_angle_deg=inputs.steering_angle_deg,
+            assist_active=True,
+        )
+        payload["lighting"]["brake_lights"] = inputs.brake_pct > 0
+        energy_use = inputs.accelerator_pct * seconds / 360_000
+        thermal_gain = (inputs.accelerator_pct + inputs.brake_pct * 0.25) * seconds / 10_000
+        payload["battery"]["state_of_charge_pct"] = round(
+            max(0.0, current.battery.state_of_charge_pct - energy_use), 6
+        )
+        payload["battery"]["temperature_c"] = round(
+            min(120.0, current.battery.temperature_c + thermal_gain), 6
+        )
+        payload["battery"]["pack_current_a"] = round(inputs.accelerator_pct * 4.0, 6)
+    elif inputs.accelerator_pct > 0 or inputs.brake_pct > 0 or inputs.steering_angle_deg != 0:
+        raise VehicleSimulationStateError(
+            current_mode=current.operational_mode.value, requested_mode="actuated"
+        )
+
+    requested = DigitalVehicleStatePayload.model_validate(payload)
+    readings = VehicleSensorReadings(
+        speed_kph=round(
+            min(
+                400.0,
+                max(
+                    0.0,
+                    _sensor_value(
+                        requested.powertrain.speed_kph,
+                        seed=command.seed,
+                        name="speed",
+                        configuration=command.sensors.speed,
+                    ),
+                ),
+            ),
+            6,
+        ),
+        battery_soc_pct=round(
+            min(
+                100.0,
+                max(
+                    0.0,
+                    _sensor_value(
+                        requested.battery.state_of_charge_pct,
+                        seed=command.seed,
+                        name="battery_soc",
+                        configuration=command.sensors.battery_soc,
+                    ),
+                ),
+            ),
+            6,
+        ),
+        battery_temperature_c=round(
+            min(
+                120.0,
+                max(
+                    -50.0,
+                    _sensor_value(
+                        requested.battery.temperature_c,
+                        seed=command.seed,
+                        name="battery_temperature",
+                        configuration=command.sensors.battery_temperature,
+                    ),
+                ),
+            ),
+            6,
+        ),
+    )
+    return requested, readings
+
+
+async def execute_vehicle_simulation_step(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    command: VehicleSimulationStepCommand,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> tuple[VehicleSimulationStep, bool]:
+    existing = await session.scalar(
+        select(VehicleSimulationStep).where(
+            VehicleSimulationStep.vehicle_id == vehicle.id,
+            VehicleSimulationStep.command_id == command.command_id,
+        )
+    )
+    if existing is not None:
+        if _step_matches(existing, command):
+            return existing, True
+        raise VehicleSimulationStepConflictError()
+
+    state = await require_vehicle_digital_state(session, vehicle=vehicle, for_update=True)
+    if command.expected_version != state.version:
+        raise VehicleStateVersionConflictError(current_version=state.version)
+    requested, readings = _apply_simulation_step(digital_state_payload(state), command)
+    previous_version = state.version
+    state.battery_state = requested.battery.model_dump(mode="json")
+    state.powertrain_state = requested.powertrain.model_dump(mode="json")
+    state.brake_state = requested.brakes.model_dump(mode="json")
+    state.steering_state = requested.steering.model_dump(mode="json")
+    state.lighting_state = requested.lighting.model_dump(mode="json")
+    state.version += 1
+    state.simulation_time_ms += command.duration_ms
+    step = VehicleSimulationStep(
+        vehicle_id=vehicle.id,
+        command_id=command.command_id,
+        duration_ms=command.duration_ms,
+        seed=command.seed,
+        inputs=command.inputs.model_dump(mode="json"),
+        sensor_configuration=command.sensors.model_dump(mode="json"),
+        sensor_readings=readings.model_dump(mode="json"),
+        previous_state_version=previous_version,
+        state_version=state.version,
+        simulation_time_ms=state.simulation_time_ms,
+        requested_by_user_id=actor_user_id,
+    )
+    session.add(step)
+    await session.flush()
+    evidence = {
+        "command_id": command.command_id,
+        "vehicle_id": vehicle.identifier,
+        "duration_ms": command.duration_ms,
+        "seed": command.seed,
+        "state_version": step.state_version,
+        "simulation_time_ms": step.simulation_time_ms,
+        "readings": step.sensor_readings,
+    }
+    enqueue_event(
+        session,
+        event_type="atep.digital_vehicle.simulation.stepped.v1",
+        aggregate_type="digital_vehicle",
+        aggregate_id=vehicle.id,
+        payload=evidence,
+        correlation_id=correlation_id,
+    )
+    record_audit(
+        session,
+        actor_user_id=actor_user_id,
+        action="digital_vehicle.simulation_stepped",
+        resource_type="vehicle",
+        resource_id=vehicle.id,
+        correlation_id=correlation_id,
+        details=evidence,
+    )
+    return step, False
 
 
 async def list_vehicles(
