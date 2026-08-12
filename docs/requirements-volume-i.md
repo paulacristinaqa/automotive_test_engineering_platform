@@ -108,6 +108,8 @@
 | CORE-F-102 | The AWS foundation shall define distinct short-lived writer and restore roles that trust exact wildcard-free GitHub OIDC subjects and grant only their required S3/KMS data-plane operations. | Terraform identity-policy tests and future live IAM simulation |
 | CORE-F-103 | Archive management and S3 object data events shall be recorded by a validated multi-Region CloudTrail delivered to externally governed audit storage and encryption. | Terraform mocked plan and future live CloudTrail evidence |
 | CORE-F-104 | Routine CI shall format, initialize without a backend, validate, and test only mocked Terraform plans without AWS credentials, OIDC issuance, or `apply`. | Security-workflow and Terraform test evidence |
+| CORE-F-105 | An operator-only read-only auditor shall verify the expected AWS account, archive S3 controls, archive KMS key, exact writer/restore IAM trust and actions, and external CloudTrail configuration before live archive acceptance. | Simulated AWS-client audit tests and future operator evidence |
+| CORE-F-106 | The AWS foundation auditor shall emit one bounded non-replacing JSON report only after every check passes and shall retain no caller ARN/session identifier, raw policy, credential, token, or AWS response body. | Positive, negative, and evidence-minimization audit tests |
 
 ## Non-functional requirements
 
@@ -191,3 +193,5 @@
 | CORE-NF-076 | Archive administrative separation | writer, restore, KMS administration, audit storage/encryption, provisioning, and Terraform state are separate trust responsibilities; data-plane roles have no delete, bypass, legal-hold, IAM, KMS-administration, bucket-administration, or audit-administration authority |
 | CORE-NF-077 | Terraform reproducibility | Terraform and the AWS provider are version constrained; the provider lock includes verified Linux and Windows checksums; formatting, validation, and mocked positive/negative plans are CI gates |
 | CORE-NF-078 | Audit independence | CloudTrail log-file validation and management/object data-event coverage are enabled while its destination bucket and KMS key remain outside the archive stack |
+| CORE-NF-079 | Live audit non-mutation | Foundation conformance uses only STS/S3/KMS/IAM/CloudTrail read APIs; it never plans/applies infrastructure, assumes a role, performs cryptographic operations, writes an object, changes retention, or changes logging |
+| CORE-NF-080 | Live audit fail-closed behavior | Wrong account, shared boundaries, insufficient retention, wrong encryption, public ownership, missing deny controls, weak key state/rotation, broad or ambiguous IAM trust/actions, stopped/erroring trail, truncated IAM results, or existing report prevents evidence emission |

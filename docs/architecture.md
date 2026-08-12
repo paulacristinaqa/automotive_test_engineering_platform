@@ -208,7 +208,9 @@ flowchart LR
    declares a non-destroyable versioned Object Lock bucket, rotated customer key, exact OIDC writer
    and separate restore roles, restrictive bucket policy, and multi-Region CloudTrail delivery to
    independently governed audit storage. CI validates only a mocked plan and never receives AWS
-   credentials or applies the stack. A
+   credentials or applies the stack. A separately invoked read-only auditor verifies the observed
+   account, S3, KMS, IAM/OIDC, and CloudTrail configuration and emits one bounded non-replacing
+   report only after every control passes; routine CI still receives no AWS identity. A
    separately authorized revocation procedure preserves evidence before exact-digest attestation
    and package withdrawal.
 

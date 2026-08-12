@@ -65,6 +65,10 @@ Routine CI uses Terraform's mock provider and `command = plan`; it has no AWS cr
 `id-token: write`, backend initialization, or apply path. See the foundation README for the
 controlled two-reviewer live sequence.
 
+After an approved deployment, run the [read-only foundation audit](aws-archive-foundation-audit.md)
+from a separately authorized operator identity. It verifies observed S3, KMS, IAM/OIDC, and
+CloudTrail configuration but performs no upload, mutation, IAM simulation, or restore.
+
 ## CLI contract
 
 The CLI uses the standard AWS credential chain. Do not pass access keys on the command line or

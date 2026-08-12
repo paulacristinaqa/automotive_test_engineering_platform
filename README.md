@@ -283,7 +283,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\run_integration_test
 
 The runner creates ephemeral credentials, uses isolated ports, applies every migration, and
 removes its containers, network, and volumes after execution. The latest local evidence records
-**175 fast tests plus expanded Docker integration, restore-drill, and mocked Terraform-plan scenarios** passing. The CarSystemUI
+**185 fast tests plus expanded Docker integration, restore-drill, mocked Terraform-plan, and read-only AWS-audit scenarios** passing. The CarSystemUI
 companion project also passes 27 unit tests, Android lint, and debug APK assembly for this slice.
 
 ## Engineering documentation
@@ -303,6 +303,7 @@ companion project also passes 27 unit tests, Android lint, and debug APK assembl
 - [Release archive export gate](docs/release-archive-provider-contract.md#normalized-export-gate)
 - [AWS S3 Object Lock archive adapter](docs/aws-s3-object-lock-adapter.md)
 - [AWS immutable archive Terraform foundation](deploy/terraform/aws-archive-foundation/README.md)
+- [AWS archive foundation read-only audit](docs/aws-archive-foundation-audit.md)
 - [Engineering workbook — editable source](docs/workbook-volume-i.md)
 - [Engineering workbook — formatted document](docs/ATEP_Volume_I_Engineering_Workbook.docx)
 

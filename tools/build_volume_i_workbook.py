@@ -285,7 +285,7 @@ def configure_sections(doc: Document) -> None:
             Inches(6.5), WD_TAB_ALIGNMENT.RIGHT
         )
         set_font(
-            footer_paragraph.add_run("ATEP Engineering Workbook  |  Version 0.40.0"),
+            footer_paragraph.add_run("ATEP Engineering Workbook  |  Version 0.41.0"),
             8.5,
             MUTED,
         )
@@ -327,9 +327,9 @@ def add_cover(doc: Document) -> None:
 
     meta = doc.add_table(rows=4, cols=2)
     rows = [
-        ("Document version", "0.40.0"),
-        ("Baseline date", "11 August 2026"),
-        ("Status", "Living document - AWS archive infrastructure defined as code"),
+        ("Document version", "0.41.0"),
+        ("Baseline date", "12 August 2026"),
+        ("Status", "Living document - AWS archive foundation audit implemented"),
         ("Language", "English"),
     ]
     for row, (label, value) in zip(meta.rows, rows, strict=True):
