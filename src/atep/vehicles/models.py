@@ -111,6 +111,62 @@ class VehicleSimulationStep(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     vehicle: Mapped[Vehicle] = relationship(back_populates="simulation_steps", lazy="raise")
 
 
+class VehicleSimulationSession(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "vehicle_simulation_sessions"
+
+    name: Mapped[str] = mapped_column(String(120))
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    members: Mapped[list["VehicleSimulationSessionMember"]] = relationship(
+        back_populates="simulation_session", cascade="all, delete-orphan", lazy="selectin"
+    )
+    snapshots: Mapped[list["VehicleSimulationSnapshot"]] = relationship(
+        back_populates="simulation_session", cascade="all, delete-orphan", lazy="raise"
+    )
+
+
+class VehicleSimulationSessionMember(UUIDPrimaryKeyMixin, Base):
+    __tablename__ = "vehicle_simulation_session_members"
+    __table_args__ = (
+        UniqueConstraint("session_id", "vehicle_id", name="uq_simulation_session_vehicle"),
+    )
+
+    session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("vehicle_simulation_sessions.id", ondelete="CASCADE"),
+        index=True,
+    )
+    vehicle_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("vehicles.id", ondelete="RESTRICT"), index=True
+    )
+    simulation_session: Mapped[VehicleSimulationSession] = relationship(
+        back_populates="members", lazy="raise"
+    )
+
+
+class VehicleSimulationSnapshot(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "vehicle_simulation_snapshots"
+    __table_args__ = (
+        UniqueConstraint("session_id", "snapshot_id", name="uq_simulation_session_snapshot"),
+    )
+
+    session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("vehicle_simulation_sessions.id", ondelete="CASCADE"),
+        index=True,
+    )
+    snapshot_id: Mapped[str] = mapped_column(String(64))
+    states: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    content_sha256: Mapped[str] = mapped_column(String(64))
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    simulation_session: Mapped[VehicleSimulationSession] = relationship(
+        back_populates="snapshots", lazy="raise"
+    )
+
+
 class VehicleTelemetryEvent(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "vehicle_telemetry_events"
     __table_args__ = (UniqueConstraint("event_id", name="uq_vehicle_telemetry_events_event_id"),)

@@ -203,6 +203,15 @@ def test_vehicle_command_delivery_contracts_are_published() -> None:
     assert command_parameters["offset"]["maximum"] == 1_000_000
 
 
+def test_multi_vehicle_simulation_session_contracts_are_published() -> None:
+    paths = core_app.openapi()["paths"]
+    assert "post" in paths["/api/v1/simulation-sessions"]
+    assert "get" in paths["/api/v1/simulation-sessions/{session_id}"]
+    assert "post" in paths["/api/v1/simulation-sessions/{session_id}/snapshots"]
+    restore = "/api/v1/simulation-sessions/{session_id}/snapshots/{snapshot_id}/restore"
+    assert "post" in paths[restore]
+
+
 def test_test_job_scheduler_contracts_and_safe_pagination_are_published() -> None:
     paths = core_app.openapi()["paths"]
     collection = paths["/api/v1/test-jobs"]

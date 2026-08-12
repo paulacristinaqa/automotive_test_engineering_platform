@@ -33,6 +33,7 @@ from atep.test_jobs.scheduler import run_test_scheduler
 from atep.test_runs.router import router as test_runs_router
 from atep.test_runs.router import websocket_router as test_runs_websocket_router
 from atep.vehicles.router import router as vehicles_router
+from atep.vehicles.simulation_sessions_router import router as simulation_sessions_router
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -103,6 +104,7 @@ app.include_router(roles_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(audit_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(registry_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(vehicles_router, prefix="/api/v1", dependencies=rate_limited)
+app.include_router(simulation_sessions_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(test_runs_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(environment_profiles_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(test_jobs_router, prefix="/api/v1", dependencies=rate_limited)

@@ -2,11 +2,11 @@
 
 **Subtitle:** Domain architecture, deterministic simulation, verification strategy, and engineering evidence  
 **Project:** Automotive Test Engineering Platform (ATEP)  
-**Document version:** 0.4.0
+**Document version:** 0.5.0
 
 **Baseline date:** 12 August 2026
 
-**Status:** Living engineering document — Increments II-1 through II-4 implemented
+**Status:** Living engineering document — Increments II-1 through II-5 implemented
 **Language:** English
 
 ## 1. Document Purpose
@@ -37,6 +37,7 @@ as implemented, planned, or target according to repository evidence.
 | 0.2.0 | 12 August 2026 | II-2: added the command-driven simulation clock and persisted `parked → ready → driving → parked` transitions | Implemented and verified by state-machine, replay, idempotency, conflict, and evidence tests |
 | 0.3.0 | 12 August 2026 | II-3: added accelerator, brake, and steering actuators plus seeded speed, SOC, and temperature sensors with noise and explicit fault modes | Implemented and verified by bounds, seed, fault, retry, contract, migration, and hosted integration tests |
 | 0.4.0 | 12 August 2026 | II-4: coupled road and ambient inputs with battery energy, thermal response, powertrain, regenerative braking, steering, suspension, and lighting | Implemented and verified by scenario, conservation, bounds, migration, and hosted integration tests |
+| 0.5.0 | 12 August 2026 | II-5: added bounded multi-vehicle sessions, canonical immutable snapshots, SHA-256 content identity, and isolated deterministic restore | Implemented and verified by bounds, canonicalization, isolation, reset/replay, contract, migration, and hosted integration tests |
 
 ## 4. Scope and Boundaries
 
@@ -97,6 +98,10 @@ services behind Volume I boundaries and are never accessed directly by CarSystem
 | `PUT /api/v1/vehicles/{vehicle_id}/state` | `digital_vehicle:write` | Replace the complete aggregate using optimistic concurrency |
 | `POST /api/v1/vehicles/{vehicle_id}/simulation/transitions` | `digital_vehicle:write` | Execute a deterministic operational-mode transition |
 | `POST /api/v1/vehicles/{vehicle_id}/simulation/steps` | `digital_vehicle:write` | Apply actuators, advance logical time, and capture sensor readings |
+| `POST /api/v1/simulation-sessions` | `digital_vehicle:write` | Create a bounded unique multi-vehicle composition |
+| `GET /api/v1/simulation-sessions/{session_id}` | `digital_vehicle:read` | Inspect session composition |
+| `POST /api/v1/simulation-sessions/{session_id}/snapshots` | `digital_vehicle:write` | Capture a canonical immutable snapshot |
+| `POST /api/v1/simulation-sessions/{session_id}/snapshots/{snapshot_id}/restore` | `digital_vehicle:write` | Restore isolated member state and logical time |
 
 ## 6. Deterministic Simulation Model
 
@@ -140,6 +145,17 @@ and ambient cooling. Steering and speed produce bounded lateral acceleration; ro
 and acceleration produce front/rear suspension travel. Brake lamps and low-beam behavior follow
 brake and ambient-light inputs.
 
+### 6.5 Multi-Vehicle Sessions
+
+A session contains 1–20 unique registered vehicles. Snapshot state is ordered canonically by
+vehicle identifier before serialization and hashing. The immutable snapshot stores aggregate
+versions, logical times, component state, and a SHA-256 content identity.
+
+Restore selects and locks matching vehicles deterministically, maps each state by vehicle
+identifier, restores its saved logical time, and increments the current aggregate version. It
+never copies state between members. Creation, snapshot, and restore append bounded audit and outbox
+evidence in the same transaction.
+
 ## 7. Consistency, Security, and Evidence
 
 - Every mutation supplies `expected_version`; stale requests return a stable HTTP 409 envelope.
@@ -173,6 +189,9 @@ brake and ambient-light inputs.
 | DV-F-016 | Steps shall calculate bounded energy use, regeneration, usable energy, and SOC. | Conservation and braking tests |
 | DV-F-017 | Thermal response shall combine load generation, ambient cooling, and absolute bounds. | Scenario and boundary tests |
 | DV-F-018 | Road and ambient inputs shall influence powertrain, suspension, steering response, and lighting deterministically. | Coupled scenario test |
+| DV-F-019 | Sessions shall contain 1–20 unique registered vehicles. | Contract and creation tests |
+| DV-F-020 | Snapshots shall use canonical member ordering and SHA-256 content identity. | Canonical snapshot test |
+| DV-F-021 | Restore shall isolate member state, restore logical time, and increment versions. | Isolation and restore test |
 
 ## 9. Non-Functional Requirements
 
@@ -187,6 +206,7 @@ brake and ambient-light inputs.
 | DV-NF-007 | Simulation shall not depend on wall-clock loops, GPU, or cloud services. | Design and tests |
 | DV-NF-008 | Equal state, command, and seed inputs shall produce equal readings. | Deterministic seed test |
 | DV-NF-009 | Published energy evidence shall conserve energy at contract precision. | Conservation assertions |
+| DV-NF-010 | Session mutations shall emit atomic bounded evidence without background loops. | Transaction assertions |
 
 ## 10. Architecture Decisions
 
@@ -223,6 +243,15 @@ publish their conservation evidence instead of introducing a wall-clock or high-
 Higher-fidelity models can replace individual equations later without changing API, replay, audit,
 or logical-time contracts.
 
+### ADR-DV-005 — Identify Snapshots by Canonical Content
+
+**Decision.** Sort snapshot members by vehicle identifier, serialize compact JSON with sorted keys,
+and record a SHA-256 digest. Restore maps states by identifier and locks members in deterministic
+order.
+
+**Rationale.** Database return order must not influence evidence identity. Explicit identifier
+mapping prevents cross-vehicle state contamination and supports reproducible replay comparisons.
+
 ## 11. Verification Catalogue
 
 | ID | Test and objective | Expected result |
@@ -253,6 +282,12 @@ or logical-time contracts.
 | DV-T-024 | Inspect used, recovered, and net Wh | Published values conserve energy at contract precision and recovery is bounded |
 | DV-T-025 | Apply road, ambient, and roughness extremes | All component states remain inside declared limits |
 | DV-T-026 | Apply migration 0016 | Existing states receive the safe suspension baseline and schema reaches head |
+| DV-T-027 | Create sessions at minimum/maximum size | Accept 1–20 unique vehicles and reject duplicates or overflow |
+| DV-T-028 | Capture identical member states | Canonical state ordering and SHA-256 identity are repeatable |
+| DV-T-029 | Mutate two members and restore | Each vehicle receives only its own saved state and logical time |
+| DV-T-030 | Inspect restore versions | Every restored aggregate increments exactly once |
+| DV-T-031 | Inspect session mutations | Session, snapshot, restore, audit, and outbox evidence commit atomically |
+| DV-T-032 | Apply migration 0017 | Session/member/snapshot tables reach the expected schema head |
 
 ## 12. Implemented Evidence
 
@@ -275,7 +310,7 @@ or logical-time contracts.
 |---|---|---|
 | Equations are intentionally scenario-oriented | Results are deterministic but not a substitute for validated tyre, chassis, or thermal solvers | Calibrate or replace component equations behind stable contracts when higher fidelity is required |
 | Sensor calibration is represented by noise/fault configuration only | Offset correction and calibration lifecycle are incomplete | Add explicit calibration parameters and provenance |
-| No multi-vehicle session abstraction | Reproducibility exists per vehicle but not across coordinated fleets | Add isolated sessions and snapshots in II-5 |
+| Session membership is immutable after creation | Complex fleet reconfiguration requires a new session | Add explicit versioned composition changes only when scenarios require them |
 | No VHAL property mapping | CarSystemUI integration remains API/gateway-oriented | Add contract mappings and end-to-end evidence in II-6 |
 
 ## 14. Roadmap
@@ -286,8 +321,8 @@ or logical-time contracts.
 | II-2 | Logical clock and command-driven state transitions | Implemented |
 | II-3 | Sensors and actuators with seeded noise and explicit fault modes | Implemented |
 | II-4 | Coupled energy, thermal, powertrain, braking, steering, suspension, and lighting behavior | Implemented |
-| II-5 | Multi-vehicle simulation sessions and reproducible snapshots | Planned next |
-| II-6 | Android Automotive/VHAL Vehicle Gateway mappings | Planned |
+| II-5 | Multi-vehicle simulation sessions and reproducible snapshots | Implemented |
+| II-6 | Android Automotive/VHAL Vehicle Gateway mappings | Planned next |
 
 ## 15. Workbook Maintenance Checklist
 

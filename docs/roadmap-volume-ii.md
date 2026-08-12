@@ -12,11 +12,11 @@ and compatibility with the future Android Automotive gateway.
 | II-2 | Deterministic simulation clock and command-driven state transitions | Implemented | Repeatable time-step, state-machine, retry, and evidence tests without wall-clock dependence |
 | II-3 | Sensors and actuator models with noise, calibration, and fault modes | Implemented | Seeded simulations and boundary/fault tests |
 | II-4 | Thermal, battery-energy, powertrain, braking, steering, suspension, and lighting behavior | Implemented | Coupled drive-corner-brake and conservation/bounds tests |
-| II-5 | Multi-vehicle simulation sessions and reproducible snapshots | Planned | Isolation, scale, reset, and replay tests |
+| II-5 | Multi-vehicle simulation sessions and reproducible snapshots | Implemented | Isolation, bounds, canonical snapshot, reset, and replay tests |
 | II-6 | Vehicle Gateway mapping to Android Automotive/VHAL contracts | Planned | Contract and end-to-end CarSystemUI evidence |
 
 ## Recommended next increment
 
-Add multi-vehicle simulation sessions and reproducible snapshots. Preserve vehicle isolation,
-logical-time determinism, bounded session size, reset semantics, and exact replay evidence without
-introducing wall-clock loops or mandatory cloud infrastructure.
+Add Vehicle Gateway mappings to Android Automotive/VHAL contracts. Preserve public API isolation,
+explicit property units, authorization, idempotent telemetry, and end-to-end evidence between ATEP
+and CarSystemUI without allowing Android clients to access internal infrastructure directly.
