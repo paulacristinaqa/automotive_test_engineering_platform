@@ -2,7 +2,7 @@
 
 **Subtitle:** Architecture, implementation record, verification strategy, and engineering evidence  
 **Project:** Automotive Test Engineering Platform (ATEP)  
-**Document version:** 0.44.0
+**Document version:** 1.0.0
 
 **Baseline date:** 11 August 2026
 

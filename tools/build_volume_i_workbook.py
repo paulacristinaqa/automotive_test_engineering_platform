@@ -12,7 +12,11 @@ from docx.shared import Inches, Pt, RGBColor
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "docs" / "workbook-volume-i.md"
-OUTPUT = ROOT / "docs" / "ATEP_Volume_I_Engineering_Workbook.docx"
+OUTPUT = ROOT / "docs" / "ATEP_Volume_I_Core_Platform_Engineering_Workbook.docx"
+VOLUME_NUMBER = "I"
+VOLUME_NAME = "Core Platform"
+DOCUMENT_VERSION = "1.0.0"
+DOCUMENT_STATUS = "Living document - Volume I baseline implemented"
 
 NAVY = "0B2545"
 BLUE = "2E74B5"
@@ -274,7 +278,7 @@ def configure_sections(doc: Document) -> None:
         p = header.paragraphs[0]
         p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
         p.paragraph_format.space_after = Pt(0)
-        run = p.add_run("ATEP  /  VOLUME I  /  CORE PLATFORM")
+        run = p.add_run(f"ATEP  /  VOLUME {VOLUME_NUMBER}  /  {VOLUME_NAME.upper()}")
         set_font(run, 8.5, MUTED, bold=True)
 
         footer = section.footer
@@ -285,7 +289,9 @@ def configure_sections(doc: Document) -> None:
             Inches(6.5), WD_TAB_ALIGNMENT.RIGHT
         )
         set_font(
-            footer_paragraph.add_run("ATEP Engineering Workbook  |  Version 0.44.0"),
+            footer_paragraph.add_run(
+                f"ATEP Volume {VOLUME_NUMBER} Workbook  |  Version {DOCUMENT_VERSION}"
+            ),
             8.5,
             MUTED,
         )
@@ -306,12 +312,12 @@ def add_cover(doc: Document) -> None:
     title = doc.add_paragraph()
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     title.paragraph_format.space_after = Pt(8)
-    set_font(title.add_run("Volume I"), 30, NAVY, bold=True)
+    set_font(title.add_run(f"Volume {VOLUME_NUMBER}"), 30, NAVY, bold=True)
 
     subtitle = doc.add_paragraph()
     subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
     subtitle.paragraph_format.space_after = Pt(4)
-    set_font(subtitle.add_run("Core Platform Engineering Workbook"), 17, DARK_BLUE, bold=True)
+    set_font(subtitle.add_run(f"{VOLUME_NAME} Engineering Workbook"), 17, DARK_BLUE, bold=True)
 
     descriptor = doc.add_paragraph()
     descriptor.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -327,9 +333,9 @@ def add_cover(doc: Document) -> None:
 
     meta = doc.add_table(rows=4, cols=2)
     rows = [
-        ("Document version", "0.44.0"),
+        ("Document version", DOCUMENT_VERSION),
         ("Baseline date", "12 August 2026"),
-        ("Status", "Living document - AWS archive foundation audit implemented"),
+        ("Status", DOCUMENT_STATUS),
         ("Language", "English"),
     ]
     for row, (label, value) in zip(meta.rows, rows, strict=True):
@@ -569,13 +575,13 @@ def build() -> Path:
     configure_styles(doc)
     configure_sections(doc)
     properties = doc.core_properties
-    properties.title = "ATEP Volume I - Core Platform Engineering Workbook"
+    properties.title = f"ATEP Volume {VOLUME_NUMBER} - {VOLUME_NAME} Engineering Workbook"
     properties.subject = "Architecture, implementation, verification, and engineering evidence"
     properties.author = "ATEP Core Platform Engineering"
     properties.keywords = (
         "ATEP, automotive testing, FastAPI, RBAC, PostgreSQL, RabbitMQ, engineering workbook"
     )
-    properties.comments = "Generated from docs/workbook-volume-i.md"
+    properties.comments = f"Generated from {SOURCE.relative_to(ROOT).as_posix()}"
 
     add_cover(doc)
     decimal_abstract_id = create_abstract_numbering(doc, bullet=False)
