@@ -90,6 +90,7 @@ def state() -> VehicleDigitalState:
         brake_state=baseline.brakes.model_dump(mode="json"),
         steering_state=baseline.steering.model_dump(mode="json"),
         lighting_state=baseline.lighting.model_dump(mode="json"),
+        suspension_state=baseline.suspension.model_dump(mode="json"),
         version=1,
         simulation_time_ms=0,
         created_at=now,
@@ -493,6 +494,56 @@ async def test_seeded_sensor_and_actuator_step_is_deterministic_and_atomic() -> 
             target_mode="ready",
             speed_kph=10,
         )
+
+
+@pytest.mark.asyncio
+async def test_coupled_drive_corner_brake_scenario_conserves_energy_and_updates_components() -> (
+    None
+):
+    current = state()
+    current.operational_mode = "driving"
+    current.battery_state.update(contactors_closed=True, temperature_c=30.0)
+    current.powertrain_state.update(motor_enabled=True, gear="drive", speed_kph=60.0)
+    current.brake_state.update(parking_brake_applied=False)
+    command = VehicleSimulationStepCommand(
+        command_id="coupled-brake-001",
+        expected_version=1,
+        duration_ms=5000,
+        seed=7,
+        inputs={
+            "brake_pct": 40,
+            "steering_angle_deg": 12,
+            "road_grade_pct": -4,
+            "road_roughness_pct": 25,
+            "ambient_temperature_c": 10,
+            "ambient_light_lux": 300,
+        },
+    )
+    step, _ = await execute_vehicle_simulation_step(
+        cast(AsyncSession, FakeSession(None, current)),
+        vehicle=vehicle(),
+        command=command,
+        actor_user_id=uuid4(),
+        correlation_id=uuid4(),
+    )
+    readings = step.sensor_readings
+    assert readings["energy_used_wh"] >= readings["energy_recovered_wh"] >= 0
+    assert readings["net_energy_wh"] == pytest.approx(
+        readings["energy_used_wh"] - readings["energy_recovered_wh"], abs=1e-6
+    )
+    assert current.battery_state["usable_energy_wh"] == pytest.approx(
+        60000 - readings["net_energy_wh"], abs=1e-6
+    )
+    assert current.powertrain_state["delivered_torque_nm"] < 0
+    assert current.brake_state["hydraulic_pressure_bar"] == 100
+    assert current.lighting_state == {
+        "exterior_mode": "low_beam",
+        "brake_lights": True,
+        "indicator": "off",
+    }
+    assert current.suspension_state["front_travel_mm"] > 0
+    assert current.suspension_state["lateral_acceleration_mps2"] > 0
+    assert -50 <= current.battery_state["temperature_c"] <= 120
 
 
 @pytest.mark.asyncio

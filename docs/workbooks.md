@@ -7,7 +7,7 @@ decisions while preserving cross-volume traceability.
 | Volume | Domain | Status | Editable source | Formatted workbook |
 |---|---|---|---|---|
 | I | Core Platform | Active baseline | `docs/workbook-volume-i.md` | `docs/ATEP_Volume_I_Core_Platform_Engineering_Workbook.docx` |
-| II | Digital Vehicle | II-1 through II-3 implemented | `docs/workbook-volume-ii.md` | `docs/ATEP_Volume_II_Digital_Vehicle_Engineering_Workbook.docx` |
+| II | Digital Vehicle | II-1 through II-4 implemented | `docs/workbook-volume-ii.md` | `docs/ATEP_Volume_II_Digital_Vehicle_Engineering_Workbook.docx` |
 | III | ECU Simulator | Planned | To be created when development begins | To be created |
 | IV | CAN Network | Planned | To be created when development begins | To be created |
 | V | Diagnostics | Planned | To be created when development begins | To be created |

@@ -19,6 +19,9 @@
 | DV-F-013 | Simulation steps shall model bounded accelerator, brake, and steering actuator inputs. | Contract and deterministic-step tests |
 | DV-F-014 | Speed, battery SOC, and battery-temperature sensors shall support seeded noise and explicit stuck/offset fault modes. | Seed replay and fault tests |
 | DV-F-015 | Simulation steps shall be vehicle-scoped, versioned, idempotent, and persisted for replay. | Retry, conflict, migration, and evidence tests |
+| DV-F-016 | Driving steps shall calculate bounded energy use, regenerative recovery, usable battery energy, and SOC. | Conservation and braking scenario tests |
+| DV-F-017 | Thermal behavior shall combine load generation, ambient cooling, and absolute temperature bounds. | Hot/cold boundary and scenario tests |
+| DV-F-018 | Road grade, roughness, steering, braking, and ambient light shall influence powertrain, suspension, lateral response, and lighting deterministically. | Coupled drive-corner-brake scenario |
 
 ## Non-functional requirements
 
@@ -32,3 +35,4 @@
 | DV-NF-006 | The increment shall pass Ruff, strict mypy, unit/contract tests, and disposable integration. | CI quality gates |
 | DV-NF-007 | Deterministic simulation shall not depend on wall-clock time, timers, background loops, GPU, or cloud infrastructure. | Design and tests |
 | DV-NF-008 | Equal state, command, and seed inputs shall produce equal sensor readings across runs. | Deterministic seed test |
+| DV-NF-009 | Published energy evidence shall satisfy `used - recovered = net` at contract precision and recovery shall never exceed bounded consumption. | Conservation assertions |

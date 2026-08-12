@@ -2,11 +2,11 @@
 
 **Subtitle:** Domain architecture, deterministic simulation, verification strategy, and engineering evidence  
 **Project:** Automotive Test Engineering Platform (ATEP)  
-**Document version:** 0.3.0
+**Document version:** 0.4.0
 
 **Baseline date:** 12 August 2026
 
-**Status:** Living engineering document — Increments II-1 through II-3 implemented  
+**Status:** Living engineering document — Increments II-1 through II-4 implemented
 **Language:** English
 
 ## 1. Document Purpose
@@ -36,6 +36,7 @@ as implemented, planned, or target according to repository evidence.
 | 0.1.0 | 12 August 2026 | II-1: introduced the versioned Digital Vehicle aggregate, safe baseline, component bounds, safety invariants, RBAC, optimistic concurrency, audit, and outbox evidence | Implemented and verified by unit, contract, RBAC, migration, and integration tests |
 | 0.2.0 | 12 August 2026 | II-2: added the command-driven simulation clock and persisted `parked → ready → driving → parked` transitions | Implemented and verified by state-machine, replay, idempotency, conflict, and evidence tests |
 | 0.3.0 | 12 August 2026 | II-3: added accelerator, brake, and steering actuators plus seeded speed, SOC, and temperature sensors with noise and explicit fault modes | Implemented and verified by bounds, seed, fault, retry, contract, migration, and hosted integration tests |
+| 0.4.0 | 12 August 2026 | II-4: coupled road and ambient inputs with battery energy, thermal response, powertrain, regenerative braking, steering, suspension, and lighting | Implemented and verified by scenario, conservation, bounds, migration, and hosted integration tests |
 
 ## 4. Scope and Boundaries
 
@@ -81,11 +82,12 @@ services behind Volume I boundaries and are never accessed directly by CarSystem
 | Component | Representative state | Key bounds or invariants |
 |---|---|---|
 | Operational mode | parked, ready, driving, charging, fault | Moving requires driving mode |
-| Battery | SOC, SOH, voltage, current, temperature, contactors, charging | SOC/SOH 0–100%; charging requires stationary park state |
+| Battery | SOC, SOH, usable energy, voltage, current, temperature, contactors, charging | SOC/SOH 0–100%; energy and temperature bounded; charging requires stationary park state |
 | Powertrain | motor, gear, speed, requested and delivered torque | Moving requires enabled motor, valid gear, and closed contactors |
 | Brakes | pedal, hydraulic pressure, parking brake, ABS | Moving requires released parking brake |
 | Steering | wheel angle and assist | Wheel angle bounded to ±720 degrees |
 | Lighting | exterior mode, brake lamps, indicators | Brake lamps follow modeled brake input during steps |
+| Suspension | front/rear travel and lateral acceleration | Travel bounded to ±120 mm and lateral acceleration to ±20 m/s² |
 
 ### 5.2 Public API
 
@@ -126,6 +128,18 @@ SOC, current, and temperature. Speed, SOC, and temperature observations may add 
 derived from the seed and sensor name. `stuck` reports a configured fixed value; `offset` adds a
 configured delta. Faults affect observed readings without silently replacing physical state.
 
+### 6.4 Coupled Dynamics
+
+The II-4 model adds road grade, road roughness, ambient temperature, and ambient light to each
+deterministic step. It publishes energy used, regenerative energy recovered, and net energy in Wh;
+the three values satisfy `used - recovered = net` at the published precision. Net energy reduces
+usable battery energy and SOC, while regenerative recovery remains bounded.
+
+Torque includes grade demand and braking regeneration. Battery temperature combines load heating
+and ambient cooling. Steering and speed produce bounded lateral acceleration; roughness, braking,
+and acceleration produce front/rear suspension travel. Brake lamps and low-beam behavior follow
+brake and ambient-light inputs.
+
 ## 7. Consistency, Security, and Evidence
 
 - Every mutation supplies `expected_version`; stale requests return a stable HTTP 409 envelope.
@@ -156,6 +170,9 @@ configured delta. Faults affect observed readings without silently replacing phy
 | DV-F-013 | Steps shall model bounded accelerator, brake, and steering inputs. | Contract and step tests |
 | DV-F-014 | Sensors shall support seeded noise and explicit stuck/offset faults. | Seed and fault tests |
 | DV-F-015 | Steps shall be versioned, idempotent, and persisted for replay. | Retry, conflict, migration, and evidence tests |
+| DV-F-016 | Steps shall calculate bounded energy use, regeneration, usable energy, and SOC. | Conservation and braking tests |
+| DV-F-017 | Thermal response shall combine load generation, ambient cooling, and absolute bounds. | Scenario and boundary tests |
+| DV-F-018 | Road and ambient inputs shall influence powertrain, suspension, steering response, and lighting deterministically. | Coupled scenario test |
 
 ## 9. Non-Functional Requirements
 
@@ -169,6 +186,7 @@ configured delta. Faults affect observed readings without silently replacing phy
 | DV-NF-006 | Increments shall pass Ruff, strict mypy, unit/contract, and integration gates. | CI evidence |
 | DV-NF-007 | Simulation shall not depend on wall-clock loops, GPU, or cloud services. | Design and tests |
 | DV-NF-008 | Equal state, command, and seed inputs shall produce equal readings. | Deterministic seed test |
+| DV-NF-009 | Published energy evidence shall conserve energy at contract precision. | Conservation assertions |
 
 ## 10. Architecture Decisions
 
@@ -196,6 +214,15 @@ faults explicitly and keep physical state separate from reported readings.
 **Rationale.** Reproducible evidence and later diagnostic plausibility tests require deterministic
 observations and a clear distinction between plant state and sensor output.
 
+### ADR-DV-004 — Prefer Bounded Scenario Physics over Real-Time Fidelity
+
+**Decision.** Couple vehicle components through explicit, bounded, command-driven equations and
+publish their conservation evidence instead of introducing a wall-clock or high-fidelity solver.
+
+**Rationale.** The platform first needs repeatable automotive QA scenarios and explainable failures.
+Higher-fidelity models can replace individual equations later without changing API, replay, audit,
+or logical-time contracts.
+
 ## 11. Verification Catalogue
 
 | ID | Test and objective | Expected result |
@@ -222,6 +249,10 @@ observations and a clear distinction between plant state and sensor output.
 | DV-T-020 | Inspect successful transaction evidence | State, replay row, audit, and outbox commit together |
 | DV-T-021 | Inspect OpenAPI | All state, transition, and step contracts are discoverable |
 | DV-T-022 | Apply migrations 0013–0015 | Existing vehicles backfill safely and the schema reaches head |
+| DV-T-023 | Execute a drive-corner-brake scenario | Energy, torque, thermal, steering, suspension, and lighting outputs update together |
+| DV-T-024 | Inspect used, recovered, and net Wh | Published values conserve energy at contract precision and recovery is bounded |
+| DV-T-025 | Apply road, ambient, and roughness extremes | All component states remain inside declared limits |
+| DV-T-026 | Apply migration 0016 | Existing states receive the safe suspension baseline and schema reaches head |
 
 ## 12. Implemented Evidence
 
@@ -242,8 +273,7 @@ observations and a clear distinction between plant state and sensor output.
 
 | Risk | Impact | Planned treatment |
 |---|---|---|
-| Initial equations are intentionally simple | Results are deterministic but not yet physically representative | Add coupled energy, thermal, powertrain, braking, steering, suspension, and lighting behavior in II-4 |
-| No suspension component exists yet | Full-vehicle chassis behavior is incomplete | Introduce bounded suspension state and scenario tests in II-4 |
+| Equations are intentionally scenario-oriented | Results are deterministic but not a substitute for validated tyre, chassis, or thermal solvers | Calibrate or replace component equations behind stable contracts when higher fidelity is required |
 | Sensor calibration is represented by noise/fault configuration only | Offset correction and calibration lifecycle are incomplete | Add explicit calibration parameters and provenance |
 | No multi-vehicle session abstraction | Reproducibility exists per vehicle but not across coordinated fleets | Add isolated sessions and snapshots in II-5 |
 | No VHAL property mapping | CarSystemUI integration remains API/gateway-oriented | Add contract mappings and end-to-end evidence in II-6 |
@@ -255,8 +285,8 @@ observations and a clear distinction between plant state and sensor output.
 | II-1 | Versioned aggregate, safe baseline, RBAC, invariants, audit, and outbox | Implemented |
 | II-2 | Logical clock and command-driven state transitions | Implemented |
 | II-3 | Sensors and actuators with seeded noise and explicit fault modes | Implemented |
-| II-4 | Coupled energy, thermal, powertrain, braking, steering, suspension, and lighting behavior | Planned next |
-| II-5 | Multi-vehicle simulation sessions and reproducible snapshots | Planned |
+| II-4 | Coupled energy, thermal, powertrain, braking, steering, suspension, and lighting behavior | Implemented |
+| II-5 | Multi-vehicle simulation sessions and reproducible snapshots | Planned next |
 | II-6 | Android Automotive/VHAL Vehicle Gateway mappings | Planned |
 
 ## 15. Workbook Maintenance Checklist

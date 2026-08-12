@@ -63,6 +63,7 @@ class BatteryState(BaseModel):
     pack_voltage_v: float = Field(default=400.0, ge=0, le=1000)
     pack_current_a: float = Field(default=0.0, ge=-2000, le=2000)
     temperature_c: float = Field(default=22.0, ge=-50, le=120)
+    usable_energy_wh: float = Field(default=60000.0, ge=0, le=250000)
     contactors_closed: bool = False
     charging_status: ChargingStatus = ChargingStatus.DISCONNECTED
 
@@ -93,6 +94,12 @@ class LightingState(BaseModel):
     indicator: IndicatorMode = IndicatorMode.OFF
 
 
+class SuspensionState(BaseModel):
+    front_travel_mm: float = Field(default=0.0, ge=-120, le=120)
+    rear_travel_mm: float = Field(default=0.0, ge=-120, le=120)
+    lateral_acceleration_mps2: float = Field(default=0.0, ge=-20, le=20)
+
+
 class DigitalVehicleStatePayload(BaseModel):
     operational_mode: VehicleOperationalMode = VehicleOperationalMode.PARKED
     battery: BatteryState = Field(default_factory=BatteryState)
@@ -100,6 +107,7 @@ class DigitalVehicleStatePayload(BaseModel):
     brakes: BrakeState = Field(default_factory=BrakeState)
     steering: SteeringState = Field(default_factory=SteeringState)
     lighting: LightingState = Field(default_factory=LightingState)
+    suspension: SuspensionState = Field(default_factory=SuspensionState)
 
     @model_validator(mode="after")
     def enforce_vehicle_invariants(self) -> "DigitalVehicleStatePayload":
@@ -203,6 +211,10 @@ class VehicleActuatorInputs(BaseModel):
     accelerator_pct: float = Field(default=0.0, ge=0, le=100)
     brake_pct: float = Field(default=0.0, ge=0, le=100)
     steering_angle_deg: float = Field(default=0.0, ge=-720, le=720)
+    road_grade_pct: float = Field(default=0.0, ge=-30, le=30)
+    road_roughness_pct: float = Field(default=0.0, ge=0, le=100)
+    ambient_temperature_c: float = Field(default=22.0, ge=-50, le=60)
+    ambient_light_lux: float = Field(default=10000.0, ge=0, le=200000)
 
     @model_validator(mode="after")
     def reject_conflicting_pedals(self) -> "VehicleActuatorInputs":
@@ -230,6 +242,9 @@ class VehicleSensorReadings(BaseModel):
     speed_kph: float
     battery_soc_pct: float
     battery_temperature_c: float
+    energy_used_wh: float = 0.0
+    energy_recovered_wh: float = 0.0
+    net_energy_wh: float = 0.0
 
 
 class VehicleSimulationStepResponse(BaseModel):

@@ -16,6 +16,7 @@ the boundary until their dedicated volumes.
 | Brakes | pedal position, hydraulic pressure, parking brake, ABS activity |
 | Steering | wheel angle and assist status |
 | Lighting | exterior-light mode, brake lamps, and indicators |
+| Suspension | front/rear travel and lateral acceleration |
 
 Numeric fields have explicit contract bounds. Vehicle creation also creates a safe baseline:
 parked, stationary, traction motor disabled, contactors open, parking brake applied, and lights off.
@@ -109,3 +110,17 @@ Each accepted step advances simulation time, increments the aggregate version, p
 inputs/configuration/readings for replay, records `digital_vehicle.simulation_stepped`, and enqueues
 `atep.digital_vehicle.simulation.stepped.v1` in the same transaction. An exact retry returns the
 stored result without repeating these effects.
+
+## Coupled vehicle dynamics
+
+The II-4 step model couples road grade, roughness, ambient temperature, and ambient light with the
+existing actuators. Traction and auxiliary power produce energy consumption; braking produces a
+bounded regenerative contribution. Published evidence retains used, recovered, and net Wh with the
+identity `used - recovered = net` at contract precision, while usable battery energy and SOC remain
+bounded.
+
+Delivered torque includes regenerative braking, temperature combines load generation with ambient
+cooling, and steering plus speed produces bounded lateral acceleration. Road roughness and
+longitudinal inputs produce front/rear suspension travel. Brake lamps follow pedal input and low
+ambient light selects low beam. The model is deliberately deterministic and scenario-oriented; it
+is not a high-fidelity tyre, chassis, or thermal solver.

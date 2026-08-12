@@ -6,8 +6,8 @@ SOURCE = workbook.ROOT / "docs" / "workbook-volume-ii.md"
 OUTPUT = workbook.ROOT / "docs" / "ATEP_Volume_II_Digital_Vehicle_Engineering_Workbook.docx"
 VOLUME_NUMBER = "II"
 VOLUME_NAME = "Digital Vehicle"
-DOCUMENT_VERSION = "0.3.0"
-DOCUMENT_STATUS = "Living document - Increments II-1 through II-3 implemented"
+DOCUMENT_VERSION = "0.4.0"
+DOCUMENT_STATUS = "Living document - Increments II-1 through II-4 implemented"
 
 
 def build() -> Path:
