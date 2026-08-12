@@ -75,6 +75,7 @@ The document distinguishes three types of statements:
 | 0.39.0 | 11 August 2026 | Added the first concrete immutable provider adapter for AWS S3 Object Lock: version-history/delete-marker rejection, atomic conditional upload, full SHA-256, `COMPLIANCE` retention, exact SSE-KMS key, STS assumed-role identity, immutable version metadata, streamed read-back, and normalized receipts | 169 fast Python tests, Ruff, strict mypy, canonical Python 3.14 Linux locks, structural/a11y/visual workbook checks, and bounded resource monitoring; live AWS provisioning, upload, denial, and restore evidence remain pending |
 | 0.40.0 | 11 August 2026 | Added a Terraform AWS archive foundation with a non-destroyable versioned Object Lock bucket, default/minimum `COMPLIANCE` retention, rotated SSE-KMS key, fixed-prefix bucket denials, exact separate OIDC writer/restore roles, and externally delivered validated CloudTrail | 175 fast Python tests, Terraform 1.15.8 validation, five mocked positive/negative plans, AWS provider 6.58.0 Linux/Windows lock, Ruff, strict mypy, structural/a11y/visual workbook checks, and resource monitoring; live account review, apply, IAM simulation, upload/denial/restore, and CloudTrail correlation remain pending |
 | 0.41.0 | 12 August 2026 | Added an operator-only read-only AWS foundation auditor for exact account, S3 Object Lock/encryption/private ownership/deny policy, KMS state/rotation, separate OIDC IAM roles, and external CloudTrail delivery with bounded non-replacing evidence | 185 fast Python tests, ten focused positive/negative/read-only auditor scenarios, Ruff, strict mypy, structural/a11y/visual workbook checks, and resource monitoring; approved apply, effective IAM simulation, retained upload/denial/restore, and CloudTrail event correlation remain pending |
+| 0.42.0 | 12 August 2026 | Initiated Volume II with one versioned digital-vehicle state aggregate covering operational mode, battery, powertrain, brakes, steering, and lighting; added safe defaults, cross-component invariants, independent RBAC, optimistic concurrency, audit, and outbox evidence | 193 fast Python tests, Ruff, strict mypy, API-contract coverage, migration backfill, structural/a11y/visual workbook checks, and disposable integration delegated to hosted CI |
 
 ## How to Use This Workbook
 
@@ -140,7 +141,8 @@ The initial design deliberately starts as a modular monolith rather than a colle
 | RBAC data model | Implemented | User, role, permission, and association tables |
 | User administration | Implemented | Create, list, inspect, status, role assignment, and role removal routes |
 | Role catalogue administration | Implemented | Permission listing; role create, page, inspect, update, grant, revoke, and safe delete routes |
-| PostgreSQL persistence | Implemented | SQLAlchemy models and Alembic revisions `0001` through `0012` |
+| PostgreSQL persistence | Implemented | SQLAlchemy models and Alembic revisions `0001` through `0013` |
+| Digital vehicle state | Implemented initial Volume II slice | One safe, versioned aggregate with component bounds, cross-component invariants, independent RBAC, atomic audit/outbox evidence, and idempotent exact retry |
 | Module registry | Implemented | Persistent metadata, capability catalogue, hash-only workload credentials, heartbeat leases, and automatic reconciliation |
 | Vehicle integration boundary | Implemented initial slice | Vehicle catalogue, lifecycle state, gateway capability authorization, idempotent telemetry, and outbox contract |
 | Android Vehicle Gateway | Implemented initial slice | Changed-property mapping, persistent queue, stable retry identity, bounded rejection storage, HTTP transport, and status UI in the CarSystemUI showcase |
@@ -530,6 +532,21 @@ External dashboards, test automation clients, and future ATEP modules call the C
 **Rationale.** Terraform mock plans prove declared intent but not deployed state. A read-only conformance phase closes part of that evidence gap without combining observation with provisioning or irreversible retained-object tests. Exact operator-supplied account/resource identity prevents discovery from silently selecting an unintended environment, while fail-closed output prevents a partial result from appearing successful.
 
 **Consequences.** The auditor needs a separately governed read-only identity and its result is a point-in-time observation. Named bucket-policy statements and exact role actions intentionally reject undocumented customization. It cannot prove effective permissions, environment reviewer protection, retained-object semantics, write/delete/retention denials, CloudTrail event arrival, cost, or recoverability; those remain independent controlled acceptance exercises.
+
+### ADR-036 — Establish a Versioned Digital-Vehicle State Aggregate before Physics Simulation
+
+**Decision.** Give every vehicle exactly one complete state aggregate containing operational mode,
+battery, powertrain, brake, steering, and lighting components. Validate all components together,
+replace state using an expected version and row lock, treat an exact immediate retry as idempotent,
+and atomically emit audit plus `atep.digital_vehicle.state.updated.v1` outbox evidence.
+
+**Rationale.** A deterministic domain contract is required before physics engines, ECUs, CAN,
+diagnostics, or Android adapters can interoperate safely. Complete replacement keeps invariants
+visible and prevents partial component writes from creating contradictory vehicle snapshots.
+
+**Consequences.** The current model is an authoritative snapshot rather than a time-stepped
+simulation. Clients must handle version conflicts. Future engines and gateways must translate
+through this public contract instead of accessing persistence directly.
 
 ## 5. Technology Stack and Rationale
 
@@ -1544,6 +1561,21 @@ The fast local suite and repeated remote disposable CI runs prove clean-database
 | PROV-042 | Change account, retention, KMS binding/rotation, IAM actions, or CloudTrail logging; share audit/archive storage or writer/restore subjects. | The auditor fails closed at the violated boundary and writes no report. | Implemented six provider-control negatives plus boundary negatives / P0 |
 | PROV-043 | Run the auditor when its output already exists or inspect its code/API calls. | Existing evidence is never replaced; only documented read methods are invoked and no partial temporary report remains. | Implemented non-replacement and static review evidence / P0 |
 
+### 11.18 Digital Vehicle State
+
+| ID | Test and objective | Expected result | Status / priority |
+|---|---|---|---|
+| DVS-001 | Create a vehicle and inspect its initial aggregate | Safe parked baseline, version 1, no traction or charging activity | Automated / P0 |
+| DVS-002 | Submit values outside the component bounds | Validation rejects invalid SOC, SOH, temperature, speed, torque, steering, or brake values | Automated / P0 |
+| DVS-003 | Submit contradictory moving and operational states | Moving requires driving mode, valid gear, enabled motor, closed contactors, and released parking brake | Automated / P0 |
+| DVS-004 | Submit contradictory charging state | Charging requires charging mode, park gear, zero speed, disabled motor, and closed contactors | Automated / P0 |
+| DVS-005 | Replace a valid aggregate using its expected version | State persists and version increments exactly once | Automated / P0 |
+| DVS-006 | Inspect transaction evidence after a replacement | State, bounded audit record, and versioned outbox event are committed atomically | Automated / P0 |
+| DVS-007 | Repeat the exact immediately preceding request | Current state is returned without duplicate transition evidence | Automated / P0 |
+| DVS-008 | Replace from a stale version with different state | Stable HTTP 409 `vehicle_state_version_conflict` reports only the current version | Automated / P0 |
+| DVS-009 | Exercise read and write with separately scoped roles | Each permission grants only its intended operation; missing permission returns HTTP 403 | Automated / P0 |
+| DVS-010 | Apply migration `0013` over an existing vehicle catalogue | Every existing vehicle receives one safe state aggregate and the schema reaches the expected head | CI integration / P0 |
+
 ## 12. Suggested CI/CD Quality Pipeline
 
 1. **Source checks:** secret scan, license policy, dependency lock review.
@@ -1772,6 +1804,7 @@ Application rollback is safe only when the previous version is compatible with t
 | Distributed Redis rate limiting | `src/atep/core/rate_limit.py`, typed settings, and application dependencies |
 | Module registry, heartbeat, and reconciliation | `src/atep/registry/`, including `src/atep/registry/reconciler.py`; migrations `0005_module_registry.py` and `0006_module_heartbeat_leases.py`; and module API contracts |
 | Vehicle catalogue, telemetry, and leased commands | `src/atep/vehicles/`, migrations `0007_vehicle_telemetry.py` and `0008_vehicle_command_delivery.py`, API contracts, `tests/test_vehicle_telemetry.py`, and `tests/test_vehicle_commands.py` |
+| Digital vehicle state | `src/atep/vehicles/`, migration `0013_digital_vehicle_state.py`, `tests/test_digital_vehicle_state.py`, API/integration contracts, and `docs/digital-vehicle-state.md` |
 | Test-run lifecycle and live updates | `src/atep/test_runs/`, migration `0009_test_runs.py`, `tests/test_test_runs.py`, and the WebSocket path in `tests/integration/test_identity_flow.py` |
 | Environment profiles and TestRun snapshots | `src/atep/environment_profiles/`, migration `0010_environment_profiles.py`, and `tests/test_environment_profiles.py` |
 | Persistent test-job scheduling | `src/atep/test_jobs/`, migration `0011_test_jobs.py`, `tests/test_test_jobs.py`, and the disposable integration scenario |
@@ -1779,7 +1812,7 @@ Application rollback is safe only when the previous version is compatible with t
 | Android Vehicle Gateway, property sources, retry worker, operator evidence, and command executor | `CarSystemUI_android/showcase/app/.../gateway/`, `showcase/app/.../vehicle/`, Android unit tests, `docs/ATEP_VEHICLE_GATEWAY.md`, and `docs/TEST_CASE_CT_SHOW_006.md` through `docs/TEST_CASE_CT_SHOW_010.md` in the companion repository |
 | Immutable audit model, query/export APIs, and recorder | `src/atep/audit/` |
 | Event outbox and worker | `src/atep/events/` |
-| Database migrations | `migrations/versions/0001_core_platform.py` through `0012_test_artifacts.py` |
+| Database migrations | `migrations/versions/0001_core_platform.py` through `0013_digital_vehicle_state.py` |
 | Refresh-session implementation | `src/atep/identity/sessions.py`, identity models, schemas, and router |
 | Local service topology | `compose.yaml` and `Dockerfile` |
 | Optional observability topology | `compose.observability.yaml`, `deploy/observability/`, `src/atep/core/observability.py`, and `docs/observability.md` |

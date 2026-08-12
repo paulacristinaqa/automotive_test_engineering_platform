@@ -27,6 +27,31 @@ class Vehicle(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         cascade="all, delete-orphan",
         lazy="raise",
     )
+    digital_state: Mapped["VehicleDigitalState"] = relationship(
+        back_populates="vehicle",
+        cascade="all, delete-orphan",
+        lazy="raise",
+        uselist=False,
+    )
+
+
+class VehicleDigitalState(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "vehicle_digital_states"
+
+    vehicle_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("vehicles.id", ondelete="CASCADE"),
+        unique=True,
+        index=True,
+    )
+    operational_mode: Mapped[str] = mapped_column(String(20), default="parked")
+    battery_state: Mapped[dict[str, Any]] = mapped_column(JSON)
+    powertrain_state: Mapped[dict[str, Any]] = mapped_column(JSON)
+    brake_state: Mapped[dict[str, Any]] = mapped_column(JSON)
+    steering_state: Mapped[dict[str, Any]] = mapped_column(JSON)
+    lighting_state: Mapped[dict[str, Any]] = mapped_column(JSON)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    vehicle: Mapped[Vehicle] = relationship(back_populates="digital_state", lazy="raise")
 
 
 class VehicleTelemetryEvent(UUIDPrimaryKeyMixin, Base):

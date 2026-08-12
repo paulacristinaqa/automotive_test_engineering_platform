@@ -11,9 +11,11 @@ from atep.identity.permissions import PermissionName
 from atep.identity.users_router import request_correlation_id
 from atep.registry.service import authenticate_module
 from atep.registry.workload_identity import ModuleAuthentication, module_authentication
-from atep.vehicles.models import Vehicle, VehicleCommand, VehicleTelemetryEvent
+from atep.vehicles.models import Vehicle, VehicleCommand, VehicleDigitalState, VehicleTelemetryEvent
 from atep.vehicles.schemas import (
     PROPERTY_NAME_PATTERN,
+    DigitalVehicleStateReplace,
+    DigitalVehicleStateResponse,
     TelemetryIngest,
     TelemetryPage,
     TelemetryResponse,
@@ -37,11 +39,14 @@ from atep.vehicles.service import (
     claim_next_vehicle_command,
     create_vehicle,
     create_vehicle_command,
+    digital_state_payload,
     ingest_telemetry,
     list_telemetry,
     list_vehicle_commands,
     list_vehicles,
+    replace_vehicle_digital_state,
     require_vehicle,
+    require_vehicle_digital_state,
     update_vehicle_status,
 )
 
@@ -53,6 +58,8 @@ vehicles_manage = require_permissions(PermissionName.VEHICLES_MANAGE.value)
 telemetry_read = require_permissions(PermissionName.TELEMETRY_READ.value)
 vehicle_commands_read = require_permissions(PermissionName.VEHICLE_COMMANDS_READ.value)
 vehicle_commands_write = require_permissions(PermissionName.VEHICLE_COMMANDS_WRITE.value)
+digital_vehicle_read = require_permissions(PermissionName.DIGITAL_VEHICLE_READ.value)
+digital_vehicle_write = require_permissions(PermissionName.DIGITAL_VEHICLE_WRITE.value)
 
 
 def vehicle_response(vehicle: Vehicle) -> VehicleResponse:
@@ -106,6 +113,17 @@ def command_response(command: VehicleCommand, vehicle: Vehicle) -> VehicleComman
         error_message=command.error_message,
         created_at=command.created_at,
         updated_at=command.updated_at,
+    )
+
+
+def digital_vehicle_state_response(
+    state: VehicleDigitalState, vehicle: Vehicle
+) -> DigitalVehicleStateResponse:
+    return DigitalVehicleStateResponse(
+        vehicle_id=vehicle.identifier,
+        version=state.version,
+        updated_at=state.updated_at,
+        **digital_state_payload(state).model_dump(),
     )
 
 
@@ -170,6 +188,37 @@ async def update_vehicle_status_endpoint(
     )
     await session.commit()
     return vehicle_response(vehicle)
+
+
+@router.get("/{vehicle_id}/state", response_model=DigitalVehicleStateResponse)
+async def get_digital_vehicle_state_endpoint(
+    vehicle_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(digital_vehicle_read)],
+) -> DigitalVehicleStateResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    state = await require_vehicle_digital_state(session, vehicle=vehicle)
+    return digital_vehicle_state_response(state, vehicle)
+
+
+@router.put("/{vehicle_id}/state", response_model=DigitalVehicleStateResponse)
+async def replace_digital_vehicle_state_endpoint(
+    vehicle_id: str,
+    command: DigitalVehicleStateReplace,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(digital_vehicle_write)],
+) -> DigitalVehicleStateResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    state, _ = await replace_vehicle_digital_state(
+        session,
+        vehicle=vehicle,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    return digital_vehicle_state_response(state, vehicle)
 
 
 @router.post(

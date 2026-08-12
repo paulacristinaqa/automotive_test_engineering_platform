@@ -16,6 +16,7 @@ flowchart LR
     API --> Identity["Identity and RBAC"]
     API --> Registry["Module registry"]
     API --> Vehicle["Vehicle catalogue, telemetry, and commands"]
+    API --> DigitalVehicle["Versioned digital-vehicle state"]
     API --> PG[(PostgreSQL)]
     API --> Redis[(Redis)]
     API --> Outbox[(Transactional outbox)]
@@ -23,6 +24,25 @@ flowchart LR
     Worker --> MQ[(RabbitMQ)]
     MQ --> Modules["Vehicle, test, diagnostics and analytics modules"]
 ```
+
+## Volume II boundary: digital-vehicle state
+
+The first Volume II increment remains inside the modular monolith while establishing a distinct
+domain boundary. Each registered vehicle owns exactly one state aggregate containing operational
+mode plus battery, powertrain, brake, steering, and lighting components. The API exposes a safe
+baseline through `GET /api/v1/vehicles/{vehicle_id}/state` and replaces the complete aggregate
+through `PUT /api/v1/vehicles/{vehicle_id}/state`.
+
+Updates use an expected version and a database row lock. A successful change increments the
+version and commits state, audit evidence, and `atep.digital_vehicle.state.updated.v1` to the
+transactional outbox atomically. Repeating the exact request is idempotent; a stale request with
+different state fails with the stable `vehicle_state_version_conflict` error. Cross-component
+validation prevents contradictory snapshots such as a moving parked vehicle or charging with the
+traction motor enabled.
+
+This aggregate is a control-plane representation, not yet a time-stepped physics model. Future
+simulation engines, ECUs, CAN/UDS adapters, and AAOS/VHAL gateways will translate their state into
+this contract rather than writing PostgreSQL directly.
 
 ## Decisions
 
