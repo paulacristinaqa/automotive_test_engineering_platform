@@ -3,7 +3,7 @@
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0014_deterministic_vehicle_simulation"
+revision = "0014_vehicle_simulation"
 down_revision = "0013_digital_vehicle_state"
 branch_labels = None
 depends_on = None

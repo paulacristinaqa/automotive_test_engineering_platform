@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 from typing import cast
 
@@ -35,7 +36,7 @@ class DrillPostgres:
 
     def psql(self, database: str, statement: str) -> str:
         if "version_num" in statement:
-            return "0014_deterministic_vehicle_simulation\n"
+            return "0014_vehicle_simulation\n"
         if "tablename" in statement:
             return "roles\nusers\n"
         if "information_schema.columns" in statement:
@@ -85,14 +86,14 @@ def test_safe_identifier_and_normalized_lines_reject_injection_boundaries() -> N
 def test_database_evidence_is_ordered_and_requires_one_revision() -> None:
     target = postgres(
         {
-            "version_num": "0014_deterministic_vehicle_simulation\n",
+            "version_num": "0014_vehicle_simulation\n",
             "tablename": "audit_records\nusers\n",
             "information_schema.columns": "audit_records|1|id|uuid|NO|\nusers|1|id|uuid|NO|\n",
         }
     )
     revision, tables, schema_hash = database_evidence(target, "atep")
 
-    assert revision == "0014_deterministic_vehicle_simulation"
+    assert revision == "0014_vehicle_simulation"
     assert tables == ["audit_records", "users"]
     assert len(schema_hash) == 64
 
@@ -107,6 +108,19 @@ def test_database_evidence_is_ordered_and_requires_one_revision() -> None:
             ),
             "atep",
         )
+
+
+def test_alembic_revision_identifiers_fit_the_version_table() -> None:
+    revision_pattern = re.compile(r'^revision = "([^"]+)"$', re.MULTILINE)
+    migration_files = sorted(Path("migrations/versions").glob("*.py"))
+    revisions = []
+    for migration_file in migration_files:
+        match = revision_pattern.search(migration_file.read_text(encoding="utf-8"))
+        assert match is not None, f"missing revision in {migration_file}"
+        revisions.append(match.group(1))
+
+    assert len(revisions) == len(set(revisions))
+    assert all(len(revision) <= 32 for revision in revisions)
 
 
 def test_table_counts_and_fingerprint_are_deterministic_and_aggregate_only() -> None:
