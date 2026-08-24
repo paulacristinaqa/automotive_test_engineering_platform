@@ -243,6 +243,10 @@ def test_ecu_aggregate_contracts_and_safe_pagination_are_published() -> None:
     reset_schema = reset["post"]["requestBody"]["content"]["application/json"]["schema"]
     assert advance_schema["$ref"].endswith("/EcuAdvanceCommand")
     assert reset_schema["$ref"].endswith("/EcuResetCommand")
+    profiles = paths["/api/v1/ecu-profiles"]
+    profile = paths["/api/v1/ecu-profiles/{ecu_type}"]
+    assert "get" in profiles
+    assert "get" in profile
 
 
 def test_test_job_scheduler_contracts_and_safe_pagination_are_published() -> None:

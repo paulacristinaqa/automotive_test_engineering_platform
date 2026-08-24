@@ -8,11 +8,13 @@ from atep.audit.service import record_audit
 from atep.core.errors import (
     DuplicateEcuIdentifierError,
     EcuExecutionStateError,
+    EcuProfileContractError,
     EcuSimulationCommandConflictError,
     EcuStateVersionConflictError,
     ResourceNotFoundError,
 )
 from atep.ecus.models import EcuSimulationCommand, ElectronicControlUnit
+from atep.ecus.profiles import behavior_profile, execute_profile_transitions
 from atep.ecus.schemas import (
     EcuAdvanceCommand,
     EcuCreate,
@@ -35,6 +37,7 @@ def ecu_state_payload(ecu: ElectronicControlUnit) -> EcuStatePayload:
             "memory": ecu.memory,
             "faults": ecu.faults,
             "cyclic_tasks": ecu.cyclic_tasks,
+            "behavior_state": ecu.behavior_state,
         }
     )
 
@@ -55,8 +58,14 @@ async def create_ecu(
     )
     if existing is not None:
         raise DuplicateEcuIdentifierError()
-    state = EcuStatePayload.model_validate(
+    requested_state = EcuStatePayload.model_validate(
         command.model_dump(exclude={"identifier", "display_name", "ecu_type"})
+    )
+    profile = behavior_profile(command.ecu_type)
+    state = _profile_state(
+        requested_state,
+        ecu_type=command.ecu_type,
+        use_profile_defaults=not requested_state.cyclic_tasks,
     )
     ecu = ElectronicControlUnit(
         vehicle_id=vehicle.id,
@@ -67,6 +76,8 @@ async def create_ecu(
         memory=[item.model_dump(mode="json") for item in state.memory],
         faults=[item.model_dump(mode="json") for item in state.faults],
         cyclic_tasks=[item.model_dump(mode="json") for item in state.cyclic_tasks],
+        profile_version=profile.profile_version,
+        behavior_state=state.behavior_state,
         version=1,
         simulation_time_ms=0,
         boot_count=0,
@@ -146,6 +157,9 @@ async def replace_ecu_state(
         session, vehicle=vehicle, identifier=ecu.identifier, for_update=True
     )
     requested = EcuStatePayload.model_validate(command.model_dump(exclude={"expected_version"}))
+    requested = _profile_state(
+        requested, ecu_type=EcuType(locked.ecu_type), use_profile_defaults=False
+    )
     current = ecu_state_payload(locked)
     if command.expected_version != locked.version:
         if command.expected_version == locked.version - 1 and requested == current:
@@ -158,6 +172,7 @@ async def replace_ecu_state(
     locked.memory = [item.model_dump(mode="json") for item in requested.memory]
     locked.faults = [item.model_dump(mode="json") for item in requested.faults]
     locked.cyclic_tasks = [item.model_dump(mode="json") for item in requested.cyclic_tasks]
+    locked.behavior_state = requested.behavior_state
     locked.version += 1
     await session.flush()
     await session.refresh(locked, attribute_names=["updated_at"])
@@ -263,6 +278,12 @@ async def execute_ecu_advance(
         "duration_ms": command.duration_ms,
         "task_runs": [item.model_dump(mode="json") for item in summaries],
     }
+    profile = behavior_profile(EcuType(locked.ecu_type))
+    locked.behavior_state = execute_profile_transitions(
+        profile, locked.behavior_state, summaries
+    )
+    result["profile_version"] = locked.profile_version
+    result["behavior_state"] = locked.behavior_state
     locked.simulation_time_ms = simulation_time_ms
     locked.version += 1
     execution = EcuSimulationCommand(
@@ -300,6 +321,7 @@ async def execute_ecu_advance(
             "duration_ms": command.duration_ms,
             "task_count": len(summaries),
             "execution_count": sum(item.execution_count for item in summaries),
+            "profile_version": locked.profile_version,
         },
     )
     return execution, False
@@ -424,4 +446,29 @@ def _ecu_evidence(ecu: ElectronicControlUnit, vehicle: Vehicle) -> dict[str, obj
         "ecu_identifier": ecu.identifier,
         "vehicle_id": vehicle.identifier,
         "ecu_type": ecu.ecu_type,
+        "profile_version": ecu.profile_version,
     }
+
+
+def _profile_state(
+    state: EcuStatePayload, *, ecu_type: EcuType, use_profile_defaults: bool
+) -> EcuStatePayload:
+    profile = behavior_profile(ecu_type)
+    tasks = list(profile.tasks) if use_profile_defaults else state.cyclic_tasks
+    supported = {task.task_id: task for task in profile.tasks}
+    for task in tasks:
+        expected = supported.get(task.task_id)
+        if expected is None:
+            raise EcuProfileContractError(reason=f"unsupported task: {task.task_id}")
+        if task.period_ms != expected.period_ms or task.offset_ms != expected.offset_ms:
+            raise EcuProfileContractError(
+                reason=f"task schedule differs from profile: {task.task_id}"
+            )
+    unknown_state = set(state.behavior_state) - set(profile.initial_state)
+    if unknown_state:
+        raise EcuProfileContractError(
+            reason=f"unsupported behavior state: {sorted(unknown_state)[0]}"
+        )
+    behavior_state = dict(profile.initial_state)
+    behavior_state.update(state.behavior_state)
+    return state.model_copy(update={"cyclic_tasks": tasks, "behavior_state": behavior_state})
