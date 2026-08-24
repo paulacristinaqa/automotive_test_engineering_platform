@@ -125,3 +125,83 @@ class CanFrameTransmissionPage(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class CanArbitrationContender(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    contract_id: str = Field(min_length=2, max_length=80, pattern=r"^[a-z][a-z0-9_-]+$")
+    producer_node_id: UUID
+    payload: list[int] = Field(max_length=8)
+    ready_offset_us: int = Field(default=0, ge=0, le=10_000_000)
+
+    @field_validator("payload")
+    @classmethod
+    def validate_payload_bytes(cls, value: list[int]) -> list[int]:
+        if any(item < 0 or item > 255 for item in value):
+            raise ValueError("CAN payload bytes must be between 0 and 255")
+        return value
+
+
+class CanArbitrationCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    command_id: str = Field(min_length=8, max_length=40, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]+$")
+    expected_version: int = Field(ge=1)
+    contenders: list[CanArbitrationContender] = Field(min_length=1, max_length=64)
+
+    @model_validator(mode="after")
+    def validate_contenders(self) -> "CanArbitrationCommand":
+        contracts = [item.contract_id for item in self.contenders]
+        if len(set(contracts)) != len(contracts):
+            raise ValueError("arbitration contender contracts must be unique")
+        return self
+
+
+class CanDeliveryEvidence(BaseModel):
+    consumer_node_id: UUID
+    received_at_us: int
+    latency_us: int
+
+
+class CanArbitratedFrame(BaseModel):
+    rank: int
+    sequence: int
+    contract_id: str
+    frame_id: int
+    frame_format: CanFrameFormat
+    producer_node_id: UUID
+    dlc: int
+    bit_count: int
+    ready_at_us: int
+    started_at_us: int
+    completed_at_us: int
+    duration_us: int
+    deliveries: list[CanDeliveryEvidence] = Field(max_length=63)
+
+
+class CanBusUtilization(BaseModel):
+    window_start_us: int
+    window_end_us: int
+    window_duration_us: int
+    occupied_us: int
+    idle_us: int
+    utilization_percent: float = Field(ge=0, le=100)
+    maximum_latency_us: int
+
+
+class CanArbitrationResponse(BaseModel):
+    command_id: str
+    vehicle_id: str
+    network_id: str
+    previous_version: int
+    network_version: int
+    frames: list[CanArbitratedFrame] = Field(max_length=64)
+    utilization: CanBusUtilization
+    duplicate: bool
+    created_at: datetime
+
+
+class CanArbitrationPage(BaseModel):
+    items: list[CanArbitrationResponse]
+    total: int
+    limit: int
+    offset: int

@@ -16,6 +16,14 @@
 | CAN-F-010 | Network reads and management shall use independent RBAC permissions. | Implemented |
 | CAN-F-011 | Network creation and frame submission shall produce atomic audit/outbox evidence. | Implemented |
 | CAN-F-012 | Frame history pagination shall enforce safe limits. | Implemented |
+| CAN-F-013 | The platform shall arbitrate batches of 1-64 unique contracted contenders. | Implemented |
+| CAN-F-014 | The lowest ready numeric CAN ID shall win; standard format shall precede extended format for equal IDs. | Implemented |
+| CAN-F-015 | Arbitration shall calculate nominal classic CAN bit count and microsecond duration from configured bitrate. | Implemented |
+| CAN-F-016 | Arbitration shall persist ordered transmission and declared-consumer delivery evidence. | Implemented |
+| CAN-F-017 | Arbitration shall report occupied, idle, utilization, and maximum-latency metrics. | Implemented |
+| CAN-F-018 | One successful batch shall increment aggregate version once and sequence once per frame. | Implemented |
+| CAN-F-019 | Exact arbitration replay shall be mutation-free; changed command reuse shall return a stable conflict. | Implemented |
+| CAN-F-020 | Arbitration history and detail shall be protected and safely queryable. | Implemented |
 
 ## Non-Functional Requirements
 
@@ -27,3 +35,5 @@
 | CAN-NF-004 | Database changes shall be versioned and reversible through Alembic. | Implemented |
 | CAN-NF-005 | OpenAPI shall publish typed contracts and safe pagination constraints. | Implemented |
 | CAN-NF-006 | Ruff, strict mypy, pytest, and integration CI shall protect the baseline. | Implemented |
+| CAN-NF-007 | Arbitration order and timing shall remain reproducible across host resource conditions. | Implemented |
+| CAN-NF-008 | Arbitration events and audit shall expose aggregate metrics without CAN payload bytes. | Implemented |

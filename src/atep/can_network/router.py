@@ -3,8 +3,17 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from atep.can_network.arbitration_service import (
+    arbitration_response,
+    execute_arbitration,
+    list_arbitrations,
+    require_arbitration,
+)
 from atep.can_network.models import CanFrameTransmission, CanNetwork
 from atep.can_network.schemas import (
+    CanArbitrationCommand,
+    CanArbitrationPage,
+    CanArbitrationResponse,
     CanFrameSubmitCommand,
     CanFrameTransmissionPage,
     CanFrameTransmissionResponse,
@@ -66,6 +75,66 @@ def transmission_response(
         duplicate=duplicate,
         created_at=item.created_at,
     )
+
+
+@router.post(
+    "/arbitrations/execute",
+    response_model=CanArbitrationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def execute_arbitration_endpoint(
+    vehicle_id: str,
+    command: CanArbitrationCommand,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(can_manage)],
+) -> CanArbitrationResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    execution, network, duplicate = await execute_arbitration(
+        session,
+        vehicle=vehicle,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(execution, attribute_names=["created_at"])
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+    return arbitration_response(execution, network, vehicle, duplicate=duplicate)
+
+
+@router.get("/arbitrations", response_model=CanArbitrationPage)
+async def list_arbitrations_endpoint(
+    vehicle_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(can_read)],
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
+) -> CanArbitrationPage:
+    vehicle = await require_vehicle(session, vehicle_id)
+    network = await require_can_network(session, vehicle=vehicle)
+    items, total = await list_arbitrations(session, network=network, limit=limit, offset=offset)
+    return CanArbitrationPage(
+        items=[arbitration_response(item, network, vehicle) for item in items],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/arbitrations/{command_id}", response_model=CanArbitrationResponse)
+async def get_arbitration_endpoint(
+    vehicle_id: str,
+    command_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(can_read)],
+) -> CanArbitrationResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    network = await require_can_network(session, vehicle=vehicle)
+    execution = await require_arbitration(session, network=network, command_id=command_id)
+    return arbitration_response(execution, network, vehicle)
 
 
 @router.post("", response_model=CanNetworkResponse, status_code=status.HTTP_201_CREATED)

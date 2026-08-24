@@ -47,3 +47,23 @@ class CanFrameTransmission(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     requested_by_user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
     )
+
+
+class CanArbitrationExecution(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "can_arbitration_executions"
+    __table_args__ = (
+        UniqueConstraint("network_id", "command_id", name="uq_can_arbitration_command"),
+    )
+
+    network_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("can_networks.id", ondelete="CASCADE"), index=True
+    )
+    command_id: Mapped[str] = mapped_column(String(64))
+    request: Mapped[dict[str, Any]] = mapped_column(JSON)
+    result: Mapped[dict[str, Any]] = mapped_column(JSON)
+    contender_count: Mapped[int] = mapped_column(Integer)
+    previous_version: Mapped[int] = mapped_column(Integer)
+    network_version: Mapped[int] = mapped_column(Integer)
+    requested_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
