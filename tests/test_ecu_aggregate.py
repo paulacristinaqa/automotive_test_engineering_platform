@@ -9,10 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from atep.audit.models import AuditRecord
 from atep.core.errors import (
     EcuExecutionStateError,
+    EcuProfileContractError,
     EcuSimulationCommandConflictError,
     EcuStateVersionConflictError,
 )
 from atep.ecus.models import EcuSimulationCommand, ElectronicControlUnit
+from atep.ecus.profiles import behavior_profile, behavior_profiles
 from atep.ecus.schemas import (
     EcuAdvanceCommand,
     EcuCreate,
@@ -91,6 +93,12 @@ def ecu(*, version: int = 1) -> ElectronicControlUnit:
         version=version,
         simulation_time_ms=0,
         boot_count=0,
+        profile_version="1.0.0",
+        behavior_state={
+            "cell_samples": 0,
+            "soc_estimation_cycles": 0,
+            "contactors_closed": False,
+        },
         created_at=now,
         updated_at=now,
     )
@@ -148,6 +156,11 @@ async def test_ecu_creation_is_audited_and_evented_atomically() -> None:
     )
     assert created.version == 1
     assert created.operational_state == "offline"
+    assert [task["task_id"] for task in created.cyclic_tasks] == [
+        "cell_monitor",
+        "soc_estimation",
+    ]
+    assert created.behavior_state["contactors_closed"] is False
     events = [item for item in session.added if isinstance(item, OutboxEvent)]
     audits = [item for item in session.added if isinstance(item, AuditRecord)]
     assert [item.event_type for item in events] == ["atep.ecu.created.v1"]
@@ -220,6 +233,8 @@ def test_cyclic_task_contract_rejects_duplicate_ids_and_invalid_offsets() -> Non
         EcuStatePayload(
             cyclic_tasks=[{"task_id": "control_loop", "period_ms": 10, "offset_ms": 10}]
         )
+    with pytest.raises(ValidationError, match="JSON-safe"):
+        EcuStatePayload(behavior_state={"unsafe_counter": 9_007_199_254_740_992})
 
 
 @pytest.mark.asyncio
@@ -229,8 +244,8 @@ async def test_logical_clock_executes_cyclic_tasks_deterministically_without_sle
     current.vehicle_id = target.id
     current.operational_state = "running"
     current.cyclic_tasks = [
-        {"task_id": "fast_loop", "period_ms": 100, "offset_ms": 0},
-        {"task_id": "diagnostic", "period_ms": 250, "offset_ms": 50},
+        {"task_id": "cell_monitor", "period_ms": 100, "offset_ms": 0},
+        {"task_id": "soc_estimation", "period_ms": 1000, "offset_ms": 100},
     ]
     command = EcuAdvanceCommand(
         command_id="advance-command-001", expected_version=1, duration_ms=1000
@@ -249,23 +264,25 @@ async def test_logical_clock_executes_cyclic_tasks_deterministically_without_sle
     assert current.version == 2
     assert execution.result["task_runs"] == [
         {
-            "task_id": "diagnostic",
-            "execution_count": 4,
-            "first_due_ms": 50,
-            "last_due_ms": 800,
-        },
-        {
-            "task_id": "fast_loop",
+            "task_id": "cell_monitor",
             "execution_count": 10,
             "first_due_ms": 100,
             "last_due_ms": 1000,
         },
+        {
+            "task_id": "soc_estimation",
+            "execution_count": 1,
+            "first_due_ms": 100,
+            "last_due_ms": 100,
+        },
     ]
+    assert execution.result["behavior_state"]["cell_samples"] == 10
+    assert execution.result["behavior_state"]["soc_estimation_cycles"] == 1
     events = [item for item in session.added if isinstance(item, OutboxEvent)]
     audits = [item for item in session.added if isinstance(item, AuditRecord)]
     assert [item.event_type for item in events] == ["atep.ecu.simulation.advanced.v1"]
     assert audits[0].action == "ecu.simulation_advanced"
-    assert audits[0].details["execution_count"] == 14
+    assert audits[0].details["execution_count"] == 11
 
     returned, duplicate = await execute_ecu_advance(
         cast(AsyncSession, FakeSession(current, execution)),
@@ -413,6 +430,75 @@ async def test_simulation_command_id_cannot_be_reused_for_different_input() -> N
             command=EcuAdvanceCommand(
                 command_id="shared-command-001", expected_version=1, duration_ms=200
             ),
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+
+
+def test_profile_registry_covers_every_supported_ecu_type_with_versioned_tasks() -> None:
+    profiles = behavior_profiles()
+    assert len(profiles) == 9
+    assert {profile.ecu_type.value for profile in profiles} == {
+        "motor",
+        "battery",
+        "door",
+        "abs",
+        "adas",
+        "climate",
+        "gateway",
+        "lighting",
+        "body",
+    }
+    assert all(profile.profile_version == "1.0.0" for profile in profiles)
+    assert [task.task_id for task in behavior_profile("motor").tasks] == [
+        "torque_control",
+        "motor_thermal",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_profile_rejects_unknown_tasks_before_state_is_persisted() -> None:
+    target = vehicle()
+    current = ecu()
+    current.vehicle_id = target.id
+    with pytest.raises(EcuProfileContractError) as error:
+        await replace_ecu_state(
+            cast(AsyncSession, FakeSession(current)),
+            vehicle=target,
+            ecu=current,
+            command=EcuStateReplace(
+                expected_version=1,
+                cyclic_tasks=[{"task_id": "untrusted_loop", "period_ms": 10}],
+            ),
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+    assert error.value.code == "ecu_profile_contract_invalid"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "state",
+    [
+        EcuStateReplace(
+            expected_version=1,
+            cyclic_tasks=[{"task_id": "cell_monitor", "period_ms": 101}],
+        ),
+        EcuStateReplace(expected_version=1, behavior_state={"unknown_counter": 1}),
+    ],
+)
+async def test_profile_rejects_schedule_drift_and_unknown_state_keys(
+    state: EcuStateReplace,
+) -> None:
+    target = vehicle()
+    current = ecu()
+    current.vehicle_id = target.id
+    with pytest.raises(EcuProfileContractError):
+        await replace_ecu_state(
+            cast(AsyncSession, FakeSession(current)),
+            vehicle=target,
+            ecu=current,
+            command=state,
             actor_user_id=uuid4(),
             correlation_id=None,
         )

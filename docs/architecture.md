@@ -61,6 +61,11 @@ period arithmetic to summarize due work without wall-clock sleep or per-cycle st
 have fixed logical durations, persist replay identity, increment a boot counter, and deliberately
 preserve memory and faults until the III-4 memory-region contract is defined.
 
+Volume III-3 adds an immutable, versioned behavior-profile registry above that clock. A profile owns
+allowed task schedules, bounded initial state, and deterministic counter transitions for one ECU
+type. Profiles do not import CAN, UDS, or infrastructure adapters. This keeps controller behavior
+reproducible while preserving protocol boundaries for later volumes.
+
 ## Decisions
 
 1. **PostgreSQL is the system of record.** Redis is reserved for ephemeral state, caching,

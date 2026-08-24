@@ -1,6 +1,6 @@
 # ATEP Volume III — ECU Simulator Requirements
 
-Status: Increments III-1 and III-2 implemented.
+Status: Increments III-1 through III-3 implemented.
 
 ## Functional Requirements
 
@@ -24,6 +24,12 @@ Status: Increments III-1 and III-2 implemented.
 | ECU-FR-016 | Cyclic execution shall be restricted to running or degraded ECUs. | Lifecycle conflict test |
 | ECU-FR-017 | Soft, hard, and power-cycle resets shall use fixed logical durations. | Reset-mode tests |
 | ECU-FR-018 | Reset shall preserve memory and faults until memory-region semantics are introduced. | Reset evidence test |
+| ECU-FR-019 | Every supported ECU type shall expose a versioned behavior profile. | Profile registry and OpenAPI tests |
+| ECU-FR-020 | Motor, battery, body, gateway, and safety controllers shall have distinct task and state contracts. | Profile definition tests |
+| ECU-FR-021 | New ECUs shall receive their profile tasks and initial behavior state when these values are omitted. | Creation-default test |
+| ECU-FR-022 | State replacement shall reject unsupported task IDs, schedules, and behavior-state keys. | Profile contract tests |
+| ECU-FR-023 | Logical-time advancement shall apply profile transitions from aggregated task-run counts. | Deterministic transition test |
+| ECU-FR-024 | Clients shall be able to list and inspect profiles using `ecus:read`. | Profile API contract test |
 
 ## Non-Functional Requirements
 
@@ -36,3 +42,5 @@ Status: Increments III-1 and III-2 implemented.
 | ECU-NFR-005 | The implementation shall pass pytest, Ruff, and strict mypy. | Local and CI quality gates |
 | ECU-NFR-006 | Scheduler output shall remain bounded independently of due execution count. | Aggregated task-run summaries |
 | ECU-NFR-007 | Deterministic simulation operations shall not call real-time sleep. | Design review and unit tests |
+| ECU-NFR-008 | Profile transitions shall remain independent of CAN, UDS, and wall-clock infrastructure. | Boundary review |
+| ECU-NFR-009 | Behavior state and published profile metadata shall remain bounded and JSON-compatible. | Schema limits and typed registry |

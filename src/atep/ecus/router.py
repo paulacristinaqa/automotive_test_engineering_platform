@@ -5,11 +5,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from atep.db.session import get_session
 from atep.ecus.models import EcuSimulationCommand, ElectronicControlUnit
+from atep.ecus.profiles import behavior_profile, behavior_profiles
 from atep.ecus.schemas import (
     EcuAdvanceCommand,
     EcuAdvanceResponse,
+    EcuBehaviorProfileResponse,
     EcuCreate,
     EcuPage,
+    EcuProfileTaskResponse,
     EcuResetCommand,
     EcuResetResponse,
     EcuResponse,
@@ -34,6 +37,7 @@ from atep.vehicles.models import Vehicle
 from atep.vehicles.service import require_vehicle
 
 router = APIRouter(prefix="/vehicles/{vehicle_id}/ecus", tags=["ecus"])
+profiles_router = APIRouter(prefix="/ecu-profiles", tags=["ecu-profiles"])
 ecus_read = require_permissions(PermissionName.ECUS_READ.value)
 ecus_manage = require_permissions(PermissionName.ECUS_MANAGE.value)
 
@@ -48,6 +52,7 @@ def ecu_response(ecu: ElectronicControlUnit, vehicle: Vehicle) -> EcuResponse:
         version=ecu.version,
         simulation_time_ms=ecu.simulation_time_ms,
         boot_count=ecu.boot_count,
+        profile_version=ecu.profile_version,
         created_at=ecu.created_at,
         updated_at=ecu.updated_at,
         **ecu_state_payload(ecu).model_dump(),
@@ -87,6 +92,8 @@ def ecu_advance_response(
         previous_time_ms=command.previous_time_ms,
         simulation_time_ms=command.simulation_time_ms,
         task_runs=[EcuTaskRunSummary.model_validate(item) for item in command.result["task_runs"]],
+        profile_version=str(command.result["profile_version"]),
+        behavior_state=dict(command.result["behavior_state"]),
         duplicate=duplicate,
         created_at=command.created_at,
     )
@@ -231,3 +238,34 @@ async def replace_ecu_state_endpoint(
     if duplicate:
         response.headers["X-Idempotent-Replay"] = "true"
     return ecu_response(ecu, vehicle)
+
+
+def profile_response(ecu_type: EcuType) -> EcuBehaviorProfileResponse:
+    profile = behavior_profile(ecu_type)
+    return EcuBehaviorProfileResponse(
+        ecu_type=profile.ecu_type,
+        profile_version=profile.profile_version,
+        description=profile.description,
+        tasks=[
+            EcuProfileTaskResponse(
+                **task.model_dump(), state_effect=profile.state_effects[task.task_id]
+            )
+            for task in profile.tasks
+        ],
+        initial_state=dict(profile.initial_state),
+    )
+
+
+@profiles_router.get("", response_model=list[EcuBehaviorProfileResponse])
+async def list_ecu_profiles_endpoint(
+    _: Annotated[User, Depends(ecus_read)],
+) -> list[EcuBehaviorProfileResponse]:
+    return [profile_response(profile.ecu_type) for profile in behavior_profiles()]
+
+
+@profiles_router.get("/{ecu_type}", response_model=EcuBehaviorProfileResponse)
+async def get_ecu_profile_endpoint(
+    ecu_type: EcuType,
+    _: Annotated[User, Depends(ecus_read)],
+) -> EcuBehaviorProfileResponse:
+    return profile_response(ecu_type)

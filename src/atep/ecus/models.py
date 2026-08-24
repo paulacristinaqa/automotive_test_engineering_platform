@@ -24,6 +24,8 @@ class ElectronicControlUnit(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     memory: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     faults: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     cyclic_tasks: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    profile_version: Mapped[str] = mapped_column(String(20), default="1.0.0")
+    behavior_state: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     version: Mapped[int] = mapped_column(Integer, default=1)
     simulation_time_ms: Mapped[int] = mapped_column(BigInteger, default=0)
     boot_count: Mapped[int] = mapped_column(Integer, default=0)

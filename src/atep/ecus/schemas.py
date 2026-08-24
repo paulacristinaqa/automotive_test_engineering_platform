@@ -9,6 +9,7 @@ ECU_IDENTIFIER_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{2,79}$")
 FAULT_CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]{2,31}$")
 COMMAND_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{7,63}$")
 TASK_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]{2,39}$")
+BEHAVIOR_STATE_KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_]{2,39}$")
 
 
 class EcuType(StrEnum):
@@ -93,6 +94,26 @@ class EcuStatePayload(BaseModel):
     memory: list[EcuMemoryCell] = Field(default_factory=list, max_length=256)
     faults: list[EcuFault] = Field(default_factory=list, max_length=64)
     cyclic_tasks: list[EcuCyclicTask] = Field(default_factory=list, max_length=32)
+    behavior_state: dict[str, int | bool | str] = Field(default_factory=dict, max_length=32)
+
+    @field_validator("behavior_state")
+    @classmethod
+    def bound_behavior_state(
+        cls, value: dict[str, int | bool | str]
+    ) -> dict[str, int | bool | str]:
+        for key, item in value.items():
+            if not BEHAVIOR_STATE_KEY_PATTERN.fullmatch(key):
+                raise ValueError("behavior-state keys must use lowercase canonical names")
+            integer_is_unsafe = (
+                isinstance(item, int)
+                and not isinstance(item, bool)
+                and abs(item) > 9_007_199_254_740_991
+            )
+            if integer_is_unsafe:
+                raise ValueError("behavior-state integers must remain JSON-safe")
+            if isinstance(item, str) and len(item) > 120:
+                raise ValueError("behavior-state strings must not exceed 120 characters")
+        return value
 
     @model_validator(mode="after")
     def require_unique_entries_and_consistent_fault_state(self) -> "EcuStatePayload":
@@ -147,6 +168,7 @@ class EcuResponse(EcuStatePayload):
     version: int
     simulation_time_ms: int
     boot_count: int
+    profile_version: str
     created_at: datetime
     updated_at: datetime
 
@@ -196,6 +218,18 @@ class EcuTaskRunSummary(BaseModel):
     last_due_ms: int | None
 
 
+class EcuProfileTaskResponse(EcuCyclicTask):
+    state_effect: str
+
+
+class EcuBehaviorProfileResponse(BaseModel):
+    ecu_type: EcuType
+    profile_version: str
+    description: str
+    tasks: list[EcuProfileTaskResponse]
+    initial_state: dict[str, int | bool | str]
+
+
 class EcuAdvanceResponse(BaseModel):
     command_id: str
     vehicle_id: str
@@ -206,6 +240,8 @@ class EcuAdvanceResponse(BaseModel):
     previous_time_ms: int
     simulation_time_ms: int
     task_runs: list[EcuTaskRunSummary]
+    profile_version: str
+    behavior_state: dict[str, int | bool | str]
     duplicate: bool = False
     created_at: datetime
 

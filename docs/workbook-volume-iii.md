@@ -1,6 +1,6 @@
 # ATEP Volume III — ECU Simulator Engineering Workbook
 
-**Document status:** Living document — Increments III-1 and III-2 implemented
+**Document status:** Living document — Increments III-1 through III-3 implemented
 **Language:** English
 **Last updated:** 2026-08-24
 **Repository:** `paulacristinaqa/automotive_test_engineering_platform`
@@ -16,7 +16,7 @@ maintainable technical record for future ECU, CAN, and diagnostics development.
 | Field | Value |
 |---|---|
 | Volume | III — ECU Simulator |
-| Baseline | Increments III-1 and III-2 |
+| Baseline | Increments III-1 through III-3 |
 | Architecture style | Modular monolith with transactional domain services |
 | Primary runtime | Python 3.12, FastAPI, SQLAlchemy, PostgreSQL |
 | Quality gates | pytest, Ruff, strict mypy, Alembic migration checks |
@@ -27,6 +27,7 @@ maintainable technical record for future ECU, CAN, and diagnostics development.
 |---|---|---|
 | 0.1.0 | 2026-08-24 | Added ECU aggregate, lifecycle, memory, faults, API, RBAC, audit, outbox, migration, and tests. |
 | 0.2.0 | 2026-08-24 | Added logical time, cyclic scheduling, reset modes, replay evidence, APIs, and tests. |
+| 0.3.0 | 2026-08-24 | Added versioned behavior profiles, profile APIs, deterministic state transitions, migration, and tests. |
 
 ## 4. Scope and Boundaries
 
@@ -42,6 +43,7 @@ maintainable technical record for future ECU, CAN, and diagnostics development.
 - Transactional audit and outbox evidence.
 - Per-ECU logical time, cyclic task schedules, and boot counters.
 - Idempotent advance/reset commands with persisted execution evidence.
+- Versioned profiles with allowed schedules, bounded initial state, and deterministic transitions.
 
 ### 4.2 Deferred
 
@@ -63,7 +65,8 @@ PostgreSQL aggregate + audit record + transactional outbox event → HTTP respon
 ## 6. Domain Model
 
 An ECU contains `vehicle_id`, `identifier`, `display_name`, `ecu_type`, `operational_state`, `memory`,
-`faults`, cyclic tasks, logical time, boot count, `version`, and timestamps. Memory has at most 256
+`faults`, cyclic tasks, profile version, behavior state, logical time, boot count, `version`, and
+timestamps. Memory has at most 256
 cells, each with a 16-bit address and an
 8-bit value. Faults have a canonical code, severity, pending/confirmed status, and description.
 
@@ -84,6 +87,8 @@ smaller than its period. A maximum of 32 tasks keeps configuration and execution
 | PUT | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/state` | `ecus:manage` | Replace versioned ECU state. |
 | POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/simulation/advance` | `ecus:manage` | Advance logical time and summarize due tasks. |
 | POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/reset` | `ecus:manage` | Execute a deterministic reset mode. |
+| GET | `/api/v1/ecu-profiles` | `ecus:read` | List versioned behavior profiles. |
+| GET | `/api/v1/ecu-profiles/{ecu_type}` | `ecus:read` | Inspect one profile contract. |
 
 The Android Automotive client continues to access only the public ATEP API. It never connects to
 PostgreSQL or RabbitMQ directly. Stable errors include `ecu_not_found`,
@@ -106,10 +111,17 @@ Reset durations are fixed: soft 10 ms, hard 100 ms, and power cycle 500 ms. Rese
 counter, advances logical time, and becomes offline unless a confirmed critical fault requires fault
 state. Memory and faults remain unchanged pending the III-4 memory-region model.
 
+### 8.2 Profile Execution
+
+The immutable registry defines a version, allowed task schedules, initial behavior state, and a
+state effect for every task. Creation applies defaults when callers omit them. State replacement
+rejects unknown task IDs, modified schedules, and unknown state keys. During logical-time advance,
+aggregated execution counts update integer counters once; no wall-clock or protocol adapter is used.
+
 ## 9. Functional Requirements
 
-The authoritative catalogue is `docs/requirements-volume-iii.md`. III-1 covers the aggregate and III-2
-covers logical time, cyclic schedules, reset modes, replay, lifecycle guards, events, and audit.
+The authoritative catalogue is `docs/requirements-volume-iii.md`. III-1 covers the aggregate, III-2
+covers deterministic execution and reset, and III-3 covers versioned profiles and state transitions.
 
 ## 10. Architecture Decisions
 
@@ -142,6 +154,12 @@ due-cycle evidence with bounded storage and no dependency on host performance.
 
 Clearing state before defining volatile and non-volatile regions would invent behavior. III-2 records
 reset mode, duration, boot count, and preservation; III-4 will own persistence semantics.
+
+### ADR-ECU-007 — Keep Behavior Profiles Immutable and Protocol-Independent
+
+Profiles are source-controlled contracts rather than mutable database configuration. This makes
+tests reproducible and reviewable. CAN production, UDS diagnostics, and continuous physical models
+remain outside the profile registry and will integrate through later explicit boundaries.
 
 ## 11. Verification Catalogue
 
@@ -181,10 +199,25 @@ reset mode, duration, boot count, and preservation; III-4 will own persistence s
 | Reset boot counter | Increment boot count exactly once, including after retry. | Service |
 | Critical reset invariant | Keep fault state while a confirmed critical fault remains. | Service |
 
+## 11.2 III-3 Verification
+
+| Test | Objective | Level |
+|---|---|---|
+| Profile coverage | Publish a versioned profile for every supported ECU type. | Unit/contract |
+| Distinct controller profiles | Verify motor, battery, body, gateway, and ABS safety schedules differ. | Unit |
+| Creation defaults | Apply profile tasks and initial state when omitted. | Service |
+| Unsupported task rejection | Reject task IDs outside the ECU type contract. | Service/API |
+| Schedule drift rejection | Reject changed periods or offsets for a known task. | Service/API |
+| State-key rejection | Prevent unbounded or unknown behavior-state fields. | Service/API |
+| Deterministic transition | Derive counter changes from aggregated task-run counts. | Service |
+| Profile RBAC | Require `ecus:read` for catalogue and detail endpoints. | API/integration |
+| OpenAPI publication | Publish profile paths and typed schemas. | Contract |
+
 ## 12. Implemented Evidence
 
 - `src/atep/ecus/` contains models, schemas, services, and routers.
-- Migrations `0018_ecu_aggregate` and `0019_ecu_execution_clock` own the database schema.
+- Migrations `0018_ecu_aggregate`, `0019_ecu_execution_clock`, and
+  `0020_ecu_behavior_profiles` own the database schema.
 - Permission catalogue contains `ecus:read` and `ecus:manage`.
 - Events are `atep.ecu.created.v1` and `atep.ecu.state.updated.v1`.
 - Simulation events are `atep.ecu.simulation.advanced.v1` and `atep.ecu.reset.completed.v1`.
@@ -194,15 +227,16 @@ reset mode, duration, boot count, and preservation; III-4 will own persistence s
 
 - JSON state is practical for the baseline but may require normalized history tables for large traces.
 - Whole-state replacement is not intended for high-frequency RAM writes.
-- ECU type profiles are not yet behaviorally distinct.
+- Coordination profiles for door, ADAS, climate, and lighting intentionally share a baseline and
+  need specialization in later scenario-driven work.
 - Memory persistence across reset is undefined until III-4.
 - Fault-to-DTC mapping belongs to the Diagnostics boundary and is not implemented here.
 
 ## 14. Roadmap
 
-The next increment adds ECU-specific behavior profiles on top of the deterministic task clock. Later
-increments add memory regions, fault lifecycle, CAN contracts, and multi-ECU scenarios. See
-`docs/roadmap-volume-iii.md`.
+The next increment adds volatile and non-volatile memory regions, snapshots, reset persistence, and
+corruption injection. Later increments add fault lifecycle, CAN contracts, and multi-ECU scenarios.
+See `docs/roadmap-volume-iii.md`.
 
 ## 15. Study Exercises
 
@@ -213,3 +247,6 @@ increments add memory regions, fault lifecycle, CAN contracts, and multi-ECU sce
 5. Propose how a BMS ECU fault should later become a UDS DTC without coupling the two modules.
 6. Calculate the due times for a 100 ms task with a 20 ms offset over two consecutive advances.
 7. Explain why III-2 reset preserves memory and how III-4 can refine that contract safely.
+8. Compare the battery and gateway schedules and explain why both remain protocol-independent.
+9. Calculate the behavior-state counters after advancing a new battery ECU by 2,100 ms.
+10. Design a dedicated ADAS profile without adding camera or CAN dependencies to the registry.

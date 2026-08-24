@@ -113,6 +113,16 @@ class EcuExecutionStateError(ApplicationError):
         )
 
 
+class EcuProfileContractError(ApplicationError):
+    def __init__(self, *, reason: str) -> None:
+        super().__init__(
+            code="ecu_profile_contract_invalid",
+            message="The ECU state does not conform to its behavior profile.",
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            details={"reason": reason},
+        )
+
+
 class ModuleCapabilityRequiredError(ApplicationError):
     def __init__(self, capability: str) -> None:
         super().__init__(

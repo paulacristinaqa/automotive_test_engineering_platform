@@ -51,6 +51,21 @@ offline unless a confirmed critical fault requires it to remain in fault state. 
 preserved deliberately until volatile/non-volatile regions are defined in III-4. Successful resets
 emit `atep.ecu.reset.completed.v1`.
 
+## Versioned Behavior Profiles
+
+Every supported ECU type resolves to a versioned profile. Motor, battery, body, gateway, and ABS
+safety controllers have distinct tasks, initial state, and counter transitions; door, ADAS, climate,
+and lighting controllers currently use an explicitly identified coordination baseline. New ECUs
+receive profile defaults when tasks and behavior state are omitted.
+
+`GET /api/v1/ecu-profiles` lists the catalogue and `GET /api/v1/ecu-profiles/{ecu_type}` returns one
+contract. Both require `ecus:read`. State replacement rejects unknown task IDs, altered profile
+schedules, and unknown behavior-state keys with `ecu_profile_contract_invalid`.
+
+Logical-time advancement applies state transitions from the arithmetic task summaries. For example,
+ten due battery cell-monitor cycles increment `cell_samples` by ten without executing a real-time
+loop. Profile behavior is therefore repeatable, bounded, and independent of CAN and UDS transport.
+
 ## Current Limits
 
 This baseline does not execute ECU firmware, model non-volatile memory, emit CAN frames, expose UDS
