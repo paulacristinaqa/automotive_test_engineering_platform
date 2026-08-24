@@ -32,8 +32,27 @@ Creation writes `ecu.created` audit evidence and `atep.ecu.created.v1` to the tr
 State replacement writes `ecu.state_updated` and `atep.ecu.state.updated.v1`. Audit details contain
 identity, version, state, and counts, but not full mutable memory or fault payloads.
 
+## Deterministic Execution Clock
+
+Each ECU owns `simulation_time_ms`, `boot_count`, and up to 32 cyclic task definitions. A task has a
+canonical ID, period, and offset. `POST .../simulation/advance` moves the logical clock without
+wall-clock sleep and returns execution count plus first and last due times for every task. The result
+is reproducible and remains small even when many cycles are due.
+
+Advance commands run only when the ECU is running or degraded. A row lock and expected version make
+concurrent updates explicit. Persisted command identity provides exact replay without advancing the
+clock twice. Successful advances emit `atep.ecu.simulation.advanced.v1`.
+
+## Reset Semantics
+
+`POST .../reset` supports soft, hard, and power-cycle modes with fixed logical durations of 10, 100,
+and 500 milliseconds. A reset increments `boot_count`, advances logical time, and returns the ECU to
+offline unless a confirmed critical fault requires it to remain in fault state. Memory and faults are
+preserved deliberately until volatile/non-volatile regions are defined in III-4. Successful resets
+emit `atep.ecu.reset.completed.v1`.
+
 ## Current Limits
 
-This increment does not execute ECU firmware, schedule cyclic tasks, model non-volatile memory,
-emit CAN frames, expose UDS services, or inject faults over time. Those capabilities are planned as
+This baseline does not execute ECU firmware, model non-volatile memory, emit CAN frames, expose UDS
+services, or inject faults over time. Those capabilities are planned as
 separate increments so their timing and protocol contracts can be tested independently.

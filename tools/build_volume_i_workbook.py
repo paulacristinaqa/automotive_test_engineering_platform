@@ -490,6 +490,8 @@ def render_body(
         "8. Requirements and Traceability",
         "10. Test Strategy",
         "11. Detailed Test Catalogue",
+        "11.1 III-2 Verification",
+        "12. Implemented Evidence",
         "12. Suggested CI/CD Quality Pipeline",
         "16. Engineering Review Worksheets",
         "18. Glossary",

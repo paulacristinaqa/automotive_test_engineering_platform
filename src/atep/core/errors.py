@@ -94,6 +94,25 @@ class EcuStateVersionConflictError(ApplicationError):
         )
 
 
+class EcuSimulationCommandConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="ecu_simulation_command_conflict",
+            message="The ECU simulation command identifier was already used differently.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class EcuExecutionStateError(ApplicationError):
+    def __init__(self, *, current_state: str) -> None:
+        super().__init__(
+            code="ecu_execution_state_conflict",
+            message="The ECU cannot execute cyclic tasks from its current state.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_state": current_state},
+        )
+
+
 class ModuleCapabilityRequiredError(ApplicationError):
     def __init__(self, capability: str) -> None:
         super().__init__(
