@@ -115,6 +115,33 @@ must match. `POST .../signal-routes/{route_id}/transfer` copies the current valu
 source and target versions, then updates only the target ECU. Route creation and transfer emit
 `atep.ecu.signal.route.created.v1` and `atep.ecu.signal.routed.v1`.
 
+## Multi-ECU Scenarios and Failure Campaigns
+
+`POST /api/v1/vehicles/{vehicle_id}/ecu-scenarios/execute` executes a persisted, vehicle-scoped
+scenario with `ecus:manage`. A request contains 1 to 32 ordered actions, references at most 16 ECU
+identifiers, and runs from one to eight iterations. Supported actions reuse existing domain commands:
+logical-time advance, fault observation, seeded memory corruption, signal publication, and gateway
+signal transfer. The orchestrator calculates current optimistic versions internally and derives a
+stable command ID from the execution ID, iteration, and action position.
+
+Memory-corruption campaigns derive each action seed from the declared base seed and logical action
+coordinates. The same initial database state and request therefore produce the same mutations and
+evidence on any CI machine. Exact retries return the stored execution; reuse of an execution ID with
+a changed request returns `ecu_scenario_execution_conflict`. A vehicle row lock closes concurrent
+claim races, and the endpoint commits every primitive action, the scenario row, audit records, and
+outbox events together.
+
+The result contains at most 256 action summaries, aggregate resource counts before and after the
+scenario, and at most 16 per-ECU clock diagnostics. Resource evidence counts ECUs, initialized memory
+cells, semantic signals, active faults, routes, and aggregate state versions. Timing diagnostics use
+only ECU logical clocks and report minimum, maximum, skew, and lag from the leading ECU. Host CPU,
+GPU, RAM, and wall-clock duration are deliberately excluded from simulation truth. Read access uses
+the bounded list and detail endpoints with `ecus:read`.
+
+Scenario evidence emits `atep.ecu.scenario.completed.v1` without memory contents, physical signal
+values, or complete fault payloads. The orchestrator does not add CAN frames, DBC mapping, UDS
+services, condition evaluators, or real-time background workers.
+
 These are transport hooks, not a CAN bus. CAN IDs, frames, payload encoding, DBC parsing,
 arbitration, timing, bitrate, and error injection remain owned by Volume IV.
 

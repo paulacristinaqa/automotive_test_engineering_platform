@@ -118,4 +118,23 @@ class EcuSignalRoute(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     enabled: Mapped[bool] = mapped_column(default=True)
 
 
+class EcuScenarioExecution(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ecu_scenario_executions"
+    __table_args__ = (
+        UniqueConstraint("vehicle_id", "execution_id", name="uq_ecu_scenario_execution"),
+    )
+
+    vehicle_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("vehicles.id", ondelete="CASCADE"), index=True
+    )
+    execution_id: Mapped[str] = mapped_column(String(40))
+    request_hash: Mapped[str] = mapped_column(String(64))
+    request: Mapped[dict[str, Any]] = mapped_column(JSON)
+    result: Mapped[dict[str, Any]] = mapped_column(JSON)
+    iteration_count: Mapped[int] = mapped_column(Integer)
+    requested_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+
+
 from atep.vehicles.models import Vehicle  # noqa: E402

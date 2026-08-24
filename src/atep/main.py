@@ -23,6 +23,7 @@ from atep.core.rate_limit import api_rate_limit
 from atep.db.session import session_factory
 from atep.ecus.router import profiles_router as ecu_profiles_router
 from atep.ecus.router import router as ecus_router
+from atep.ecus.router import scenarios_router as ecu_scenarios_router
 from atep.environment_profiles.router import router as environment_profiles_router
 from atep.identity.bootstrap import ensure_bootstrap_admin
 from atep.identity.roles_router import router as roles_router
@@ -109,6 +110,7 @@ app.include_router(registry_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(vehicles_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(ecus_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(ecu_profiles_router, prefix="/api/v1", dependencies=rate_limited)
+app.include_router(ecu_scenarios_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(vehicle_gateway_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(simulation_sessions_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(test_runs_router, prefix="/api/v1", dependencies=rate_limited)

@@ -10,10 +10,12 @@
 | III-4 | Volatile/non-volatile memory regions, snapshots, reset persistence, and corruption injection | Implemented |
 | III-5 | Fault activation lifecycle, debouncing, latching, healing, and DTC bridge | Implemented |
 | III-6 | CAN signal production/consumption contract and gateway routing hooks | Implemented |
-| III-7 | Multi-ECU scenarios, timing diagnostics, resource metrics, and failure campaigns | Planned |
+| III-7 | Multi-ECU scenarios, timing diagnostics, resource metrics, and failure campaigns | Implemented |
 
-## Recommended Next Increment
+## Volume III Baseline Outcome
 
-III-7 should add multi-ECU scenarios, logical-time diagnostics, bounded resource metrics, and
-repeatable failure campaigns. It should orchestrate the existing vehicle, ECU, fault, memory, and
-signal contracts without introducing CAN-bus or UDS transport behavior prematurely.
+III-7 completes the initial ECU Simulator baseline with persisted multi-ECU scenario executions,
+logical-clock skew diagnostics, bounded aggregate resource evidence, deterministic campaign seeds,
+exact replay, and atomic audit/outbox evidence. It orchestrates the existing ECU primitives without
+introducing CAN-bus or UDS transport behavior prematurely. The recommended next volume is Volume IV,
+starting with a protocol-independent CAN network aggregate and frame contract.

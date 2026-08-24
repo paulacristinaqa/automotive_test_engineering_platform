@@ -162,6 +162,15 @@ class DuplicateEcuSignalRouteError(ApplicationError):
         )
 
 
+class EcuScenarioExecutionConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="ecu_scenario_execution_conflict",
+            message="The scenario execution identifier is already used by another request.",
+            status_code=409,
+        )
+
+
 class ModuleCapabilityRequiredError(ApplicationError):
     def __init__(self, capability: str) -> None:
         super().__init__(

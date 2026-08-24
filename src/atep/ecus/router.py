@@ -12,6 +12,12 @@ from atep.ecus.models import (
     ElectronicControlUnit,
 )
 from atep.ecus.profiles import behavior_profile, behavior_profiles
+from atep.ecus.scenario_service import (
+    execute_scenario,
+    list_scenario_executions,
+    require_scenario_execution,
+    scenario_response,
+)
 from atep.ecus.schemas import (
     EcuAdvanceCommand,
     EcuAdvanceResponse,
@@ -32,6 +38,9 @@ from atep.ecus.schemas import (
     EcuResetCommand,
     EcuResetResponse,
     EcuResponse,
+    EcuScenarioExecuteCommand,
+    EcuScenarioExecutionPage,
+    EcuScenarioExecutionResponse,
     EcuSignalContract,
     EcuSignalPublishCommand,
     EcuSignalPublishResponse,
@@ -77,8 +86,73 @@ from atep.vehicles.service import require_vehicle
 
 router = APIRouter(prefix="/vehicles/{vehicle_id}/ecus", tags=["ecus"])
 profiles_router = APIRouter(prefix="/ecu-profiles", tags=["ecu-profiles"])
+scenarios_router = APIRouter(
+    prefix="/vehicles/{vehicle_id}/ecu-scenarios", tags=["ecu-scenarios"]
+)
 ecus_read = require_permissions(PermissionName.ECUS_READ.value)
 ecus_manage = require_permissions(PermissionName.ECUS_MANAGE.value)
+
+
+@scenarios_router.post(
+    "/execute",
+    response_model=EcuScenarioExecutionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def execute_scenario_endpoint(
+    vehicle_id: str,
+    command: EcuScenarioExecuteCommand,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(ecus_manage)],
+) -> EcuScenarioExecutionResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    scenario, duplicate = await execute_scenario(
+        session,
+        vehicle=vehicle,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(scenario, attribute_names=["created_at"])
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+    return scenario_response(scenario, vehicle=vehicle, duplicate=duplicate)
+
+
+@scenarios_router.get("", response_model=EcuScenarioExecutionPage)
+async def list_scenarios_endpoint(
+    vehicle_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(ecus_read)],
+    limit: Annotated[int, Query(ge=1, le=50)] = 25,
+    offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
+) -> EcuScenarioExecutionPage:
+    vehicle = await require_vehicle(session, vehicle_id)
+    scenarios, total = await list_scenario_executions(
+        session, vehicle=vehicle, limit=limit, offset=offset
+    )
+    return EcuScenarioExecutionPage(
+        items=[scenario_response(item, vehicle=vehicle) for item in scenarios],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@scenarios_router.get("/{execution_id}", response_model=EcuScenarioExecutionResponse)
+async def get_scenario_endpoint(
+    vehicle_id: str,
+    execution_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(ecus_read)],
+) -> EcuScenarioExecutionResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    scenario = await require_scenario_execution(
+        session, vehicle=vehicle, execution_id=execution_id
+    )
+    return scenario_response(scenario, vehicle=vehicle)
 
 
 def ecu_response(ecu: ElectronicControlUnit, vehicle: Vehicle) -> EcuResponse:
