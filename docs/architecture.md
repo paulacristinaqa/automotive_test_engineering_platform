@@ -366,5 +366,8 @@ than duplicating controller state. Its arbitration service resolves bounded batc
 contracts, selects the lowest ready identifier, calculates nominal classic CAN duration, serializes
 winners, records consumer delivery, and reports bus utilization. Batch request/result evidence and
 individual winner transmissions are persisted atomically with audit and outbox records. DBC
-encoding, CAN FD, bit stuffing, acknowledgement, retransmission, and network faults remain explicit
-later increments.
+catalogues map structured signals to existing frame contracts. The codec applies exact decimal
+scaling, offsets, signed raw ranges, Intel LSB-first placement, and Motorola DBC sawtooth placement;
+it persists replay-safe encode/decode evidence without exposing values in audit or events. CAN FD,
+textual DBC parsing, multiplexing, bit stuffing, acknowledgement, retransmission, and network faults
+remain explicit later increments.

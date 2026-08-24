@@ -67,3 +67,41 @@ class CanArbitrationExecution(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     requested_by_user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
     )
+
+
+class CanDbcCatalogue(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "can_dbc_catalogues"
+
+    network_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("can_networks.id", ondelete="CASCADE"),
+        unique=True,
+        index=True,
+    )
+    identifier: Mapped[str] = mapped_column(String(80))
+    display_name: Mapped[str] = mapped_column(String(120))
+    revision: Mapped[str] = mapped_column(String(40))
+    messages: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    network_version: Mapped[int] = mapped_column(Integer)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+
+
+class CanSignalCodecExecution(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "can_signal_codec_executions"
+    __table_args__ = (
+        UniqueConstraint("network_id", "command_id", name="uq_can_signal_codec_command"),
+    )
+
+    network_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("can_networks.id", ondelete="CASCADE"), index=True
+    )
+    command_id: Mapped[str] = mapped_column(String(64))
+    operation: Mapped[str] = mapped_column(String(16))
+    contract_id: Mapped[str] = mapped_column(String(80), index=True)
+    request: Mapped[dict[str, Any]] = mapped_column(JSON)
+    result: Mapped[dict[str, Any]] = mapped_column(JSON)
+    requested_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )

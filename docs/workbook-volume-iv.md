@@ -1,6 +1,6 @@
 # ATEP Volume IV - CAN Network Engineering Workbook
 
-**Document status:** Increments IV-1 and IV-2 implemented
+**Document status:** Increments IV-1 through IV-3 implemented
 **Language:** English
 **Last updated:** 2026-08-24
 **Repository:** `paulacristinaqa/automotive_test_engineering_platform`
@@ -15,7 +15,7 @@ evidence, verification strategy, risks, and study exercises for the CAN Network 
 | Field | Value |
 |---|---|
 | Volume | IV - CAN Network |
-| Baseline | Increments IV-1 and IV-2 |
+| Baseline | Increments IV-1 through IV-3 |
 | Architecture style | Vehicle-scoped aggregate with transactional domain service |
 | Primary runtime | Python 3.12, FastAPI, SQLAlchemy, PostgreSQL |
 | Quality gates | pytest, Ruff, strict mypy, Alembic and integration CI |
@@ -26,6 +26,7 @@ evidence, verification strategy, risks, and study exercises for the CAN Network 
 |---|---|---|
 | 0.1.0 | 2026-08-24 | Added ECU-backed topology, classic CAN frame contracts, deterministic submission, RBAC, audit, outbox, migration, APIs, and tests. |
 | 0.2.0 | 2026-08-24 | Added deterministic arbitration, nominal transmission duration, delivery evidence, utilization metrics, replay-safe persistence, APIs, migration, and tests. |
+| 0.3.0 | 2026-08-24 | Added structured DBC catalogues, Intel/Motorola signal placement, exact decimal scaling, signed codec evidence, APIs, migration, and tests. |
 
 ## 4. Scope and Boundaries
 
@@ -43,11 +44,14 @@ evidence, verification strategy, risks, and study exercises for the CAN Network 
 - Batches of one to 64 unique contenders with explicit readiness offsets.
 - CAN-ID priority, standard/extended tie-break, calculated nominal duration, and serial delivery.
 - Occupied, idle, utilization, latency, ordered transmission, and consumer delivery evidence.
+- One structured DBC catalogue mapped to existing frame contracts.
+- Exact signal encode/decode with Intel and Motorola byte order, signedness, scaling, and offsets.
+- Replay-safe codec evidence with payload-free audit and outbox metrics.
 
 ### 4.2 Deferred
 
 - Bit stuffing, acknowledgement, retransmission, and oscillator/physical-layer effects.
-- DBC parsing, scaling, byte order, multiplexing, and semantic-signal encoding.
+- Textual `.dbc` parsing, attributes, value tables, comments, and multiplexing.
 - CAN FD payloads and data-phase bitrate.
 - Error frames, error counters, bus-off, recovery, loss, latency, and corruption.
 - LIN, automotive Ethernet, physical transceivers, and SocketCAN adapters.
@@ -60,8 +64,8 @@ Nodes reference Volume III ECU UUIDs; ECU lifecycle, memory, faults, and semanti
 copied into the CAN aggregate.
 
 Request flow: authenticated client -> FastAPI router -> CAN RBAC dependency -> vehicle lookup ->
-CAN domain/arbitration service -> PostgreSQL aggregate/evidence + audit + transactional outbox ->
-response.
+CAN domain/arbitration/DBC service -> PostgreSQL aggregate/evidence + audit + transactional outbox
+-> response.
 
 ## 6. Domain Model
 
@@ -72,6 +76,11 @@ producer, CAN ID and format, request, payload, sequence, logical time, versions,
 `CanArbitrationExecution` stores the canonical batch request, ordered result, contender count,
 aggregate versions, requesting actor, and timestamps. Each winner also creates normal transmission
 evidence so history remains coherent across individual and arbitrated sends.
+
+`CanDbcCatalogue` stores bounded structured messages and signals for one network. Each message
+references a frame contract rather than duplicating ID, DLC, producer, or consumers.
+`CanSignalCodecExecution` stores the canonical encode/decode request and deterministic payload, raw,
+and physical result for exact replay.
 
 Bounds are architectural controls: 64 nodes, 256 contracts, 8 payload bytes, a 10-second maximum
 logical advance per submission, safe history pagination, and one network aggregate per vehicle.
@@ -87,6 +96,12 @@ logical advance per submission, safe history pagination, and one network aggrega
 | POST | `/api/v1/vehicles/{vehicle_id}/can-networks/arbitrations/execute` | `can_networks:manage` | Execute a bounded arbitration batch. |
 | GET | `/api/v1/vehicles/{vehicle_id}/can-networks/arbitrations` | `can_networks:read` | List persisted arbitration evidence. |
 | GET | `/api/v1/vehicles/{vehicle_id}/can-networks/arbitrations/{command_id}` | `can_networks:read` | Retrieve one arbitration result. |
+| POST | `/api/v1/vehicles/{vehicle_id}/can-networks/dbc-catalogues` | `can_networks:manage` | Create the structured DBC catalogue. |
+| GET | `/api/v1/vehicles/{vehicle_id}/can-networks/dbc-catalogues` | `can_networks:read` | Retrieve the DBC catalogue. |
+| POST | `/api/v1/vehicles/{vehicle_id}/can-networks/dbc/encode` | `can_networks:manage` | Encode physical values into payload bytes. |
+| POST | `/api/v1/vehicles/{vehicle_id}/can-networks/dbc/decode` | `can_networks:manage` | Decode payload bytes into signal values. |
+| GET | `/api/v1/vehicles/{vehicle_id}/can-networks/dbc/executions` | `can_networks:read` | List safely paginated codec evidence. |
+| GET | `/api/v1/vehicles/{vehicle_id}/can-networks/dbc/executions/{command_id}` | `can_networks:read` | Retrieve one codec result. |
 
 The Android Automotive application and future gateways continue to use the public ATEP API. They
 never connect directly to PostgreSQL or RabbitMQ.
@@ -118,10 +133,29 @@ time is the sum of nominal durations; idle time is the remainder. A batch advanc
 version once and the sequence once per winner. Exact retry returns stored evidence without another
 mutation, event, or audit record.
 
+### 8.2 DBC Signal Semantics
+
+Catalogue creation locks the network, verifies optimistic version, resolves every message against an
+existing frame contract, and rejects duplicate messages, duplicate signals, occupied-bit overlap, or
+positions outside the contracted DLC. One catalogue is allowed per network in this increment.
+
+Intel signals begin at their least-significant bit and occupy increasing bit positions. Motorola
+signals begin at their most-significant bit and follow DBC sawtooth numbering: bits descend within a
+byte, then bit 0 advances to bit 15 of the next byte. Signed signals use two's complement.
+
+Physical-to-raw conversion uses decimal arithmetic: `(physical - offset) / factor`. A value is
+rejected if it violates optional physical bounds, exceeds its signed or unsigned raw range, or would
+require fractional rounding. Decode applies `raw * factor + offset`. Encode requires exactly the
+declared signal set, preventing accidental default values or ignored names.
+
+Codec commands lock the network row to serialize command identity checks. Exact retry returns the
+stored result; changed reuse fails with `can_signal_codec_command_conflict`. Payload, raw values, and
+physical values are persisted as engineering evidence but excluded from audit and outbox messages.
+
 ## 9. Functional Requirements
 
-The authoritative catalogue is `docs/requirements-volume-iv.md`. IV-1 and IV-2 implement CAN-F-001
-through CAN-F-020 and CAN-NF-001 through CAN-NF-008.
+The authoritative catalogue is `docs/requirements-volume-iv.md`. IV-1 through IV-3 implement
+CAN-F-001 through CAN-F-030 and CAN-NF-001 through CAN-NF-011.
 
 ## 10. Architecture Decisions
 
@@ -165,6 +199,26 @@ The batch preserves arbitration context and metrics. Winner transmissions preser
 history. A single aggregate version increment represents the atomic command, while each frame gets
 its own monotonically increasing sequence.
 
+### ADR-CAN-009 - Reference Frame Contracts from DBC Messages
+
+DBC messages do not duplicate frame ID, format, DLC, producer, or consumers. The CAN contract stays
+authoritative while the catalogue supplies signal interpretation.
+
+### ADR-CAN-010 - Implement Explicit Intel and Motorola Bit Traversal
+
+Intel uses increasing LSB-first positions. Motorola uses MSB-first DBC sawtooth traversal. The bit
+position function is independently tested so byte-order behavior remains reviewable.
+
+### ADR-CAN-011 - Reject Inexact Physical Values
+
+Decimal arithmetic avoids binary floating-point drift. Encoding rejects non-integral raw results
+instead of selecting an implicit rounding policy that could hide test-data errors.
+
+### ADR-CAN-012 - Separate Codec Evidence from Bus Transmission
+
+Encoding creates a payload but does not automatically transmit it. A later caller may submit or
+arbitrate that payload, keeping semantic conversion and transport execution independently testable.
+
 ## 11. Verification Catalogue
 
 | Test | Objective | Level |
@@ -199,16 +253,31 @@ its own monotonically increasing sequence.
 | Arbitration conflict | Reject changed command reuse with a stable error. | Service/API |
 | Arbitration RBAC | Require manage to execute and read to query evidence. | API/integration |
 | Arbitration minimization | Exclude CAN payload bytes from event and audit metrics. | Service |
+| Catalogue uniqueness | Reject a second catalogue for the same CAN network. | Service/database |
+| Contract mapping | Reject a DBC message without an existing frame contract. | Service |
+| Signal uniqueness | Reject duplicate signal names within one message. | Schema |
+| DLC boundary | Reject Intel or Motorola positions outside contracted payload bits. | Service |
+| Signal overlap | Reject any two signals that occupy a common payload bit. | Service |
+| Intel placement | Verify LSB-first contiguous positions and payload bytes. | Unit |
+| Motorola placement | Verify MSB-first sawtooth positions and payload bytes. | Unit |
+| Signed round-trip | Preserve negative two's-complement raw values. | Unit/service |
+| Decimal conversion | Apply factor and offset without binary floating-point drift. | Unit |
+| Exact representation | Reject physical values requiring fractional raw rounding. | Unit/service |
+| Physical bounds | Reject values below minimum or above maximum. | Unit/service |
+| Exact signal set | Reject missing or unexpected encode values. | Unit/service |
+| Codec replay | Reuse exact command evidence without duplicate observability. | Service/API |
+| Codec conflict | Reject changed command reuse with a stable error. | Service/API |
+| Codec concurrency | Serialize command identity checks on the network row. | Integration |
+| Codec minimization | Exclude payload and values from audit and events. | Service |
 
 ## 12. Implemented Evidence
 
 - `src/atep/can_network/` contains models, schemas, service, and router.
-- Migrations `0024_can_network_baseline` and `0025_can_arbitration` own the database schema.
-- Events include `atep.can.network.created.v1`, `atep.can.frame.submitted.v1`, and
-  `atep.can.arbitration.completed.v1`.
+- Migrations `0024_can_network_baseline`, `0025_can_arbitration`, and `0026_can_dbc_codec` own the database schema.
+- Events include `atep.can.network.created.v1`, `atep.can.frame.submitted.v1`, and `atep.can.arbitration.completed.v1`.
+- DBC events are `atep.can.dbc.catalogue.created.v1` and `atep.can.signal.codec.completed.v1`.
 - Permissions are `can_networks:read` and `can_networks:manage`.
-- Automated tests cover validation, priority, timing mathematics, readiness, delivery, utilization,
-  versioning, replay, errors, evidence minimization, persistence, and OpenAPI.
+- Automated tests cover validation, priority, timing mathematics, readiness, delivery, utilization, versioning, replay, errors, DBC bit placement, signed scaling, exact conversion, evidence minimization, persistence, and OpenAPI.
 
 ## 13. Risks and Technical Debt
 
@@ -217,12 +286,14 @@ its own monotonically increasing sequence.
 - Stored payloads are test evidence and may require a future retention policy.
 - Nominal duration excludes variable bit stuffing and physical-layer effects.
 - Arbitration currently models one attempt; acknowledgement and retransmission are future work.
-- No DBC adapter currently maps Volume III semantic values into payload bytes.
+- The catalogue is structured JSON; importing and exporting textual `.dbc` files remains future work.
+- Multiplexed signals, value tables, attributes, and comments are not yet represented.
+- Encoding produces evidence but does not automatically submit the frame to the simulated bus.
 
 ## 14. Roadmap
 
-The recommended next increment is IV-3: a DBC catalogue with signal encoding/decoding, scaling,
-offsets, signed values, and byte order. See `docs/roadmap-volume-iv.md`.
+The recommended next increment is IV-4: CAN FD payload and timing contracts with explicit nominal
+and data-phase bitrate plus mixed classic/FD compatibility. See `docs/roadmap-volume-iv.md`.
 
 ## 15. Study Exercises
 
@@ -242,3 +313,11 @@ offsets, signed values, and byte order. See `docs/roadmap-volume-iv.md`.
 14. Calculate utilization when a frame becomes ready 50 microseconds after the window begins.
 15. Explain why one batch increments aggregate version once but sequence once per winner.
 16. Design an acknowledgement-failure extension without changing the nominal IV-2 evidence.
+17. Encode a 12-bit Intel value `0xABC` beginning at bit 0 and list the resulting bytes.
+18. Trace a 12-bit Motorola value beginning at bit 7 through sawtooth bit positions.
+19. Explain how two's-complement decoding reconstructs a negative raw value.
+20. Prove why `300.05` is not representable when factor is `0.1` and offset is zero.
+21. Explain why DBC messages reference frame contracts instead of repeating their metadata.
+22. Design a test that detects overlap between one Intel and one Motorola signal.
+23. Trace encode evidence into a later arbitration command without coupling the two operations.
+24. Propose a backward-compatible textual `.dbc` import boundary.

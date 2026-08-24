@@ -9,16 +9,35 @@ from atep.can_network.arbitration_service import (
     list_arbitrations,
     require_arbitration,
 )
-from atep.can_network.models import CanFrameTransmission, CanNetwork
+from atep.can_network.dbc_service import (
+    create_dbc_catalogue,
+    decode_signals,
+    encode_signals,
+    list_codec_executions,
+    require_codec_execution,
+    require_dbc_catalogue,
+)
+from atep.can_network.models import (
+    CanDbcCatalogue,
+    CanFrameTransmission,
+    CanNetwork,
+    CanSignalCodecExecution,
+)
 from atep.can_network.schemas import (
     CanArbitrationCommand,
     CanArbitrationPage,
     CanArbitrationResponse,
+    CanDbcCatalogueCreate,
+    CanDbcCatalogueResponse,
     CanFrameSubmitCommand,
     CanFrameTransmissionPage,
     CanFrameTransmissionResponse,
     CanNetworkCreate,
     CanNetworkResponse,
+    CanSignalCodecPage,
+    CanSignalCodecResponse,
+    CanSignalDecodeCommand,
+    CanSignalEncodeCommand,
 )
 from atep.can_network.service import (
     create_can_network,
@@ -75,6 +94,167 @@ def transmission_response(
         duplicate=duplicate,
         created_at=item.created_at,
     )
+
+
+def dbc_catalogue_response(
+    catalogue: CanDbcCatalogue, network: CanNetwork, vehicle: Vehicle
+) -> CanDbcCatalogueResponse:
+    return CanDbcCatalogueResponse(
+        id=catalogue.id,
+        vehicle_id=vehicle.identifier,
+        network_id=network.identifier,
+        identifier=catalogue.identifier,
+        display_name=catalogue.display_name,
+        revision=catalogue.revision,
+        messages=catalogue.messages,
+        network_version=catalogue.network_version,
+        created_at=catalogue.created_at,
+        updated_at=catalogue.updated_at,
+    )
+
+
+def codec_response(
+    execution: CanSignalCodecExecution,
+    network: CanNetwork,
+    vehicle: Vehicle,
+    *,
+    duplicate: bool = False,
+) -> CanSignalCodecResponse:
+    return CanSignalCodecResponse(
+        command_id=execution.command_id,
+        vehicle_id=vehicle.identifier,
+        network_id=network.identifier,
+        operation=execution.operation,
+        contract_id=execution.contract_id,
+        payload=execution.result["payload"],
+        raw_values=execution.result["raw_values"],
+        physical_values=execution.result["physical_values"],
+        duplicate=duplicate,
+        created_at=execution.created_at,
+    )
+
+
+@router.post(
+    "/dbc-catalogues",
+    response_model=CanDbcCatalogueResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_dbc_catalogue_endpoint(
+    vehicle_id: str,
+    command: CanDbcCatalogueCreate,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(can_manage)],
+) -> CanDbcCatalogueResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    catalogue, network = await create_dbc_catalogue(
+        session,
+        vehicle=vehicle,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(catalogue, attribute_names=["created_at", "updated_at"])
+    return dbc_catalogue_response(catalogue, network, vehicle)
+
+
+@router.get("/dbc-catalogues", response_model=CanDbcCatalogueResponse)
+async def get_dbc_catalogue_endpoint(
+    vehicle_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(can_read)],
+) -> CanDbcCatalogueResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    network = await require_can_network(session, vehicle=vehicle)
+    catalogue = await require_dbc_catalogue(session, network=network)
+    return dbc_catalogue_response(catalogue, network, vehicle)
+
+
+@router.post(
+    "/dbc/encode", response_model=CanSignalCodecResponse, status_code=status.HTTP_201_CREATED
+)
+async def encode_signals_endpoint(
+    vehicle_id: str,
+    command: CanSignalEncodeCommand,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(can_manage)],
+) -> CanSignalCodecResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    execution, network, duplicate = await encode_signals(
+        session,
+        vehicle=vehicle,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(execution, attribute_names=["created_at"])
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+    return codec_response(execution, network, vehicle, duplicate=duplicate)
+
+
+@router.post(
+    "/dbc/decode", response_model=CanSignalCodecResponse, status_code=status.HTTP_201_CREATED
+)
+async def decode_signals_endpoint(
+    vehicle_id: str,
+    command: CanSignalDecodeCommand,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(can_manage)],
+) -> CanSignalCodecResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    execution, network, duplicate = await decode_signals(
+        session,
+        vehicle=vehicle,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(execution, attribute_names=["created_at"])
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+    return codec_response(execution, network, vehicle, duplicate=duplicate)
+
+
+@router.get("/dbc/executions", response_model=CanSignalCodecPage)
+async def list_codec_executions_endpoint(
+    vehicle_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(can_read)],
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
+) -> CanSignalCodecPage:
+    vehicle = await require_vehicle(session, vehicle_id)
+    network = await require_can_network(session, vehicle=vehicle)
+    items, total = await list_codec_executions(
+        session, network=network, limit=limit, offset=offset
+    )
+    return CanSignalCodecPage(
+        items=[codec_response(item, network, vehicle) for item in items],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/dbc/executions/{command_id}", response_model=CanSignalCodecResponse)
+async def get_codec_execution_endpoint(
+    vehicle_id: str,
+    command_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(can_read)],
+) -> CanSignalCodecResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    network = await require_can_network(session, vehicle=vehicle)
+    execution = await require_codec_execution(session, network=network, command_id=command_id)
+    return codec_response(execution, network, vehicle)
 
 
 @router.post(

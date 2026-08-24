@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID
 
@@ -202,6 +203,114 @@ class CanArbitrationResponse(BaseModel):
 
 class CanArbitrationPage(BaseModel):
     items: list[CanArbitrationResponse]
+    total: int
+    limit: int
+    offset: int
+
+
+class CanDbcByteOrder(StrEnum):
+    INTEL = "intel"
+    MOTOROLA = "motorola"
+
+
+class CanDbcSignal(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    identifier: str = Field(min_length=1, max_length=80, pattern=r"^[A-Za-z][A-Za-z0-9_]*$")
+    start_bit: int = Field(ge=0, le=63)
+    bit_length: int = Field(ge=1, le=64)
+    byte_order: CanDbcByteOrder
+    signed: bool = False
+    factor: Decimal = Field(default=Decimal("1"), gt=0)
+    offset: Decimal = Decimal("0")
+    minimum: Decimal | None = None
+    maximum: Decimal | None = None
+    unit: str = Field(default="", max_length=32)
+
+    @model_validator(mode="after")
+    def validate_physical_range(self) -> "CanDbcSignal":
+        if self.minimum is not None and self.maximum is not None and self.minimum > self.maximum:
+            raise ValueError("signal minimum must be less than or equal to maximum")
+        return self
+
+
+class CanDbcMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    contract_id: str = Field(min_length=2, max_length=80, pattern=r"^[a-z][a-z0-9_-]+$")
+    signals: list[CanDbcSignal] = Field(min_length=1, max_length=64)
+
+    @model_validator(mode="after")
+    def validate_unique_signals(self) -> "CanDbcMessage":
+        identifiers = [signal.identifier for signal in self.signals]
+        if len(set(identifiers)) != len(identifiers):
+            raise ValueError("DBC signal identifiers must be unique per message")
+        return self
+
+
+class CanDbcCatalogueCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_version: int = Field(ge=1)
+    identifier: str = Field(min_length=2, max_length=80, pattern=r"^[a-z][a-z0-9_-]+$")
+    display_name: str = Field(min_length=2, max_length=120)
+    revision: str = Field(min_length=1, max_length=40)
+    messages: list[CanDbcMessage] = Field(min_length=1, max_length=256)
+
+    @model_validator(mode="after")
+    def validate_unique_messages(self) -> "CanDbcCatalogueCreate":
+        contracts = [message.contract_id for message in self.messages]
+        if len(set(contracts)) != len(contracts):
+            raise ValueError("DBC messages must reference unique frame contracts")
+        return self
+
+
+class CanDbcCatalogueResponse(BaseModel):
+    id: UUID
+    vehicle_id: str
+    network_id: str
+    identifier: str
+    display_name: str
+    revision: str
+    messages: list[CanDbcMessage]
+    network_version: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class CanSignalEncodeCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    command_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]+$")
+    contract_id: str = Field(min_length=2, max_length=80, pattern=r"^[a-z][a-z0-9_-]+$")
+    values: dict[str, Decimal] = Field(min_length=1, max_length=64)
+
+
+class CanSignalDecodeCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    command_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]+$")
+    contract_id: str = Field(min_length=2, max_length=80, pattern=r"^[a-z][a-z0-9_-]+$")
+    payload: list[int] = Field(max_length=8)
+
+    @field_validator("payload")
+    @classmethod
+    def validate_payload_bytes(cls, value: list[int]) -> list[int]:
+        if any(item < 0 or item > 255 for item in value):
+            raise ValueError("CAN payload bytes must be between 0 and 255")
+        return value
+
+
+class CanSignalCodecResponse(BaseModel):
+    command_id: str
+    vehicle_id: str
+    network_id: str
+    operation: str
+    contract_id: str
+    payload: list[int]
+    raw_values: dict[str, int]
+    physical_values: dict[str, Decimal]
+    duplicate: bool
+    created_at: datetime
+
+
+class CanSignalCodecPage(BaseModel):
+    items: list[CanSignalCodecResponse]
     total: int
     limit: int
     offset: int

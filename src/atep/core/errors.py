@@ -218,6 +218,24 @@ class CanArbitrationCommandConflictError(ApplicationError):
         )
 
 
+class CanDbcCatalogueAlreadyExistsError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="can_dbc_catalogue_already_exists",
+            message="A DBC catalogue already exists for this CAN network.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class CanSignalCodecCommandConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="can_signal_codec_command_conflict",
+            message="The CAN signal codec command identifier was already used differently.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
 class ModuleCapabilityRequiredError(ApplicationError):
     def __init__(self, capability: str) -> None:
         super().__init__(

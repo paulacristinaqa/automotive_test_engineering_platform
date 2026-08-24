@@ -24,6 +24,16 @@
 | CAN-F-018 | One successful batch shall increment aggregate version once and sequence once per frame. | Implemented |
 | CAN-F-019 | Exact arbitration replay shall be mutation-free; changed command reuse shall return a stable conflict. | Implemented |
 | CAN-F-020 | Arbitration history and detail shall be protected and safely queryable. | Implemented |
+| CAN-F-021 | The platform shall create at most one structured DBC catalogue per CAN network. | Implemented |
+| CAN-F-022 | Each DBC message shall reference an existing frame contract and contain unique, non-overlapping signals within its DLC. | Implemented |
+| CAN-F-023 | Signals shall define start bit, bit length, Intel or Motorola byte order, signedness, factor, offset, optional physical bounds, and unit. | Implemented |
+| CAN-F-024 | Intel signals shall use contiguous LSB-first DBC bit numbering. | Implemented |
+| CAN-F-025 | Motorola signals shall use MSB-first DBC sawtooth bit numbering. | Implemented |
+| CAN-F-026 | Encoding shall require exactly the declared signals and reject values that are not exactly representable. | Implemented |
+| CAN-F-027 | Encoding and decoding shall support unsigned and two's-complement signed raw values. | Implemented |
+| CAN-F-028 | Codec execution shall persist payload, raw values, and physical values as replayable evidence. | Implemented |
+| CAN-F-029 | Exact codec replay shall be mutation-free; changed command reuse shall return a stable conflict. | Implemented |
+| CAN-F-030 | DBC catalogue and codec evidence shall be protected by CAN read/manage permissions. | Implemented |
 
 ## Non-Functional Requirements
 
@@ -37,3 +47,6 @@
 | CAN-NF-006 | Ruff, strict mypy, pytest, and integration CI shall protect the baseline. | Implemented |
 | CAN-NF-007 | Arbitration order and timing shall remain reproducible across host resource conditions. | Implemented |
 | CAN-NF-008 | Arbitration events and audit shall expose aggregate metrics without CAN payload bytes. | Implemented |
+| CAN-NF-009 | Decimal scaling and offset calculations shall avoid binary floating-point drift. | Implemented |
+| CAN-NF-010 | Codec audit and outbox evidence shall exclude payload and signal values. | Implemented |
+| CAN-NF-011 | Codec commands shall serialize on the network aggregate to prevent duplicate concurrent evidence. | Implemented |
