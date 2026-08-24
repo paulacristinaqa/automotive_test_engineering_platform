@@ -18,6 +18,8 @@ class PermissionName(StrEnum):
     DIGITAL_VEHICLE_WRITE = "digital_vehicle:write"
     ECUS_READ = "ecus:read"
     ECUS_MANAGE = "ecus:manage"
+    CAN_NETWORKS_READ = "can_networks:read"
+    CAN_NETWORKS_MANAGE = "can_networks:manage"
     TEST_RUNS_READ = "test_runs:read"
     TEST_RUNS_WRITE = "test_runs:write"
     ENVIRONMENT_PROFILES_READ = "environment_profiles:read"

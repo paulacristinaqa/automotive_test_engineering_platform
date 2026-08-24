@@ -1,0 +1,127 @@
+from datetime import datetime
+from enum import StrEnum
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+class CanFrameFormat(StrEnum):
+    STANDARD = "standard"
+    EXTENDED = "extended"
+
+
+class CanNodeRole(StrEnum):
+    PARTICIPANT = "participant"
+    GATEWAY = "gateway"
+    MONITOR = "monitor"
+
+
+class CanNode(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    ecu_id: UUID
+    role: CanNodeRole = CanNodeRole.PARTICIPANT
+
+
+class CanFrameContract(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    identifier: str = Field(min_length=2, max_length=80, pattern=r"^[a-z][a-z0-9_-]+$")
+    frame_id: int = Field(ge=0, le=0x1FFFFFFF)
+    frame_format: CanFrameFormat = CanFrameFormat.STANDARD
+    dlc: int = Field(ge=0, le=8)
+    producer_node_id: UUID
+    consumer_node_ids: list[UUID] = Field(default_factory=list, max_length=63)
+
+    @model_validator(mode="after")
+    def validate_contract(self) -> "CanFrameContract":
+        if self.frame_format is CanFrameFormat.STANDARD and self.frame_id > 0x7FF:
+            raise ValueError("standard CAN frame_id must be at most 0x7FF")
+        if self.producer_node_id in self.consumer_node_ids:
+            raise ValueError("producer cannot also be a consumer")
+        if len(set(self.consumer_node_ids)) != len(self.consumer_node_ids):
+            raise ValueError("consumer node identifiers must be unique")
+        return self
+
+
+class CanNetworkCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    identifier: str = Field(min_length=2, max_length=80, pattern=r"^[a-z][a-z0-9_-]+$")
+    display_name: str = Field(min_length=2, max_length=120)
+    bitrate_kbps: int = Field(default=500, ge=10, le=1000)
+    nodes: list[CanNode] = Field(min_length=1, max_length=64)
+    frame_contracts: list[CanFrameContract] = Field(default_factory=list, max_length=256)
+
+    @model_validator(mode="after")
+    def validate_topology(self) -> "CanNetworkCreate":
+        node_ids = [item.ecu_id for item in self.nodes]
+        if len(set(node_ids)) != len(node_ids):
+            raise ValueError("CAN node ECU identifiers must be unique")
+        contract_ids = [item.identifier for item in self.frame_contracts]
+        if len(set(contract_ids)) != len(contract_ids):
+            raise ValueError("CAN frame contract identifiers must be unique")
+        frame_keys = [(item.frame_format, item.frame_id) for item in self.frame_contracts]
+        if len(set(frame_keys)) != len(frame_keys):
+            raise ValueError("CAN frame identifiers must be unique per format")
+        known = set(node_ids)
+        for contract in self.frame_contracts:
+            if (
+                contract.producer_node_id not in known
+                or not set(contract.consumer_node_ids) <= known
+            ):
+                raise ValueError("CAN frame contracts may reference only declared nodes")
+        return self
+
+
+class CanFrameSubmitCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    command_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]+$")
+    expected_version: int = Field(ge=1)
+    contract_id: str = Field(min_length=2, max_length=80, pattern=r"^[a-z][a-z0-9_-]+$")
+    producer_node_id: UUID
+    payload: list[int] = Field(max_length=8)
+    advance_time_us: int = Field(default=0, ge=0, le=10_000_000)
+
+    @field_validator("payload")
+    @classmethod
+    def validate_payload_bytes(cls, value: list[int]) -> list[int]:
+        if any(item < 0 or item > 255 for item in value):
+            raise ValueError("CAN payload bytes must be between 0 and 255")
+        return value
+
+
+class CanNetworkResponse(BaseModel):
+    id: UUID
+    vehicle_id: str
+    identifier: str
+    display_name: str
+    bitrate_kbps: int
+    nodes: list[CanNode]
+    frame_contracts: list[CanFrameContract]
+    version: int
+    simulation_time_us: int
+    next_sequence: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class CanFrameTransmissionResponse(BaseModel):
+    command_id: str
+    vehicle_id: str
+    network_id: str
+    contract_id: str
+    producer_node_id: UUID
+    frame_id: int
+    frame_format: CanFrameFormat
+    payload: list[int]
+    sequence: int
+    transmission_time_us: int
+    previous_version: int
+    network_version: int
+    duplicate: bool
+    created_at: datetime
+
+
+class CanFrameTransmissionPage(BaseModel):
+    items: list[CanFrameTransmissionResponse]
+    total: int
+    limit: int
+    offset: int
