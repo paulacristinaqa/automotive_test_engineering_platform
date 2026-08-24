@@ -1,6 +1,6 @@
 # ATEP Volume III — ECU Simulator Requirements
 
-Status: Increments III-1 through III-3 implemented.
+Status: Increments III-1 through III-4 implemented.
 
 ## Functional Requirements
 
@@ -30,6 +30,12 @@ Status: Increments III-1 through III-3 implemented.
 | ECU-FR-022 | State replacement shall reject unsupported task IDs, schedules, and behavior-state keys. | Profile contract tests |
 | ECU-FR-023 | Logical-time advancement shall apply profile transitions from aggregated task-run counts. | Deterministic transition test |
 | ECU-FR-024 | Clients shall be able to list and inspect profiles using `ecus:read`. | Profile API contract test |
+| ECU-FR-025 | ECU memory shall support non-overlapping volatile and non-volatile regions. | Region validation tests |
+| ECU-FR-026 | Hard and power-cycle reset shall restore initialized volatile cells while preserving non-volatile cells. | Reset persistence tests |
+| ECU-FR-027 | Soft reset shall preserve both volatile and non-volatile memory. | Reset-mode test |
+| ECU-FR-028 | Authorized clients shall create, list, and restore bounded memory snapshots with checksums. | Snapshot service and API tests |
+| ECU-FR-029 | Memory corruption shall use an explicit seed and bounded bit-flip count. | Determinism and validation tests |
+| ECU-FR-030 | Exact corruption retries shall not mutate memory or version twice. | Command replay test |
 
 ## Non-Functional Requirements
 
@@ -44,3 +50,5 @@ Status: Increments III-1 through III-3 implemented.
 | ECU-NFR-007 | Deterministic simulation operations shall not call real-time sleep. | Design review and unit tests |
 | ECU-NFR-008 | Profile transitions shall remain independent of CAN, UDS, and wall-clock infrastructure. | Boundary review |
 | ECU-NFR-009 | Behavior state and published profile metadata shall remain bounded and JSON-compatible. | Schema limits and typed registry |
+| ECU-NFR-010 | Snapshot and corruption evidence shall avoid copying complete memory into audit details. | Audit minimization review |
+| ECU-NFR-011 | Memory operations shall remain deterministic and independent of host timing. | Seeded service tests |
