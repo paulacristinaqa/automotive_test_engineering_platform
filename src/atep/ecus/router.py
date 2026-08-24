@@ -5,7 +5,12 @@ from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atep.db.session import get_session
-from atep.ecus.models import EcuMemorySnapshot, EcuSimulationCommand, ElectronicControlUnit
+from atep.ecus.models import (
+    EcuMemorySnapshot,
+    EcuSignalRoute,
+    EcuSimulationCommand,
+    ElectronicControlUnit,
+)
 from atep.ecus.profiles import behavior_profile, behavior_profiles
 from atep.ecus.schemas import (
     EcuAdvanceCommand,
@@ -27,6 +32,14 @@ from atep.ecus.schemas import (
     EcuResetCommand,
     EcuResetResponse,
     EcuResponse,
+    EcuSignalContract,
+    EcuSignalPublishCommand,
+    EcuSignalPublishResponse,
+    EcuSignalRouteCreate,
+    EcuSignalRoutePage,
+    EcuSignalRouteResponse,
+    EcuSignalRouteTransferCommand,
+    EcuSignalRouteTransferResponse,
     EcuSnapshotCreate,
     EcuSnapshotRestoreCommand,
     EcuStateReplace,
@@ -38,17 +51,22 @@ from atep.ecus.service import (
     corrupt_ecu_memory,
     create_ecu,
     create_memory_snapshot,
+    create_signal_route,
     dtc_candidates,
     ecu_state_payload,
     execute_ecu_advance,
     execute_ecu_reset,
     list_ecus,
     list_memory_snapshots,
+    list_signal_routes,
     observe_ecu_fault,
+    publish_ecu_signal,
     replace_ecu_state,
     require_ecu,
     require_memory_snapshot,
+    require_signal_route,
     restore_memory_snapshot,
+    transfer_signal_route,
 )
 from atep.identity.dependencies import require_permissions
 from atep.identity.models import User
@@ -527,3 +545,159 @@ async def list_ecu_dtc_candidates_endpoint(
     ecu = await require_ecu(session, vehicle=vehicle, identifier=ecu_id)
     items = dtc_candidates(ecu)
     return EcuDtcCandidatePage(items=items, total=len(items))
+
+
+@router.post(
+    "/{ecu_id}/signals/{signal_name}/publish",
+    response_model=EcuSignalPublishResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def publish_ecu_signal_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    signal_name: str,
+    command: EcuSignalPublishCommand,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(ecus_manage)],
+) -> EcuSignalPublishResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    ecu = await require_ecu(session, vehicle=vehicle, identifier=ecu_id)
+    canonical_name = EcuSignalContract.validate_name(signal_name)
+    execution, duplicate = await publish_ecu_signal(
+        session,
+        vehicle=vehicle,
+        ecu=ecu,
+        signal_name=canonical_name,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(execution, attribute_names=["created_at"])
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+    return EcuSignalPublishResponse(
+        command_id=execution.command_id,
+        vehicle_id=vehicle.identifier,
+        ecu_id=ecu.identifier,
+        signal=EcuSignalContract.model_validate(execution.result["signal"]),
+        previous_version=execution.previous_version,
+        state_version=execution.state_version,
+        duplicate=duplicate,
+        created_at=execution.created_at,
+    )
+
+
+def signal_route_response(
+    route: EcuSignalRoute, vehicle: Vehicle, gateway: ElectronicControlUnit
+) -> EcuSignalRouteResponse:
+    return EcuSignalRouteResponse(
+        id=route.id,
+        vehicle_id=vehicle.identifier,
+        gateway_ecu_id=gateway.identifier,
+        identifier=route.identifier,
+        source_ecu_id=route.source_ecu_id,
+        source_signal=route.source_signal,
+        target_ecu_id=route.target_ecu_id,
+        target_signal=route.target_signal,
+        enabled=route.enabled,
+        created_at=route.created_at,
+    )
+
+
+@router.post(
+    "/{ecu_id}/signal-routes",
+    response_model=EcuSignalRouteResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_signal_route_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    command: EcuSignalRouteCreate,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(ecus_manage)],
+) -> EcuSignalRouteResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    gateway = await require_ecu(session, vehicle=vehicle, identifier=ecu_id)
+    route = await create_signal_route(
+        session,
+        vehicle=vehicle,
+        gateway=gateway,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    return signal_route_response(route, vehicle, gateway)
+
+
+@router.get("/{ecu_id}/signal-routes", response_model=EcuSignalRoutePage)
+async def list_signal_routes_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(ecus_read)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
+) -> EcuSignalRoutePage:
+    vehicle = await require_vehicle(session, vehicle_id)
+    gateway = await require_ecu(session, vehicle=vehicle, identifier=ecu_id)
+    routes, total = await list_signal_routes(
+        session, gateway=gateway, limit=limit, offset=offset
+    )
+    return EcuSignalRoutePage(
+        items=[signal_route_response(item, vehicle, gateway) for item in routes],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.post(
+    "/{ecu_id}/signal-routes/{route_id}/transfer",
+    response_model=EcuSignalRouteTransferResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def transfer_signal_route_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    route_id: UUID,
+    command: EcuSignalRouteTransferCommand,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(ecus_manage)],
+) -> EcuSignalRouteTransferResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    gateway = await require_ecu(session, vehicle=vehicle, identifier=ecu_id)
+    route = await require_signal_route(session, gateway=gateway, route_id=route_id)
+    execution, duplicate, source, target = await transfer_signal_route(
+        session,
+        vehicle=vehicle,
+        gateway=gateway,
+        route=route,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(execution, attribute_names=["created_at"])
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+    return EcuSignalRouteTransferResponse(
+        command_id=execution.command_id,
+        vehicle_id=vehicle.identifier,
+        gateway_ecu_id=gateway.identifier,
+        route_id=route.id,
+        source_ecu_id=source.identifier,
+        target_ecu_id=target.identifier,
+        source_signal=EcuSignalContract.model_validate(execution.result["source_signal"]),
+        target_signal=EcuSignalContract.model_validate(execution.result["target_signal"]),
+        previous_target_version=execution.previous_version,
+        target_version=execution.state_version,
+        duplicate=duplicate,
+        created_at=execution.created_at,
+    )

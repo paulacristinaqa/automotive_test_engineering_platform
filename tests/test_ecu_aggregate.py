@@ -11,10 +11,11 @@ from atep.core.errors import (
     EcuExecutionStateError,
     EcuFaultContractError,
     EcuProfileContractError,
+    EcuSignalContractError,
     EcuSimulationCommandConflictError,
     EcuStateVersionConflictError,
 )
-from atep.ecus.models import EcuSimulationCommand, ElectronicControlUnit
+from atep.ecus.models import EcuSignalRoute, EcuSimulationCommand, ElectronicControlUnit
 from atep.ecus.profiles import behavior_profile, behavior_profiles
 from atep.ecus.schemas import (
     EcuAdvanceCommand,
@@ -23,6 +24,9 @@ from atep.ecus.schemas import (
     EcuFaultObservationCommand,
     EcuMemoryCorruptionCommand,
     EcuResetCommand,
+    EcuSignalPublishCommand,
+    EcuSignalRouteCreate,
+    EcuSignalRouteTransferCommand,
     EcuSnapshotCreate,
     EcuStatePayload,
     EcuStateReplace,
@@ -32,12 +36,15 @@ from atep.ecus.service import (
     corrupt_ecu_memory,
     create_ecu,
     create_memory_snapshot,
+    create_signal_route,
     dtc_candidates,
     execute_ecu_advance,
     execute_ecu_reset,
     observe_ecu_fault,
+    publish_ecu_signal,
     replace_ecu_state,
     restore_memory_snapshot,
+    transfer_signal_route,
 )
 from atep.events.models import OutboxEvent
 from atep.identity.dependencies import require_permissions
@@ -109,6 +116,7 @@ def ecu(*, version: int = 1) -> ElectronicControlUnit:
             }
         ],
         faults=[],
+        signals=[],
         cyclic_tasks=[],
         version=version,
         simulation_time_ms=0,
@@ -885,3 +893,293 @@ async def test_absent_observation_resets_pending_confirmation_sequence() -> None
     )
     assert execution.result["transition"] == "detected"
     assert current.faults[0]["status"] == "pending"
+
+
+def test_signal_contract_rejects_duplicate_direction_and_invalid_values() -> None:
+    with pytest.raises(ValidationError, match="signal names must be unique per direction"):
+        EcuStatePayload(
+            signals=[
+                {
+                    "name": "battery_temperature",
+                    "direction": "produced",
+                    "data_type": "decimal",
+                    "unit": "celsius",
+                    "value": 20.0,
+                },
+                {
+                    "name": "battery_temperature",
+                    "direction": "produced",
+                    "data_type": "decimal",
+                    "unit": "celsius",
+                    "value": 21.0,
+                },
+            ]
+        )
+    with pytest.raises(ValidationError, match="at most 64 items"):
+        EcuStatePayload(
+            signals=[
+                {
+                    "name": f"signal_{index:02d}",
+                    "direction": "produced",
+                    "data_type": "integer",
+                    "value": index,
+                }
+                for index in range(65)
+            ]
+        )
+    with pytest.raises(ValidationError, match="below its minimum"):
+        EcuStatePayload(
+            signals=[
+                {
+                    "name": "battery_temperature",
+                    "direction": "produced",
+                    "data_type": "decimal",
+                    "unit": "celsius",
+                    "minimum": -40,
+                    "maximum": 120,
+                    "value": -41,
+                }
+            ]
+        )
+    with pytest.raises(ValidationError, match="valid boolean|valid integer|valid number"):
+        EcuStatePayload(
+            signals=[
+                {
+                    "name": "vehicle_speed",
+                    "direction": "produced",
+                    "data_type": "integer",
+                    "value": "5",
+                }
+            ]
+        )
+
+
+@pytest.mark.asyncio
+async def test_signal_publication_uses_logical_time_and_exact_replay() -> None:
+    target = vehicle()
+    current = ecu()
+    current.vehicle_id = target.id
+    current.simulation_time_ms = 2_500
+    current.signals = [
+        {
+            "name": "battery_temperature",
+            "direction": "produced",
+            "data_type": "decimal",
+            "unit": "celsius",
+            "minimum": -40,
+            "maximum": 120,
+            "cycle_time_ms": 100,
+            "value": 20.0,
+            "updated_at_ms": 0,
+        }
+    ]
+    command = EcuSignalPublishCommand(
+        command_id="signal-publish-001", expected_version=1, value=47.5
+    )
+    first_session = FakeSession(current, None)
+    execution, duplicate = await publish_ecu_signal(
+        cast(AsyncSession, first_session),
+        vehicle=target,
+        ecu=current,
+        signal_name="battery_temperature",
+        command=command,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert duplicate is False
+    assert current.version == 2
+    assert current.signals[0]["value"] == 47.5
+    assert current.signals[0]["updated_at_ms"] == 2_500
+    outbox = next(item for item in first_session.added if isinstance(item, OutboxEvent))
+    assert outbox.event_type == "atep.ecu.signal.published.v1"
+    assert "value" not in outbox.payload
+    returned, duplicate = await publish_ecu_signal(
+        cast(AsyncSession, FakeSession(current, execution)),
+        vehicle=target,
+        ecu=current,
+        signal_name="battery_temperature",
+        command=command,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert returned is execution
+    assert duplicate is True
+    assert current.version == 2
+
+
+@pytest.mark.asyncio
+async def test_gateway_route_creation_validates_signal_compatibility() -> None:
+    target_vehicle = vehicle()
+    gateway = ecu()
+    gateway.vehicle_id = target_vehicle.id
+    gateway.ecu_type = "gateway"
+    source = ecu()
+    source.id = uuid4()
+    source.vehicle_id = target_vehicle.id
+    source.identifier = "bms-source"
+    source.signals = [
+        {
+            "name": "battery_temperature",
+            "direction": "produced",
+            "data_type": "decimal",
+            "unit": "celsius",
+            "value": 35.0,
+        }
+    ]
+    target = ecu()
+    target.id = uuid4()
+    target.vehicle_id = target_vehicle.id
+    target.identifier = "thermal-target"
+    target.signals = [
+        {
+            "name": "pack_temperature",
+            "direction": "consumed",
+            "data_type": "decimal",
+            "unit": "celsius",
+            "value": 0.0,
+        }
+    ]
+    command = EcuSignalRouteCreate(
+        identifier="bms-to-thermal",
+        source_ecu_id=source.identifier,
+        source_signal="battery_temperature",
+        target_ecu_id=target.identifier,
+        target_signal="pack_temperature",
+    )
+    non_gateway = ecu()
+    non_gateway.vehicle_id = target_vehicle.id
+    with pytest.raises(EcuSignalContractError) as owner_error:
+        await create_signal_route(
+            cast(AsyncSession, FakeSession()),
+            vehicle=target_vehicle,
+            gateway=non_gateway,
+            command=command,
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+    assert owner_error.value.details == {
+        "reason": "signal routes must be owned by a gateway ECU"
+    }
+    session = FakeSession(None, source, target)
+    route = await create_signal_route(
+        cast(AsyncSession, session),
+        vehicle=target_vehicle,
+        gateway=gateway,
+        command=command,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert route.gateway_ecu_id == gateway.id
+    assert route.source_ecu_id == source.id
+    assert route.target_ecu_id == target.id
+    outbox = next(item for item in session.added if isinstance(item, OutboxEvent))
+    assert outbox.event_type == "atep.ecu.signal.route.created.v1"
+
+    target.signals[0]["unit"] = "kelvin"
+    with pytest.raises(EcuSignalContractError) as exc_info:
+        await create_signal_route(
+            cast(AsyncSession, FakeSession(None, source, target)),
+            vehicle=target_vehicle,
+            gateway=gateway,
+            command=command.model_copy(update={"identifier": "invalid-units"}),
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+    assert exc_info.value.details == {"reason": "route signal units must match"}
+
+
+@pytest.mark.asyncio
+async def test_gateway_route_transfer_is_atomic_and_idempotent() -> None:
+    target_vehicle = vehicle()
+    gateway = ecu()
+    gateway.ecu_type = "gateway"
+    gateway.vehicle_id = target_vehicle.id
+    source = ecu(version=3)
+    source.id = uuid4()
+    source.vehicle_id = target_vehicle.id
+    source.identifier = "bms-source"
+    source.signals = [
+        {
+            "name": "battery_temperature",
+            "direction": "produced",
+            "data_type": "decimal",
+            "unit": "celsius",
+            "value": 48.25,
+            "updated_at_ms": 900,
+        }
+    ]
+    target = ecu(version=5)
+    target.id = uuid4()
+    target.vehicle_id = target_vehicle.id
+    target.identifier = "thermal-target"
+    target.simulation_time_ms = 1_000
+    target.signals = [
+        {
+            "name": "pack_temperature",
+            "direction": "consumed",
+            "data_type": "decimal",
+            "unit": "celsius",
+            "value": 0.0,
+        }
+    ]
+    route = EcuSignalRoute(
+        id=uuid4(),
+        gateway_ecu_id=gateway.id,
+        identifier="bms-to-thermal",
+        source_ecu_id=source.id,
+        source_signal="battery_temperature",
+        target_ecu_id=target.id,
+        target_signal="pack_temperature",
+        enabled=True,
+        created_at=datetime(2026, 8, 24, 10, 0, tzinfo=UTC),
+        updated_at=datetime(2026, 8, 24, 10, 0, tzinfo=UTC),
+    )
+    command = EcuSignalRouteTransferCommand(
+        command_id="route-transfer-001",
+        expected_source_version=3,
+        expected_target_version=5,
+    )
+    session = FakeSession(source, target, None)
+    execution, duplicate, _, returned_target = await transfer_signal_route(
+        cast(AsyncSession, session),
+        vehicle=target_vehicle,
+        gateway=gateway,
+        route=route,
+        command=command,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert duplicate is False
+    assert returned_target.version == 6
+    assert returned_target.signals[0]["value"] == 48.25
+    assert returned_target.signals[0]["updated_at_ms"] == 1_000
+    outbox = next(item for item in session.added if isinstance(item, OutboxEvent))
+    assert outbox.event_type == "atep.ecu.signal.routed.v1"
+    assert "value" not in outbox.payload
+    returned, duplicate, _, _ = await transfer_signal_route(
+        cast(AsyncSession, FakeSession(source, target, execution)),
+        vehicle=target_vehicle,
+        gateway=gateway,
+        route=route,
+        command=command,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert returned is execution
+    assert duplicate is True
+    assert target.version == 6
+
+    stale = command.model_copy(
+        update={"command_id": "route-transfer-002", "expected_source_version": 2}
+    )
+    with pytest.raises(EcuStateVersionConflictError) as version_error:
+        await transfer_signal_route(
+            cast(AsyncSession, FakeSession(source, target, None)),
+            vehicle=target_vehicle,
+            gateway=gateway,
+            route=route,
+            command=stale,
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+    assert version_error.value.details == {"current_version": 3}

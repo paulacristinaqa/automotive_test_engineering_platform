@@ -98,9 +98,29 @@ counters or versions twice. Lifecycle evidence is minimized and published as
 confirmed, test-failed, and warning-indicator intent. The Diagnostics volume will own actual UDS DTC
 numbers, aging rules, storage status bytes, and diagnostic services.
 
+## Signal Contracts and Gateway Routing Hooks
+
+An ECU can define at most 64 semantic signal contracts. Each contract has a canonical name,
+`produced` or `consumed` direction, strict boolean/integer/decimal data type, optional unit and
+physical bounds, optional cycle time, current value, and last ECU logical update time. Duplicate
+names are rejected within one direction.
+
+`POST .../signals/{signal_name}/publish` changes only a produced signal under optimistic versioning.
+The command records exact-replay identity and uses `simulation_time_ms`; its audit/outbox evidence
+omits the physical value. Successful publication emits `atep.ecu.signal.published.v1`.
+
+A gateway ECU owns routes created through `POST .../signal-routes`. A route connects a produced
+source signal to a consumed target signal on a different ECU in the same vehicle. Data type and unit
+must match. `POST .../signal-routes/{route_id}/transfer` copies the current value while checking both
+source and target versions, then updates only the target ECU. Route creation and transfer emit
+`atep.ecu.signal.route.created.v1` and `atep.ecu.signal.routed.v1`.
+
+These are transport hooks, not a CAN bus. CAN IDs, frames, payload encoding, DBC parsing,
+arbitration, timing, bitrate, and error injection remain owned by Volume IV.
+
 ## Current Limits
 
-This baseline does not execute ECU firmware, emit CAN frames, expose UDS services, or assign actual
-DTC numbers. Fault observations are explicit commands rather than autonomous sensor-condition
-evaluation. Those capabilities remain separate so timing and protocol contracts can be tested
-independently.
+This baseline does not execute ECU firmware, emit CAN frames, arbitrate a bus, expose UDS services,
+or assign actual DTC numbers. Fault observations and signal transfers are explicit commands rather
+than autonomous physical/network evaluation. Those capabilities remain separate so timing and
+protocol contracts can be tested independently.

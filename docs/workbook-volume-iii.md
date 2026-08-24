@@ -1,6 +1,6 @@
 # ATEP Volume III — ECU Simulator Engineering Workbook
 
-**Document status:** Living document — Increments III-1 through III-5 implemented
+**Document status:** Living document — Increments III-1 through III-6 implemented
 **Language:** English
 **Last updated:** 2026-08-24
 **Repository:** `paulacristinaqa/automotive_test_engineering_platform`
@@ -16,7 +16,7 @@ maintainable technical record for future ECU, CAN, and diagnostics development.
 | Field | Value |
 |---|---|
 | Volume | III — ECU Simulator |
-| Baseline | Increments III-1 through III-5 |
+| Baseline | Increments III-1 through III-6 |
 | Architecture style | Modular monolith with transactional domain services |
 | Primary runtime | Python 3.12, FastAPI, SQLAlchemy, PostgreSQL |
 | Quality gates | pytest, Ruff, strict mypy, Alembic migration checks |
@@ -30,6 +30,7 @@ maintainable technical record for future ECU, CAN, and diagnostics development.
 | 0.3.0 | 2026-08-24 | Added versioned behavior profiles, profile APIs, deterministic state transitions, migration, and tests. |
 | 0.4.0 | 2026-08-24 | Added memory regions, reset persistence, snapshots, seeded corruption, APIs, migration, and tests. |
 | 0.5.0 | 2026-08-24 | Added logical-time fault lifecycle, debounce, healing, latching, clear, DTC projection, APIs, and tests. |
+| 0.6.0 | 2026-08-24 | Added typed signal contracts, publication, gateway routes, atomic transfer, migration, APIs, and tests. |
 
 ## 4. Scope and Boundaries
 
@@ -39,6 +40,7 @@ maintainable technical record for future ECU, CAN, and diagnostics development.
 - Nine initial ECU types and six lifecycle states.
 - Bounded memory with volatile/non-volatile regions, snapshots, and seeded corruption.
 - Bounded fault records with logical-time confirmation, healing, latching, clear, and DTC intent.
+- Typed produced/consumed signals, logical-time publication, and gateway-owned routing hooks.
 - Optimistic state versioning and idempotent exact retries.
 - Nested REST APIs, safe pagination, and type filtering.
 - Independent read/manage permissions.
@@ -50,7 +52,7 @@ maintainable technical record for future ECU, CAN, and diagnostics development.
 ### 4.2 Deferred
 
 - Firmware or instruction execution.
-- CAN, CAN FD, LIN, Ethernet, and gateway routing.
+- CAN, CAN FD, LIN, Ethernet frames, DBC encoding, arbitration, and bus simulation.
 - UDS/OBD-II services, assigned DTC numbers, status-byte aging, security access, and flashing.
 - Full binary firmware images and unrestricted memory dumps.
 - Autonomous sensor-condition evaluation and fault injection campaigns.
@@ -67,12 +69,17 @@ PostgreSQL aggregate + audit record + transactional outbox event → HTTP respon
 ## 6. Domain Model
 
 An ECU contains `vehicle_id`, `identifier`, `display_name`, `ecu_type`, `operational_state`, `memory`,
-`faults`, memory regions, cyclic tasks, profile version, behavior state, logical time, boot count,
+`faults`, semantic signals, memory regions, cyclic tasks, profile version, behavior state, logical time, boot count,
 `version`, and
 timestamps. Memory has at most 256
 cells, each with a 16-bit address and an
 8-bit value. Faults have a canonical code, severity, pending/confirmed/healed status, description,
 bounded debounce counters, logical timestamps, thresholds, active state, and latch policy.
+
+Signals are bounded to 64 contracts. Each contract declares a canonical name, produced/consumed
+direction, strict data type, optional unit/bounds/cycle time, current value, and ECU logical update
+time. Names are unique per direction, allowing an ECU to consume and produce the same semantic name
+without ambiguity.
 
 The lifecycle contains offline, booting, running, degraded, fault, and shutdown. A confirmed critical
 fault cannot coexist with a non-fault lifecycle state. This protects the simulator from representing
@@ -99,6 +106,9 @@ smaller than its period. A maximum of 32 tasks keeps configuration and execution
 | POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/faults/observe` | `ecus:manage` | Record one detected or absent observation. |
 | POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/faults/{fault_code}/clear` | `ecus:manage` | Explicitly clear an active fault. |
 | GET | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/faults/dtc-candidates` | `ecus:read` | Read diagnostic-intent projections. |
+| POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/signals/{signal_name}/publish` | `ecus:manage` | Publish one produced signal value. |
+| POST/GET | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/signal-routes` | `ecus:manage` / `ecus:read` | Create or list gateway routes. |
+| POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/signal-routes/{route_id}/transfer` | `ecus:manage` | Transfer a routed value atomically. |
 
 The Android Automotive client continues to access only the public ATEP API. It never connects to
 PostgreSQL or RabbitMQ directly. Stable errors include `ecu_not_found`,
@@ -151,11 +161,25 @@ twice. Audit and outbox evidence includes the transition, code, status, and boun
 complete fault collection. DTC candidates express diagnostic intent but deliberately contain no UDS
 types or assigned DTC numbers.
 
+### 8.5 Signal Publication and Gateway Routes
+
+Signal publication changes a produced contract under a row lock and expected ECU version. The
+published timestamp is the ECU logical clock, not host time. Persisted command identity makes exact
+retries safe. Evidence includes contract identity, type, direction, and logical time but excludes the
+physical value.
+
+Only a gateway ECU can own a route. Its source and target are distinct ECUs in the same vehicle; the
+source contract must be produced, the target consumed, and type/unit must match. Transfer locks both
+ECUs, compares source and target versions, copies the source value to the target at target logical
+time, and increments only the target version. This is an adapter hook: no CAN ID, frame, DBC,
+arbitration, bitrate, or bus timing exists in the ECU domain.
+
 ## 9. Functional Requirements
 
 The authoritative catalogue is `docs/requirements-volume-iii.md`. III-1 covers the aggregate, III-2
 covers deterministic execution and reset, III-3 covers versioned profiles, III-4 covers memory
-regions, snapshots, persistence, and corruption, and III-5 covers fault lifecycle and DTC intent.
+regions, snapshots, persistence, and corruption, III-5 covers fault lifecycle and DTC intent, and
+III-6 covers semantic signal contracts and gateway routing hooks.
 
 ## 10. Architecture Decisions
 
@@ -217,6 +241,18 @@ against bounded thresholds at the ECU logical time make confirmation and healing
 
 The ECU owns fault truth, while Diagnostics will own UDS identifiers, status bytes, and services.
 Publishing diagnostic intent prevents both domains from creating competing fault representations.
+
+### ADR-ECU-012 — Separate Semantic Signals from CAN Transport
+
+ECUs own physical meaning, direction, value constraints, and logical timestamps. Volume IV owns CAN
+identifiers, encoding, frames, arbitration, bus timing, and network faults. This allows alternate
+Ethernet or simulation adapters to reuse the same ECU contract.
+
+### ADR-ECU-013 — Make Gateway Routing Explicit and Version-Guarded
+
+Persistent routes provide reviewable source/target ownership. Matching type/unit rules prevent
+implicit conversion, while source and target versions expose stale transfers rather than silently
+copying a different value.
 
 ## 11. Verification Catalogue
 
@@ -300,16 +336,33 @@ Publishing diagnostic intent prevents both domains from creating competing fault
 | DTC projection | Publish protocol-independent diagnostic intent without UDS coupling. | Unit/contract |
 | Fault RBAC and OpenAPI | Publish protected, typed lifecycle endpoints. | Contract/integration |
 
+## 11.5 III-6 Verification
+
+| Test | Objective | Level |
+|---|---|---|
+| Signal bound | Reject the 65th contract. | Schema |
+| Strict data type | Reject coercion and values that disagree with the declaration. | Schema |
+| Physical bounds | Reject values below minimum or above maximum. | Schema/service |
+| Direction uniqueness | Reject duplicate names within one direction. | Schema |
+| Publication clock | Record the ECU logical time without wall-clock access. | Service |
+| Publication replay | Avoid changing value or version twice. | Service |
+| Gateway ownership | Reject route creation by a non-gateway ECU. | Service/API |
+| Route compatibility | Require produced-to-consumed direction plus matching type and unit. | Service |
+| Transfer concurrency | Reject stale source or target versions. | Service/API |
+| Atomic transfer | Copy the value and commit target, audit, command, and event together. | Integration |
+| Signal RBAC/OpenAPI | Publish protected, typed, safely paginated endpoints. | Contract/integration |
+| Transport boundary | Verify no CAN ID, frame, DBC, arbitration, or bitrate type is imported. | Review |
+
 ## 12. Implemented Evidence
 
 - `src/atep/ecus/` contains models, schemas, services, and routers.
 - Migrations `0018_ecu_aggregate`, `0019_ecu_execution_clock`, and
-  `0020_ecu_behavior_profiles`, and `0021_ecu_memory_regions` own the database schema.
+  `0020_ecu_behavior_profiles`, `0021_ecu_memory_regions`, and `0022_ecu_signal_contracts` own the database schema.
 - Permission catalogue contains `ecus:read` and `ecus:manage`.
 - Events are `atep.ecu.created.v1` and `atep.ecu.state.updated.v1`.
 - Simulation events are `atep.ecu.simulation.advanced.v1` and `atep.ecu.reset.completed.v1`.
 - Memory events cover snapshot creation/restoration and deterministic corruption.
-- Fault events use `atep.ecu.fault.lifecycle.changed.v1` for observation and explicit-clear evidence.
+- Fault events use `atep.ecu.fault.lifecycle.changed.v1` for observation and explicit-clear evidence; signal events cover publication, route creation, and routed transfer without physical values in audit evidence.
 - Automated tests cover validation, atomic evidence, concurrency, idempotency, permissions, and API contracts.
 
 ## 13. Risks and Technical Debt
@@ -320,11 +373,13 @@ Publishing diagnostic intent prevents both domains from creating competing fault
   need specialization in later scenario-driven work.
 - Snapshot retention limits and deletion policy require an enterprise storage decision.
 - Actual DTC identifiers, status-byte semantics, and aging belong to the Diagnostics boundary.
+- Cross-route lock ordering must be hardened before high-concurrency multi-gateway execution.
+- Unit conversion is intentionally absent; routes currently require exact unit equality.
 
 ## 14. Roadmap
 
-The next increment adds CAN production/consumption contracts and gateway routing hooks without
-embedding a bus implementation. Later increments add multi-ECU scenarios. See
+The next increment adds multi-ECU scenarios, logical-time diagnostics, bounded resource metrics, and
+repeatable failure campaigns. CAN bus implementation remains in Volume IV. See
 `docs/roadmap-volume-iii.md`.
 
 ## 15. Study Exercises
@@ -345,3 +400,7 @@ embedding a bus implementation. Later increments add multi-ECU scenarios. See
 14. Trace three detected observations and two absent observations through configurable thresholds.
 15. Explain why a latched confirmed fault cannot heal from an absent observation alone.
 16. Map a DTC candidate to future UDS responsibilities without assigning a DTC number in the ECU.
+17. Model battery temperature as a produced BMS signal and consumed thermal-controller signal.
+18. Explain why a gateway route rejects Celsius-to-Kelvin transfer instead of converting silently.
+19. Trace publication and transfer versions through an exact retry and one stale-source conflict.
+20. Design the future Volume IV adapter that maps a semantic signal to a DBC without changing ECU state.

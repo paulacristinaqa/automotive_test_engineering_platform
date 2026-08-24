@@ -24,6 +24,7 @@ class ElectronicControlUnit(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     memory: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     memory_regions: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     faults: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    signals: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     cyclic_tasks: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     profile_version: Mapped[str] = mapped_column(String(20), default="1.0.0")
     behavior_state: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
@@ -36,6 +37,11 @@ class ElectronicControlUnit(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     memory_snapshots: Mapped[list["EcuMemorySnapshot"]] = relationship(
         back_populates="ecu", cascade="all, delete-orphan", lazy="raise"
+    )
+    owned_signal_routes: Mapped[list["EcuSignalRoute"]] = relationship(
+        foreign_keys="EcuSignalRoute.gateway_ecu_id",
+        cascade="all, delete-orphan",
+        lazy="raise",
     )
 
 
@@ -83,6 +89,33 @@ class EcuMemorySnapshot(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     ecu: Mapped[ElectronicControlUnit] = relationship(
         back_populates="memory_snapshots", lazy="raise"
     )
+
+
+class EcuSignalRoute(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ecu_signal_routes"
+    __table_args__ = (
+        UniqueConstraint("gateway_ecu_id", "identifier", name="uq_ecu_signal_route_identifier"),
+    )
+
+    gateway_ecu_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("electronic_control_units.id", ondelete="CASCADE"),
+        index=True,
+    )
+    identifier: Mapped[str] = mapped_column(String(80))
+    source_ecu_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("electronic_control_units.id", ondelete="CASCADE"),
+        index=True,
+    )
+    source_signal: Mapped[str] = mapped_column(String(40))
+    target_ecu_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("electronic_control_units.id", ondelete="CASCADE"),
+        index=True,
+    )
+    target_signal: Mapped[str] = mapped_column(String(40))
+    enabled: Mapped[bool] = mapped_column(default=True)
 
 
 from atep.vehicles.models import Vehicle  # noqa: E402

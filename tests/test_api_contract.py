@@ -265,6 +265,23 @@ def test_ecu_aggregate_contracts_and_safe_pagination_are_published() -> None:
     assert "post" in observe_fault
     assert "post" in clear_fault
     assert "get" in dtc_candidates
+    signal_publish = paths[
+        "/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/signals/{signal_name}/publish"
+    ]
+    signal_routes = paths[
+        "/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/signal-routes"
+    ]
+    route_transfer = paths[
+        "/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/signal-routes/{route_id}/transfer"
+    ]
+    assert "post" in signal_publish
+    assert {"get", "post"} <= set(signal_routes)
+    assert "post" in route_transfer
+    route_parameters = {
+        item["name"]: item["schema"] for item in signal_routes["get"]["parameters"]
+    }
+    assert route_parameters["limit"]["maximum"] == 100
+    assert route_parameters["offset"]["maximum"] == 1_000_000
 
 
 def test_test_job_scheduler_contracts_and_safe_pagination_are_published() -> None:
