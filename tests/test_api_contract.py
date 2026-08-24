@@ -181,6 +181,16 @@ def test_vehicle_gateway_contracts_and_safe_pagination_are_published() -> None:
     assert step_schema["$ref"].endswith("/VehicleSimulationStepCommand")
 
 
+def test_vehicle_gateway_vhal_mapping_contract_is_published() -> None:
+    operation = core_app.openapi()["paths"]["/api/v1/vehicle-gateway/vhal-mappings"]["get"]
+    headers = {item["name"]: item for item in operation["parameters"] if item["in"] == "header"}
+
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"].endswith(
+        "/VhalMappingCatalog"
+    )
+    assert {"X-ATEP-Module-ID", "X-ATEP-Module-Token", "X-Forwarded-Client-Cert"} <= set(headers)
+
+
 def test_vehicle_command_delivery_contracts_are_published() -> None:
     paths = core_app.openapi()["paths"]
     command_path = paths["/api/v1/vehicles/{vehicle_id}/commands"]

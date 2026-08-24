@@ -13,7 +13,7 @@ networks, diagnostics, electric-powertrain behavior, automated testing, observab
 analysis, and enterprise fleet capabilities.
 
 The repository contains the executable foundation of **Volume I — Core Platform** and the
-first bounded increment of **Volume II — Digital Vehicle**.
+completed bounded baseline of **Volume II — Digital Vehicle**.
 Implemented behavior is backed by requirements, architecture decisions, migrations, automated
 tests, a disposable integration environment, and an English engineering workbook.
 
@@ -247,6 +247,7 @@ source .venv/bin/activate
 | Deterministic simulation | `POST /api/v1/vehicles/{vehicle_id}/simulation/transitions` | `digital_vehicle:write` |
 | Telemetry ingest | `POST /api/v1/vehicles/{vehicle_id}/telemetry` | Gateway module identity + `vehicle.telemetry.publish` capability |
 | Telemetry query | `GET /api/v1/vehicles/{vehicle_id}/telemetry` | `telemetry:read` |
+| AAOS/VHAL mapping catalogue | `GET /api/v1/vehicle-gateway/vhal-mappings` | Gateway workload identity + `vehicle.telemetry.publish` capability |
 | Test runs | `POST/GET /api/v1/test-runs`, status updates | `test_runs:read`, `test_runs:write` |
 | Live test run | `WS /api/v1/test-runs/{run_id}/stream` | active bearer token + `test_runs:read` |
 | Environment profiles | `/api/v1/environment-profiles` and lifecycle status | `environment_profiles:read`, `environment_profiles:manage` |
@@ -335,7 +336,7 @@ operational guidance, and review worksheets.
 | Volume | Domain | Status |
 |---|---|---|
 | I | Core Platform | In progress |
-| II | Digital Vehicle | In progress — state aggregate and deterministic transition engine implemented |
+| II | Digital Vehicle | Baseline complete — increments II-1 through II-6 implemented |
 | III | ECU Simulator | Planned |
 | IV | CAN Network | Planned |
 | V | Diagnostics | Planned |
@@ -354,8 +355,9 @@ connectivity-constrained WorkManager job now retries pending telemetry after the
 process closes. Rejected observations can now be inspected, retried with their original identity,
 or selectively discarded, while exhausted retry work remains visible until explicitly resumed.
 Authorized test commands now use an idempotent request, capability-scoped target, bounded lease,
-hash-only claim token, safe Android property allowlist, and terminal acknowledgement. The next
-slices add area-aware properties and live test-run updates.
+hash-only claim token, safe Android property allowlist, and terminal acknowledgement. The
+versioned gateway catalogue now makes global, seat, and wheel property semantics explicit; the
+next planned domain slice begins the Volume III ECU aggregate and lifecycle.
 Versioned test configuration profiles, scheduler boundaries, artifact storage, and the initial
 OpenTelemetry/Prometheus/Grafana observability, aggregate module health, recording rules, and
 initial SLO/registry alerts are implemented. Outbox, scheduler, and WebSocket domain telemetry

@@ -2,11 +2,11 @@
 
 **Subtitle:** Domain architecture, deterministic simulation, verification strategy, and engineering evidence  
 **Project:** Automotive Test Engineering Platform (ATEP)  
-**Document version:** 0.5.0
+**Document version:** 0.6.0
 
 **Baseline date:** 12 August 2026
 
-**Status:** Living engineering document — Increments II-1 through II-5 implemented
+**Status:** Living engineering document — Increments II-1 through II-6 implemented
 **Language:** English
 
 ## 1. Document Purpose
@@ -38,6 +38,7 @@ as implemented, planned, or target according to repository evidence.
 | 0.3.0 | 12 August 2026 | II-3: added accelerator, brake, and steering actuators plus seeded speed, SOC, and temperature sensors with noise and explicit fault modes | Implemented and verified by bounds, seed, fault, retry, contract, migration, and hosted integration tests |
 | 0.4.0 | 12 August 2026 | II-4: coupled road and ambient inputs with battery energy, thermal response, powertrain, regenerative braking, steering, suspension, and lighting | Implemented and verified by scenario, conservation, bounds, migration, and hosted integration tests |
 | 0.5.0 | 12 August 2026 | II-5: added bounded multi-vehicle sessions, canonical immutable snapshots, SHA-256 content identity, and isolated deterministic restore | Implemented and verified by bounds, canonicalization, isolation, reset/replay, contract, migration, and hosted integration tests |
+| 0.6.0 | 24 August 2026 | II-6: published the telemetry-authorized, versioned Android Automotive/VHAL mapping catalogue with explicit types, access, units, conversions, and global/seat/wheel area semantics | Implemented and verified by focused catalogue and OpenAPI tests, combined with the existing live CarSystemUI telemetry/command evidence |
 
 ## 4. Scope and Boundaries
 
@@ -51,7 +52,7 @@ as implemented, planned, or target according to repository evidence.
 - explicit sensor noise, stuck faults, and offset faults;
 - versioned public APIs, deny-by-default RBAC, audit, and transactional outbox evidence;
 - persisted command metadata for retry safety and replay;
-- compatibility boundary for the future Android Automotive Vehicle Gateway.
+- a versioned Android Automotive/VHAL mapping catalogue for the Vehicle Gateway.
 
 ### 4.2 Excluded from the Current Baseline
 
@@ -59,7 +60,7 @@ as implemented, planned, or target according to repository evidence.
 - ECU firmware execution, CAN/LIN/Ethernet buses, UDS, OBD-II, and DTC behavior;
 - ADAS perception and planning;
 - Android VHAL property writes;
-- multi-vehicle sessions and distributed simulation scheduling;
+- distributed real-time simulation scheduling;
 - real-time guarantees or hardware-in-the-loop execution.
 
 These capabilities belong to later Volume II increments or subsequent ATEP volumes.
@@ -102,6 +103,7 @@ services behind Volume I boundaries and are never accessed directly by CarSystem
 | `GET /api/v1/simulation-sessions/{session_id}` | `digital_vehicle:read` | Inspect session composition |
 | `POST /api/v1/simulation-sessions/{session_id}/snapshots` | `digital_vehicle:write` | Capture a canonical immutable snapshot |
 | `POST /api/v1/simulation-sessions/{session_id}/snapshots/{snapshot_id}/restore` | `digital_vehicle:write` | Restore isolated member state and logical time |
+| `GET /api/v1/vehicle-gateway/vhal-mappings` | Gateway module with `vehicle.telemetry.publish` | Retrieve the reviewed versioned AAOS/VHAL mapping catalogue |
 
 ## 6. Deterministic Simulation Model
 
@@ -156,6 +158,19 @@ identifier, restores its saved logical time, and increments the current aggregat
 never copies state between members. Creation, snapshot, and restore append bounded audit and outbox
 evidence in the same transaction.
 
+### 6.6 Android Automotive/VHAL Mapping Contract
+
+The II-6 catalogue maps symbolic Android `VehiclePropertyIds` names to canonical ATEP property
+names. It intentionally publishes symbols rather than copying Android integer constants: the
+CarSystemUI build resolves those constants from its selected Android SDK, while the backend
+contract remains stable and reviewable. Each entry declares value type, read/read-write access,
+global/seat/wheel area semantics, source and target units, and any required conversion.
+
+The first catalogue covers speed, gear, ignition, EV battery energy/capacity, charging-port state,
+hybrid fuel level, zoned cabin temperature, and wheel-specific tyre pressure. Retrieval requires
+an authenticated module declaring `vehicle.telemetry.publish`. The gateway still communicates
+only through the public ATEP API and receives no PostgreSQL, Redis, or RabbitMQ access.
+
 ## 7. Consistency, Security, and Evidence
 
 - Every mutation supplies `expected_version`; stale requests return a stable HTTP 409 envelope.
@@ -192,6 +207,8 @@ evidence in the same transaction.
 | DV-F-019 | Sessions shall contain 1–20 unique registered vehicles. | Contract and creation tests |
 | DV-F-020 | Snapshots shall use canonical member ordering and SHA-256 content identity. | Canonical snapshot test |
 | DV-F-021 | Restore shall isolate member state, restore logical time, and increment versions. | Isolation and restore test |
+| DV-F-022 | A telemetry-authorized gateway shall retrieve one versioned symbolic VHAL mapping catalogue. | Catalogue, authorization, and OpenAPI tests |
+| DV-F-023 | Mappings shall declare type, access, area, units, and conversion explicitly. | Mapping invariant tests |
 
 ## 9. Non-Functional Requirements
 
@@ -207,6 +224,7 @@ evidence in the same transaction.
 | DV-NF-008 | Equal state, command, and seed inputs shall produce equal readings. | Deterministic seed test |
 | DV-NF-009 | Published energy evidence shall conserve energy at contract precision. | Conservation assertions |
 | DV-NF-010 | Session mutations shall emit atomic bounded evidence without background loops. | Transaction assertions |
+| DV-NF-011 | Symbolic versioned mappings shall isolate ATEP from Android SDK numeric constant values. | Contract review and tests |
 
 ## 10. Architecture Decisions
 
@@ -252,6 +270,16 @@ order.
 **Rationale.** Database return order must not influence evidence identity. Explicit identifier
 mapping prevents cross-vehicle state contamination and supports reproducible replay comparisons.
 
+### ADR-DV-006 — Publish Symbolic VHAL Mappings with Explicit Area Semantics
+
+**Decision.** Publish reviewed Android property symbols, canonical ATEP names, types, access,
+areas, units, and conversions as an immutable versioned catalogue protected by gateway workload
+identity.
+
+**Rationale.** Android integer property constants belong to the selected platform SDK. Symbolic
+mapping avoids duplicating that authority in Python, while explicit seat/wheel area requirements
+prevent zoned observations from being silently collapsed into ambiguous global values.
+
 ## 11. Verification Catalogue
 
 | ID | Test and objective | Expected result |
@@ -288,6 +316,10 @@ mapping prevents cross-vehicle state contamination and supports reproducible rep
 | DV-T-030 | Inspect restore versions | Every restored aggregate increments exactly once |
 | DV-T-031 | Inspect session mutations | Session, snapshot, restore, audit, and outbox evidence commit atomically |
 | DV-T-032 | Apply migration 0017 | Session/member/snapshot tables reach the expected schema head |
+| DV-T-033 | Inspect the VHAL mapping catalogue | Contract version and Android property symbols are unique |
+| DV-T-034 | Inspect speed mapping | Source m/s, target km/h, and conversion are explicit |
+| DV-T-035 | Inspect cabin-temperature and tyre-pressure mappings | Seat/wheel area IDs are required while global properties reject that assumption |
+| DV-T-036 | Inspect OpenAPI and gateway headers | Mapping response and workload authentication headers are published |
 
 ## 12. Implemented Evidence
 
@@ -302,6 +334,7 @@ mapping prevents cross-vehicle state contamination and supports reproducible rep
 | Focused verification | `tests/test_digital_vehicle_state.py` and `tests/test_api_contract.py` |
 | Disposable integration | `tests/integration/test_identity_flow.py` and GitHub Actions |
 | Domain design | `docs/digital-vehicle-state.md` |
+| Android Automotive mapping contract | `src/atep/vehicles/vhal_contracts.py` and `src/atep/vehicles/gateway_router.py` |
 | Requirements and roadmap | `docs/requirements-volume-ii.md` and `docs/roadmap-volume-ii.md` |
 
 ## 13. Risks and Technical Debt
@@ -311,7 +344,7 @@ mapping prevents cross-vehicle state contamination and supports reproducible rep
 | Equations are intentionally scenario-oriented | Results are deterministic but not a substitute for validated tyre, chassis, or thermal solvers | Calibrate or replace component equations behind stable contracts when higher fidelity is required |
 | Sensor calibration is represented by noise/fault configuration only | Offset correction and calibration lifecycle are incomplete | Add explicit calibration parameters and provenance |
 | Session membership is immutable after creation | Complex fleet reconfiguration requires a new session | Add explicit versioned composition changes only when scenarios require them |
-| No VHAL property mapping | CarSystemUI integration remains API/gateway-oriented | Add contract mappings and end-to-end evidence in II-6 |
+| Symbolic mappings require Android-side SDK resolution | A mismatched CarSystemUI SDK may not expose every reviewed property | Validate availability explicitly and retain the existing no-silent-fallback behavior |
 
 ## 14. Roadmap
 
@@ -322,7 +355,10 @@ mapping prevents cross-vehicle state contamination and supports reproducible rep
 | II-3 | Sensors and actuators with seeded noise and explicit fault modes | Implemented |
 | II-4 | Coupled energy, thermal, powertrain, braking, steering, suspension, and lighting behavior | Implemented |
 | II-5 | Multi-vehicle simulation sessions and reproducible snapshots | Implemented |
-| II-6 | Android Automotive/VHAL Vehicle Gateway mappings | Planned next |
+| II-6 | Android Automotive/VHAL Vehicle Gateway mappings | Implemented |
+
+The recommended next increment begins Volume III with a bounded ECU aggregate and lifecycle before
+adding CAN or diagnostic protocol behavior.
 
 ## 15. Workbook Maintenance Checklist
 

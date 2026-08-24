@@ -1,8 +1,8 @@
 # ATEP time-bounded vulnerability exceptions.
 # Owner: ATEP maintainers
 # Review-by: 2026-09-05
-# Upstream stable fix: unavailable as of 2026-08-05; Grype lists only Python 3.15 prerelease/future fixes.
-# Scope: exact Python binary/version and exact CVE. Every other high/critical finding remains blocking.
+# Upstream stable fixes: unavailable for the entries below as of 2026-08-24.
+# Scope: exact package/version/type and exact CVE. Every other high/critical finding remains blocking.
 ignore:
   - vulnerability: CVE-2026-11940
     package:
@@ -19,3 +19,15 @@ ignore:
       name: python
       version: 3.14.6
       type: binary
+  # OpenSSL advisory 20260813 affects only a QUIC server listener. ATEP serves HTTP/TCP through
+  # Uvicorn and does not create or expose an OpenSSL QUIC listener. OpenSSL 3.5.8 is not released.
+  - vulnerability: CVE-2026-14456
+    package:
+      name: libcrypto3
+      version: 3.5.7-r0
+      type: apk
+  - vulnerability: CVE-2026-14456
+    package:
+      name: libssl3
+      version: 3.5.7-r0
+      type: apk
