@@ -1,7 +1,7 @@
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import JSON, BigInteger, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import JSON, BigInteger, Boolean, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -17,6 +17,8 @@ class CanNetwork(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     identifier: Mapped[str] = mapped_column(String(80))
     display_name: Mapped[str] = mapped_column(String(120))
     bitrate_kbps: Mapped[int] = mapped_column(Integer)
+    can_fd_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    data_bitrate_kbps: Mapped[int | None] = mapped_column(Integer, nullable=True)
     nodes: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
     frame_contracts: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
     version: Mapped[int] = mapped_column(Integer, default=1)
@@ -38,6 +40,8 @@ class CanFrameTransmission(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     producer_node_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True))
     frame_id: Mapped[int] = mapped_column(Integer)
     frame_format: Mapped[str] = mapped_column(String(20))
+    protocol: Mapped[str] = mapped_column(String(16), default="classic")
+    bitrate_switch: Mapped[bool] = mapped_column(Boolean, default=False)
     request: Mapped[dict[str, Any]] = mapped_column(JSON)
     payload: Mapped[list[int]] = mapped_column(JSON)
     sequence: Mapped[int] = mapped_column(BigInteger)

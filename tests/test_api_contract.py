@@ -339,6 +339,15 @@ def test_can_network_baseline_contracts_and_safe_pagination_are_published() -> N
     assert catalogue_schema["$ref"].endswith("/CanDbcCatalogueCreate")
     assert encode_schema["$ref"].endswith("/CanSignalEncodeCommand")
     assert decode_schema["$ref"].endswith("/CanSignalDecodeCommand")
+    schemas = core_app.openapi()["components"]["schemas"]
+    network_properties = schemas["CanNetworkCreate"]["properties"]
+    assert network_properties["can_fd_enabled"]["default"] is False
+    assert network_properties["data_bitrate_kbps"]["anyOf"][0]["maximum"] == 8000
+    frame_contract = schemas["CanFrameContract"]["properties"]
+    assert frame_contract["protocol"]["$ref"].endswith("/CanFrameProtocol")
+    assert frame_contract["dlc"]["maximum"] == 64
+    submit_payload = schemas["CanFrameSubmitCommand"]["properties"]["payload"]
+    assert submit_payload["maxItems"] == 64
     parameters = {item["name"]: item["schema"] for item in frames["get"]["parameters"]}
     assert parameters["limit"]["maximum"] == 200
     assert parameters["offset"]["maximum"] == 1_000_000

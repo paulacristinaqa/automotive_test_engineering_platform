@@ -20,6 +20,7 @@ from atep.can_network.schemas import (
     CanDeliveryEvidence,
     CanFrameContract,
     CanFrameFormat,
+    CanFrameProtocol,
 )
 from atep.can_network.service import _contract, require_can_network
 from atep.core.errors import (
@@ -40,14 +41,52 @@ class _ResolvedContender:
     ready_at_us: int
 
 
-def _nominal_bit_count(contract: CanFrameContract) -> int:
-    """Return classic CAN bits excluding bit stuffing and including intermission."""
-    overhead = 47 if contract.frame_format is CanFrameFormat.STANDARD else 67
-    return overhead + (8 * contract.dlc)
+@dataclass(frozen=True)
+class _FrameTiming:
+    bit_count: int
+    nominal_bit_count: int
+    data_bit_count: int
+    nominal_phase_duration_us: int
+    data_phase_duration_us: int
+
+    @property
+    def duration_us(self) -> int:
+        return self.nominal_phase_duration_us + self.data_phase_duration_us
 
 
 def _duration_us(bit_count: int, bitrate_kbps: int) -> int:
     return ceil((bit_count * 1000) / bitrate_kbps)
+
+
+def frame_timing(contract: CanFrameContract, network: CanNetwork) -> _FrameTiming:
+    """Return a deterministic, stuffing-free classic CAN/CAN FD timing model."""
+    if contract.protocol is CanFrameProtocol.CLASSIC:
+        bit_count = (47 if contract.frame_format is CanFrameFormat.STANDARD else 67) + (
+            8 * contract.dlc
+        )
+        return _FrameTiming(
+            bit_count=bit_count,
+            nominal_bit_count=bit_count,
+            data_bit_count=0,
+            nominal_phase_duration_us=_duration_us(bit_count, network.bitrate_kbps),
+            data_phase_duration_us=0,
+        )
+
+    nominal_bit_count = 32 if contract.frame_format is CanFrameFormat.STANDARD else 52
+    crc_bits = 17 if contract.dlc <= 16 else 21
+    data_bit_count = (8 * contract.dlc) + crc_bits
+    data_bitrate = (
+        network.data_bitrate_kbps
+        if contract.bitrate_switch and network.data_bitrate_kbps is not None
+        else network.bitrate_kbps
+    )
+    return _FrameTiming(
+        bit_count=nominal_bit_count + data_bit_count,
+        nominal_bit_count=nominal_bit_count,
+        data_bit_count=data_bit_count,
+        nominal_phase_duration_us=_duration_us(nominal_bit_count, network.bitrate_kbps),
+        data_phase_duration_us=_duration_us(data_bit_count, data_bitrate),
+    )
 
 
 def _resolve_contenders(
@@ -94,8 +133,9 @@ def _arbitrate(
             ),
         )
         pending.remove(winner)
-        bit_count = _nominal_bit_count(winner.contract)
-        duration_us = _duration_us(bit_count, network.bitrate_kbps)
+        timing = frame_timing(winner.contract, network)
+        bit_count = timing.bit_count
+        duration_us = timing.duration_us
         started_at_us = clock
         clock += duration_us
         occupied_us += duration_us
@@ -107,9 +147,15 @@ def _arbitrate(
                 contract_id=winner.contract.identifier,
                 frame_id=winner.contract.frame_id,
                 frame_format=winner.contract.frame_format,
+                protocol=winner.contract.protocol,
+                bitrate_switch=winner.contract.bitrate_switch,
                 producer_node_id=winner.producer_node_id,
                 dlc=winner.contract.dlc,
                 bit_count=bit_count,
+                nominal_bit_count=timing.nominal_bit_count,
+                data_bit_count=timing.data_bit_count,
+                nominal_phase_duration_us=timing.nominal_phase_duration_us,
+                data_phase_duration_us=timing.data_phase_duration_us,
                 ready_at_us=winner.ready_at_us,
                 started_at_us=started_at_us,
                 completed_at_us=clock,
@@ -213,6 +259,8 @@ async def execute_arbitration(
                 producer_node_id=frame.producer_node_id,
                 frame_id=frame.frame_id,
                 frame_format=frame.frame_format.value,
+                protocol=frame.protocol.value,
+                bitrate_switch=frame.bitrate_switch,
                 request={
                     "arbitration_command_id": command.command_id,
                     "ready_at_us": frame.ready_at_us,
@@ -235,6 +283,10 @@ async def execute_arbitration(
         "occupied_us": utilization.occupied_us,
         "utilization_percent": utilization.utilization_percent,
         "maximum_latency_us": utilization.maximum_latency_us,
+        "fd_frame_count": sum(
+            frame.protocol is CanFrameProtocol.FD for frame in frames
+        ),
+        "bitrate_switched_frame_count": sum(frame.bitrate_switch for frame in frames),
         "previous_version": previous_version,
         "network_version": network.version,
     }
