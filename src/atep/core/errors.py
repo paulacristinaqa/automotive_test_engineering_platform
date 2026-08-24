@@ -75,6 +75,25 @@ class DuplicateVehicleIdentifierError(ApplicationError):
         )
 
 
+class DuplicateEcuIdentifierError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="ecu_identifier_already_exists",
+            message="An ECU with this identifier already exists in the vehicle.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class EcuStateVersionConflictError(ApplicationError):
+    def __init__(self, *, current_version: int) -> None:
+        super().__init__(
+            code="ecu_state_version_conflict",
+            message="The ECU state was changed by another operation.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_version": current_version},
+        )
+
+
 class ModuleCapabilityRequiredError(ApplicationError):
     def __init__(self, capability: str) -> None:
         super().__init__(

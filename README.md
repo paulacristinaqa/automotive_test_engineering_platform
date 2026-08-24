@@ -12,12 +12,13 @@ the integrated QA ecosystem of an automotive manufacturer: virtual vehicles and 
 networks, diagnostics, electric-powertrain behavior, automated testing, observability, AI-assisted
 analysis, and enterprise fleet capabilities.
 
-The repository contains the executable foundation of **Volume I — Core Platform** and the
-completed bounded baseline of **Volume II — Digital Vehicle**.
+The repository contains the executable foundation of **Volume I — Core Platform**, the completed
+bounded baseline of **Volume II — Digital Vehicle**, and the first implemented increment of
+**Volume III — ECU Simulator**.
 Implemented behavior is backed by requirements, architecture decisions, migrations, automated
 tests, a disposable integration environment, and an English engineering workbook.
 
-> **Project status:** active development. Volume I, Increment 3 is in progress. The first
+> **Project status:** active development. Volume III, Increment III-1 is implemented. The first
 > ATEP-to-Android-Automotive integration contract now provides a vehicle catalogue and
 > idempotent telemetry and command delivery for the Vehicle Gateway. Persistent test runs now
 > publish authenticated live WebSocket updates to CarSystemUI, which continues to isolate
@@ -308,6 +309,9 @@ companion project also passes 27 unit tests, Android lint, and debug APK assembl
 - [Volume II digital-vehicle state design](docs/digital-vehicle-state.md)
 - [Volume II requirements](docs/requirements-volume-ii.md)
 - [Volume II delivery roadmap](docs/roadmap-volume-ii.md)
+- [Volume III ECU aggregate design](docs/ecu-simulator.md)
+- [Volume III requirements](docs/requirements-volume-iii.md)
+- [Volume III delivery roadmap](docs/roadmap-volume-iii.md)
 - [Audit retention baseline](docs/audit-retention-policy.md)
 - [Observability baseline and runbook](docs/observability.md)
 - [Software supply-chain security](docs/software-supply-chain-security.md)
@@ -322,6 +326,8 @@ companion project also passes 27 unit tests, Android lint, and debug APK assembl
 - [AWS immutable archive Terraform foundation](deploy/terraform/aws-archive-foundation/README.md)
 - [AWS archive foundation read-only audit](docs/aws-archive-foundation-audit.md)
 - [Engineering workbook index](docs/workbooks.md)
+- [Volume III ECU Simulator editable workbook](docs/workbook-volume-iii.md)
+- [Volume III ECU Simulator formatted workbook](docs/ATEP_Volume_III_ECU_Simulator_Engineering_Workbook.docx)
 - [Volume I — Core Platform editable source](docs/workbook-volume-i.md)
 - [Volume I — Core Platform formatted workbook](docs/ATEP_Volume_I_Core_Platform_Engineering_Workbook.docx)
 - [Volume II — Digital Vehicle editable source](docs/workbook-volume-ii.md)
@@ -337,7 +343,7 @@ operational guidance, and review worksheets.
 |---|---|---|
 | I | Core Platform | In progress |
 | II | Digital Vehicle | Baseline complete — increments II-1 through II-6 implemented |
-| III | ECU Simulator | Planned |
+| III | ECU Simulator | In progress — increment III-1 implemented |
 | IV | CAN Network | Planned |
 | V | Diagnostics | Planned |
 | VI | Electric Vehicle | Planned |

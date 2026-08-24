@@ -222,6 +222,21 @@ def test_multi_vehicle_simulation_session_contracts_are_published() -> None:
     assert "post" in paths[restore]
 
 
+def test_ecu_aggregate_contracts_and_safe_pagination_are_published() -> None:
+    paths = core_app.openapi()["paths"]
+    collection = paths["/api/v1/vehicles/{vehicle_id}/ecus"]
+    assert {"get", "post"} <= set(collection)
+    assert "get" in paths["/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}"]
+    state = paths["/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/state"]
+    assert "put" in state
+    state_schema = state["put"]["requestBody"]["content"]["application/json"]["schema"]
+    assert state_schema["$ref"].endswith("/EcuStateReplace")
+    parameters = {item["name"]: item["schema"] for item in collection["get"]["parameters"]}
+    assert parameters["limit"]["maximum"] == 100
+    assert parameters["offset"]["maximum"] == 1_000_000
+    assert "ecu_type" in parameters
+
+
 def test_test_job_scheduler_contracts_and_safe_pagination_are_published() -> None:
     paths = core_app.openapi()["paths"]
     collection = paths["/api/v1/test-jobs"]

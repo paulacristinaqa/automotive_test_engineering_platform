@@ -17,6 +17,7 @@ VOLUME_NUMBER = "I"
 VOLUME_NAME = "Core Platform"
 DOCUMENT_VERSION = "1.0.0"
 DOCUMENT_STATUS = "Living document - Volume I baseline implemented"
+BASELINE_DATE = "12 August 2026"
 
 NAVY = "0B2545"
 BLUE = "2E74B5"
@@ -334,7 +335,7 @@ def add_cover(doc: Document) -> None:
     meta = doc.add_table(rows=4, cols=2)
     rows = [
         ("Document version", DOCUMENT_VERSION),
-        ("Baseline date", "12 August 2026"),
+        ("Baseline date", BASELINE_DATE),
         ("Status", DOCUMENT_STATUS),
         ("Language", "English"),
     ]

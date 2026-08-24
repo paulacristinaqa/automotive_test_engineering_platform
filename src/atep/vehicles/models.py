@@ -39,6 +39,9 @@ class Vehicle(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     simulation_steps: Mapped[list["VehicleSimulationStep"]] = relationship(
         back_populates="vehicle", cascade="all, delete-orphan", lazy="raise"
     )
+    ecus: Mapped[list["ElectronicControlUnit"]] = relationship(
+        back_populates="vehicle", cascade="all, delete-orphan", lazy="raise"
+    )
 
 
 class VehicleDigitalState(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -216,3 +219,6 @@ class VehicleCommand(UUIDPrimaryKeyMixin, Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     vehicle: Mapped[Vehicle] = relationship(back_populates="commands", lazy="raise")
+
+
+from atep.ecus.models import ElectronicControlUnit  # noqa: E402
