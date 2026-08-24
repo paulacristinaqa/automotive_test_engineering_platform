@@ -49,6 +49,33 @@ class EcuMemoryCell(BaseModel):
     value: int = Field(ge=0, le=255)
 
 
+class EcuMemoryRegionKind(StrEnum):
+    VOLATILE = "volatile"
+    NON_VOLATILE = "non_volatile"
+
+
+class EcuMemoryRegion(BaseModel):
+    name: str = Field(min_length=3, max_length=40)
+    kind: EcuMemoryRegionKind
+    start_address: int = Field(ge=0, le=65_535)
+    size: int = Field(ge=1, le=65_536)
+    reset_value: int = Field(default=0, ge=0, le=255)
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        normalized = value.strip().casefold()
+        if not TASK_ID_PATTERN.fullmatch(normalized):
+            raise ValueError("memory-region names must use lowercase canonical names")
+        return normalized
+
+    @model_validator(mode="after")
+    def remain_in_address_space(self) -> "EcuMemoryRegion":
+        if self.start_address + self.size > 65_536:
+            raise ValueError("memory region exceeds the 16-bit address space")
+        return self
+
+
 class EcuCyclicTask(BaseModel):
     task_id: str = Field(min_length=3, max_length=40)
     period_ms: int = Field(ge=1, le=60_000)
@@ -92,6 +119,7 @@ class EcuFault(BaseModel):
 class EcuStatePayload(BaseModel):
     operational_state: EcuOperationalState = EcuOperationalState.OFFLINE
     memory: list[EcuMemoryCell] = Field(default_factory=list, max_length=256)
+    memory_regions: list[EcuMemoryRegion] = Field(default_factory=list, max_length=16)
     faults: list[EcuFault] = Field(default_factory=list, max_length=64)
     cyclic_tasks: list[EcuCyclicTask] = Field(default_factory=list, max_length=32)
     behavior_state: dict[str, int | bool | str] = Field(default_factory=dict, max_length=32)
@@ -120,6 +148,22 @@ class EcuStatePayload(BaseModel):
         addresses = [cell.address for cell in self.memory]
         if len(addresses) != len(set(addresses)):
             raise ValueError("ECU memory addresses must be unique")
+        region_names = [region.name for region in self.memory_regions]
+        if len(region_names) != len(set(region_names)):
+            raise ValueError("ECU memory-region names must be unique")
+        ordered_regions = sorted(self.memory_regions, key=lambda region: region.start_address)
+        for previous, current in zip(ordered_regions, ordered_regions[1:], strict=False):
+            if previous.start_address + previous.size > current.start_address:
+                raise ValueError("ECU memory regions must not overlap")
+        if self.memory_regions:
+            for cell in self.memory:
+                matching_regions = [
+                    region
+                    for region in self.memory_regions
+                    if region.start_address <= cell.address < region.start_address + region.size
+                ]
+                if len(matching_regions) != 1:
+                    raise ValueError("every ECU memory cell must belong to one memory region")
         codes = [fault.code for fault in self.faults]
         if len(codes) != len(set(codes)):
             raise ValueError("ECU fault codes must be unique")
@@ -258,6 +302,73 @@ class EcuResetResponse(BaseModel):
     simulation_time_ms: int
     boot_count: int
     memory_preserved: bool
+    volatile_cells_reset: int
+    non_volatile_cells_preserved: int
     faults_preserved: bool
+    duplicate: bool = False
+    created_at: datetime
+
+
+class EcuSnapshotCreate(BaseModel):
+    name: str = Field(min_length=3, max_length=80)
+
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, value: str) -> str:
+        return value.strip()
+
+
+class EcuMemorySnapshotResponse(BaseModel):
+    id: UUID
+    vehicle_id: str
+    ecu_id: str
+    name: str
+    state_version: int
+    simulation_time_ms: int
+    memory_cell_count: int
+    checksum_sha256: str
+    created_at: datetime
+
+
+class EcuMemorySnapshotPage(BaseModel):
+    items: list[EcuMemorySnapshotResponse]
+    total: int
+    limit: int
+    offset: int
+
+
+class EcuSnapshotRestoreCommand(BaseModel):
+    expected_version: int = Field(ge=1)
+
+
+class EcuMemoryCorruptionCommand(BaseModel):
+    command_id: str = Field(min_length=8, max_length=64)
+    expected_version: int = Field(ge=1)
+    seed: int = Field(ge=0, le=2_147_483_647)
+    bit_flips: int = Field(ge=1, le=32)
+    region_names: list[str] = Field(default_factory=list, max_length=16)
+
+    @field_validator("command_id")
+    @classmethod
+    def validate_command_id(cls, value: str) -> str:
+        return EcuAdvanceCommand.validate_command_id(value)
+
+
+class EcuMemoryChange(BaseModel):
+    address: int
+    previous_value: int
+    value: int
+    bit: int
+
+
+class EcuMemoryCorruptionResponse(BaseModel):
+    command_id: str
+    vehicle_id: str
+    ecu_id: str
+    seed: int
+    requested_bit_flips: int
+    changes: list[EcuMemoryChange]
+    previous_version: int
+    state_version: int
     duplicate: bool = False
     created_at: datetime

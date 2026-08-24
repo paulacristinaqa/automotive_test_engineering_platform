@@ -18,15 +18,20 @@ from atep.ecus.profiles import behavior_profile, behavior_profiles
 from atep.ecus.schemas import (
     EcuAdvanceCommand,
     EcuCreate,
+    EcuMemoryCorruptionCommand,
     EcuResetCommand,
+    EcuSnapshotCreate,
     EcuStatePayload,
     EcuStateReplace,
 )
 from atep.ecus.service import (
+    corrupt_ecu_memory,
     create_ecu,
+    create_memory_snapshot,
     execute_ecu_advance,
     execute_ecu_reset,
     replace_ecu_state,
+    restore_memory_snapshot,
 )
 from atep.events.models import OutboxEvent
 from atep.identity.dependencies import require_permissions
@@ -88,6 +93,15 @@ def ecu(*, version: int = 1) -> ElectronicControlUnit:
         ecu_type="battery",
         operational_state="offline",
         memory=[],
+        memory_regions=[
+            {
+                "name": "legacy_nvm",
+                "kind": "non_volatile",
+                "start_address": 0,
+                "size": 65_536,
+                "reset_value": 0,
+            }
+        ],
         faults=[],
         cyclic_tasks=[],
         version=version,
@@ -362,6 +376,8 @@ async def test_hard_reset_is_deterministic_and_preserves_undefined_memory_region
         "reset_duration_ms": 100,
         "boot_count": 1,
         "memory_preserved": True,
+        "volatile_cells_reset": 0,
+        "non_volatile_cells_preserved": 1,
         "faults_preserved": True,
     }
     assert [
@@ -502,3 +518,125 @@ async def test_profile_rejects_schedule_drift_and_unknown_state_keys(
             actor_user_id=uuid4(),
             correlation_id=None,
         )
+
+
+def test_memory_regions_reject_overlap_and_unassigned_cells() -> None:
+    with pytest.raises(ValidationError, match="must not overlap"):
+        EcuStatePayload(
+            memory_regions=[
+                {"name": "ram_one", "kind": "volatile", "start_address": 0, "size": 16},
+                {"name": "ram_two", "kind": "volatile", "start_address": 8, "size": 16},
+            ]
+        )
+    with pytest.raises(ValidationError, match="must belong"):
+        EcuStatePayload(
+            memory=[{"address": 100, "value": 1}],
+            memory_regions=[
+                {"name": "small_ram", "kind": "volatile", "start_address": 0, "size": 16}
+            ],
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["hard", "power_cycle"])
+async def test_reset_clears_volatile_memory_and_preserves_non_volatile_memory(
+    mode: str,
+) -> None:
+    target = vehicle()
+    current = ecu()
+    current.vehicle_id = target.id
+    current.memory_regions = [
+        {"name": "ram", "kind": "volatile", "start_address": 0, "size": 16, "reset_value": 0},
+        {
+            "name": "eeprom",
+            "kind": "non_volatile",
+            "start_address": 100,
+            "size": 16,
+            "reset_value": 0,
+        },
+    ]
+    current.memory = [{"address": 1, "value": 9}, {"address": 100, "value": 7}]
+    execution, _ = await execute_ecu_reset(
+        cast(AsyncSession, FakeSession(current, None)),
+        vehicle=target,
+        ecu=current,
+        command=EcuResetCommand(
+            command_id=f"reset-{mode}-memory", expected_version=1, mode=mode
+        ),
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert current.memory == [{"address": 1, "value": 0}, {"address": 100, "value": 7}]
+    assert execution.result["volatile_cells_reset"] == 1
+    assert execution.result["non_volatile_cells_preserved"] == 1
+
+
+@pytest.mark.asyncio
+async def test_memory_snapshot_is_checksums_audited_and_restorable() -> None:
+    target = vehicle()
+    current = ecu()
+    current.vehicle_id = target.id
+    current.memory = [{"address": 2, "value": 8}, {"address": 1, "value": 7}]
+    session = FakeSession(current)
+    snapshot = await create_memory_snapshot(
+        cast(AsyncSession, session),
+        vehicle=target,
+        ecu=current,
+        command=EcuSnapshotCreate(name="Before corruption"),
+        actor_user_id=uuid4(),
+        correlation_id=uuid4(),
+    )
+    assert snapshot.memory == [{"address": 1, "value": 7}, {"address": 2, "value": 8}]
+    assert len(snapshot.checksum_sha256) == 64
+    assert [
+        item.event_type for item in session.added if isinstance(item, OutboxEvent)
+    ] == ["atep.ecu.memory.snapshot.created.v1"]
+    current.memory = [{"address": 1, "value": 0}]
+    restored = await restore_memory_snapshot(
+        cast(AsyncSession, FakeSession(current)),
+        vehicle=target,
+        ecu=current,
+        snapshot=snapshot,
+        expected_version=1,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert restored.memory == snapshot.memory
+    assert restored.version == 2
+
+
+@pytest.mark.asyncio
+async def test_seeded_memory_corruption_is_deterministic_and_idempotent() -> None:
+    target = vehicle()
+    current = ecu()
+    current.vehicle_id = target.id
+    current.memory = [{"address": 1, "value": 0}, {"address": 2, "value": 255}]
+    command = EcuMemoryCorruptionCommand(
+        command_id="corrupt-memory-001",
+        expected_version=1,
+        seed=42,
+        bit_flips=3,
+        region_names=["legacy_nvm"],
+    )
+    execution, duplicate = await corrupt_ecu_memory(
+        cast(AsyncSession, FakeSession(current, None)),
+        vehicle=target,
+        ecu=current,
+        command=command,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert duplicate is False
+    assert len(execution.result["changes"]) == 3
+    memory_after_first_execution = [dict(cell) for cell in current.memory]
+    returned, duplicate = await corrupt_ecu_memory(
+        cast(AsyncSession, FakeSession(current, execution)),
+        vehicle=target,
+        ecu=current,
+        command=command,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert returned is execution
+    assert duplicate is True
+    assert current.memory == memory_after_first_execution

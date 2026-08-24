@@ -1,3 +1,5 @@
+import hashlib
+import json
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -8,19 +10,24 @@ from atep.audit.service import record_audit
 from atep.core.errors import (
     DuplicateEcuIdentifierError,
     EcuExecutionStateError,
+    EcuMemoryContractError,
     EcuProfileContractError,
     EcuSimulationCommandConflictError,
     EcuStateVersionConflictError,
     ResourceNotFoundError,
 )
-from atep.ecus.models import EcuSimulationCommand, ElectronicControlUnit
+from atep.ecus.models import EcuMemorySnapshot, EcuSimulationCommand, ElectronicControlUnit
 from atep.ecus.profiles import behavior_profile, execute_profile_transitions
 from atep.ecus.schemas import (
     EcuAdvanceCommand,
     EcuCreate,
+    EcuMemoryCorruptionCommand,
+    EcuMemoryRegion,
+    EcuMemoryRegionKind,
     EcuOperationalState,
     EcuResetCommand,
     EcuResetMode,
+    EcuSnapshotCreate,
     EcuStatePayload,
     EcuStateReplace,
     EcuTaskRunSummary,
@@ -35,6 +42,7 @@ def ecu_state_payload(ecu: ElectronicControlUnit) -> EcuStatePayload:
         {
             "operational_state": ecu.operational_state,
             "memory": ecu.memory,
+            "memory_regions": ecu.memory_regions,
             "faults": ecu.faults,
             "cyclic_tasks": ecu.cyclic_tasks,
             "behavior_state": ecu.behavior_state,
@@ -67,6 +75,7 @@ async def create_ecu(
         ecu_type=command.ecu_type,
         use_profile_defaults=not requested_state.cyclic_tasks,
     )
+    state = _memory_state(state, use_default_region=not state.memory_regions)
     ecu = ElectronicControlUnit(
         vehicle_id=vehicle.id,
         identifier=command.identifier,
@@ -74,6 +83,7 @@ async def create_ecu(
         ecu_type=command.ecu_type.value,
         operational_state=state.operational_state.value,
         memory=[item.model_dump(mode="json") for item in state.memory],
+        memory_regions=[item.model_dump(mode="json") for item in state.memory_regions],
         faults=[item.model_dump(mode="json") for item in state.faults],
         cyclic_tasks=[item.model_dump(mode="json") for item in state.cyclic_tasks],
         profile_version=profile.profile_version,
@@ -161,6 +171,9 @@ async def replace_ecu_state(
         requested, ecu_type=EcuType(locked.ecu_type), use_profile_defaults=False
     )
     current = ecu_state_payload(locked)
+    if not requested.memory_regions:
+        requested = requested.model_copy(update={"memory_regions": current.memory_regions})
+    requested = _memory_state(requested, use_default_region=False)
     if command.expected_version != locked.version:
         if command.expected_version == locked.version - 1 and requested == current:
             return locked, True
@@ -170,6 +183,9 @@ async def replace_ecu_state(
     previous_version = locked.version
     locked.operational_state = requested.operational_state.value
     locked.memory = [item.model_dump(mode="json") for item in requested.memory]
+    locked.memory_regions = [
+        item.model_dump(mode="json") for item in requested.memory_regions
+    ]
     locked.faults = [item.model_dump(mode="json") for item in requested.faults]
     locked.cyclic_tasks = [item.model_dump(mode="json") for item in requested.cyclic_tasks]
     locked.behavior_state = requested.behavior_state
@@ -370,6 +386,29 @@ async def execute_ecu_reset(
         if has_confirmed_critical_fault
         else EcuOperationalState.OFFLINE.value
     )
+    volatile_cells_reset = 0
+    non_volatile_cells_preserved = 0
+    regions = [EcuMemoryRegion.model_validate(item) for item in locked.memory_regions] or [
+        EcuMemoryRegion(
+            name="legacy_nvm",
+            kind=EcuMemoryRegionKind.NON_VOLATILE,
+            start_address=0,
+            size=65_536,
+        )
+    ]
+    memory = [dict(item) for item in locked.memory]
+    for cell in memory:
+        region = next(
+            region
+            for region in regions
+            if region.start_address <= int(cell["address"]) < region.start_address + region.size
+        )
+        if region.kind is EcuMemoryRegionKind.NON_VOLATILE:
+            non_volatile_cells_preserved += 1
+        elif command.mode is not EcuResetMode.SOFT and int(cell["value"]) != region.reset_value:
+            cell["value"] = region.reset_value
+            volatile_cells_reset += 1
+    locked.memory = memory
     locked.simulation_time_ms += duration_ms
     locked.boot_count += 1
     locked.version += 1
@@ -377,7 +416,9 @@ async def execute_ecu_reset(
         "mode": command.mode.value,
         "reset_duration_ms": duration_ms,
         "boot_count": locked.boot_count,
-        "memory_preserved": True,
+        "memory_preserved": volatile_cells_reset == 0,
+        "volatile_cells_reset": volatile_cells_reset,
+        "non_volatile_cells_preserved": non_volatile_cells_preserved,
         "faults_preserved": True,
     }
     execution = EcuSimulationCommand(
@@ -411,6 +452,245 @@ async def execute_ecu_reset(
         resource_id=locked.id,
         correlation_id=correlation_id,
         details={**evidence, **result},
+    )
+    return execution, False
+
+
+async def create_memory_snapshot(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    ecu: ElectronicControlUnit,
+    command: EcuSnapshotCreate,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> EcuMemorySnapshot:
+    locked = await require_ecu(
+        session, vehicle=vehicle, identifier=ecu.identifier, for_update=True
+    )
+    canonical_memory = sorted(locked.memory, key=lambda item: int(item["address"]))
+    checksum = hashlib.sha256(
+        json.dumps(canonical_memory, separators=(",", ":"), sort_keys=True).encode()
+    ).hexdigest()
+    snapshot = EcuMemorySnapshot(
+        ecu_id=locked.id,
+        name=command.name,
+        memory=canonical_memory,
+        state_version=locked.version,
+        simulation_time_ms=locked.simulation_time_ms,
+        checksum_sha256=checksum,
+        created_by_user_id=actor_user_id,
+    )
+    session.add(snapshot)
+    await session.flush()
+    evidence = {
+        **_ecu_evidence(locked, vehicle),
+        "snapshot_id": str(snapshot.id),
+        "snapshot_name": snapshot.name,
+        "state_version": snapshot.state_version,
+        "memory_cell_count": len(snapshot.memory),
+        "checksum_sha256": snapshot.checksum_sha256,
+    }
+    enqueue_event(
+        session,
+        event_type="atep.ecu.memory.snapshot.created.v1",
+        aggregate_type="ecu",
+        aggregate_id=locked.id,
+        payload=evidence,
+        correlation_id=correlation_id,
+    )
+    record_audit(
+        session,
+        actor_user_id=actor_user_id,
+        action="ecu.memory_snapshot_created",
+        resource_type="ecu",
+        resource_id=locked.id,
+        correlation_id=correlation_id,
+        details=evidence,
+    )
+    return snapshot
+
+
+async def list_memory_snapshots(
+    session: AsyncSession, *, ecu: ElectronicControlUnit, limit: int, offset: int
+) -> tuple[list[EcuMemorySnapshot], int]:
+    query = select(EcuMemorySnapshot).where(EcuMemorySnapshot.ecu_id == ecu.id)
+    total = await session.scalar(select(func.count()).select_from(query.subquery()))
+    result = await session.execute(
+        query.order_by(EcuMemorySnapshot.created_at.desc(), EcuMemorySnapshot.id)
+        .limit(limit)
+        .offset(offset)
+    )
+    return list(result.scalars().all()), int(total or 0)
+
+
+async def require_memory_snapshot(
+    session: AsyncSession, *, ecu: ElectronicControlUnit, snapshot_id: UUID
+) -> EcuMemorySnapshot:
+    snapshot = await session.scalar(
+        select(EcuMemorySnapshot).where(
+            EcuMemorySnapshot.ecu_id == ecu.id, EcuMemorySnapshot.id == snapshot_id
+        )
+    )
+    if snapshot is None:
+        raise ResourceNotFoundError("ecu memory snapshot")
+    return snapshot
+
+
+async def restore_memory_snapshot(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    ecu: ElectronicControlUnit,
+    snapshot: EcuMemorySnapshot,
+    expected_version: int,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> ElectronicControlUnit:
+    locked = await require_ecu(
+        session, vehicle=vehicle, identifier=ecu.identifier, for_update=True
+    )
+    if expected_version != locked.version:
+        raise EcuStateVersionConflictError(current_version=locked.version)
+    EcuStatePayload.model_validate(
+        {**ecu_state_payload(locked).model_dump(mode="json"), "memory": snapshot.memory}
+    )
+    previous_version = locked.version
+    locked.memory = [dict(item) for item in snapshot.memory]
+    locked.version += 1
+    await session.flush()
+    evidence = {
+        **_ecu_evidence(locked, vehicle),
+        "snapshot_id": str(snapshot.id),
+        "previous_version": previous_version,
+        "version": locked.version,
+        "memory_cell_count": len(locked.memory),
+        "checksum_sha256": snapshot.checksum_sha256,
+    }
+    enqueue_event(
+        session,
+        event_type="atep.ecu.memory.snapshot.restored.v1",
+        aggregate_type="ecu",
+        aggregate_id=locked.id,
+        payload=evidence,
+        correlation_id=correlation_id,
+    )
+    record_audit(
+        session,
+        actor_user_id=actor_user_id,
+        action="ecu.memory_snapshot_restored",
+        resource_type="ecu",
+        resource_id=locked.id,
+        correlation_id=correlation_id,
+        details=evidence,
+    )
+    return locked
+
+
+async def corrupt_ecu_memory(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    ecu: ElectronicControlUnit,
+    command: EcuMemoryCorruptionCommand,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> tuple[EcuSimulationCommand, bool]:
+    locked = await require_ecu(
+        session, vehicle=vehicle, identifier=ecu.identifier, for_update=True
+    )
+    request_payload = command.model_dump(mode="json")
+    existing = await _existing_simulation_command(
+        session, ecu=locked, command_id=command.command_id
+    )
+    if existing is not None:
+        if existing.kind == "memory_corruption" and existing.request == request_payload:
+            return existing, True
+        raise EcuSimulationCommandConflictError()
+    if command.expected_version != locked.version:
+        raise EcuStateVersionConflictError(current_version=locked.version)
+    regions = [EcuMemoryRegion.model_validate(item) for item in locked.memory_regions] or [
+        EcuMemoryRegion(
+            name="legacy_nvm",
+            kind=EcuMemoryRegionKind.NON_VOLATILE,
+            start_address=0,
+            size=65_536,
+        )
+    ]
+    known_names = {region.name for region in regions}
+    unknown_names = set(command.region_names) - known_names
+    if unknown_names:
+        raise EcuMemoryContractError(reason=f"unknown region: {sorted(unknown_names)[0]}")
+    selected_names = set(command.region_names) or known_names
+    candidates = sorted(
+        (
+            dict(cell)
+            for cell in locked.memory
+            if any(
+                region.name in selected_names
+                and region.start_address
+                <= int(cell["address"])
+                < region.start_address + region.size
+                for region in regions
+            )
+        ),
+        key=lambda item: int(item["address"]),
+    )
+    if not candidates:
+        raise EcuMemoryContractError(reason="no initialized cells in selected regions")
+    changes: list[dict[str, int]] = []
+    memory_by_address = {int(cell["address"]): cell for cell in locked.memory}
+    for index in range(command.bit_flips):
+        digest = hashlib.sha256(f"{command.seed}:{index}".encode()).digest()
+        candidate = candidates[int.from_bytes(digest[:4], "big") % len(candidates)]
+        address = int(candidate["address"])
+        bit = digest[4] % 8
+        target = memory_by_address[address]
+        previous_value = int(target["value"])
+        value = previous_value ^ (1 << bit)
+        target["value"] = value
+        changes.append(
+            {"address": address, "previous_value": previous_value, "value": value, "bit": bit}
+        )
+    previous_version = locked.version
+    locked.memory = list(memory_by_address.values())
+    locked.version += 1
+    result: dict[str, object] = {
+        "seed": command.seed,
+        "requested_bit_flips": command.bit_flips,
+        "changes": changes,
+    }
+    execution = EcuSimulationCommand(
+        ecu_id=locked.id,
+        command_id=command.command_id,
+        kind="memory_corruption",
+        request=request_payload,
+        result=result,
+        previous_version=previous_version,
+        state_version=locked.version,
+        previous_time_ms=locked.simulation_time_ms,
+        simulation_time_ms=locked.simulation_time_ms,
+        requested_by_user_id=actor_user_id,
+    )
+    session.add(execution)
+    await session.flush()
+    evidence = _simulation_evidence(execution, locked, vehicle)
+    enqueue_event(
+        session,
+        event_type="atep.ecu.memory.corrupted.v1",
+        aggregate_type="ecu",
+        aggregate_id=locked.id,
+        payload={**evidence, **result},
+        correlation_id=correlation_id,
+    )
+    record_audit(
+        session,
+        actor_user_id=actor_user_id,
+        action="ecu.memory_corrupted",
+        resource_type="ecu",
+        resource_id=locked.id,
+        correlation_id=correlation_id,
+        details={**evidence, "seed": command.seed, "bit_flips": command.bit_flips},
     )
     return execution, False
 
@@ -472,3 +752,21 @@ def _profile_state(
     behavior_state = dict(profile.initial_state)
     behavior_state.update(state.behavior_state)
     return state.model_copy(update={"cyclic_tasks": tasks, "behavior_state": behavior_state})
+
+
+def _memory_state(
+    state: EcuStatePayload, *, use_default_region: bool
+) -> EcuStatePayload:
+    regions = state.memory_regions
+    if use_default_region:
+        regions = [
+            EcuMemoryRegion(
+                name="legacy_nvm",
+                kind=EcuMemoryRegionKind.NON_VOLATILE,
+                start_address=0,
+                size=65_536,
+            )
+        ]
+    return EcuStatePayload.model_validate(
+        {**state.model_dump(mode="json"), "memory_regions": regions}
+    )

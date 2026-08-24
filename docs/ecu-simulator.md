@@ -66,6 +66,22 @@ Logical-time advancement applies state transitions from the arithmetic task summ
 ten due battery cell-monitor cycles increment `cell_samples` by ten without executing a real-time
 loop. Profile behavior is therefore repeatable, bounded, and independent of CAN and UDS transport.
 
+## Memory Regions, Snapshots, and Corruption
+
+Each ECU can define up to 16 non-overlapping regions over the 16-bit address space. Every initialized
+memory cell belongs to exactly one `volatile` or `non_volatile` region. New ECUs without an explicit
+map receive a full-address-space `legacy_nvm` region so existing sparse-memory behavior remains
+compatible.
+
+Soft reset preserves all cells. Hard and power-cycle reset restore initialized volatile cells to the
+region's `reset_value` and preserve non-volatile cells. Reset evidence reports how many volatile
+cells changed and how many non-volatile cells remained intact.
+
+Memory snapshots store at most the aggregate's 256 initialized cells, state version, logical time,
+and a canonical SHA-256 checksum. Snapshot audit and events contain counts and checksum, not the full
+memory image. Seeded corruption flips 1 to 32 bits in selected initialized regions and persists its
+command identity, making exact retries safe and results reproducible.
+
 ## Current Limits
 
 This baseline does not execute ECU firmware, model non-volatile memory, emit CAN frames, expose UDS

@@ -22,6 +22,7 @@ class ElectronicControlUnit(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     ecu_type: Mapped[str] = mapped_column(String(30), index=True)
     operational_state: Mapped[str] = mapped_column(String(20), default="offline", index=True)
     memory: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    memory_regions: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     faults: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     cyclic_tasks: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     profile_version: Mapped[str] = mapped_column(String(20), default="1.0.0")
@@ -31,6 +32,9 @@ class ElectronicControlUnit(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     boot_count: Mapped[int] = mapped_column(Integer, default=0)
     vehicle: Mapped["Vehicle"] = relationship(back_populates="ecus", lazy="raise")
     simulation_commands: Mapped[list["EcuSimulationCommand"]] = relationship(
+        back_populates="ecu", cascade="all, delete-orphan", lazy="raise"
+    )
+    memory_snapshots: Mapped[list["EcuMemorySnapshot"]] = relationship(
         back_populates="ecu", cascade="all, delete-orphan", lazy="raise"
     )
 
@@ -57,6 +61,27 @@ class EcuSimulationCommand(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     ecu: Mapped[ElectronicControlUnit] = relationship(
         back_populates="simulation_commands", lazy="raise"
+    )
+
+
+class EcuMemorySnapshot(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ecu_memory_snapshots"
+
+    ecu_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("electronic_control_units.id", ondelete="CASCADE"),
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(80))
+    memory: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    state_version: Mapped[int] = mapped_column(Integer)
+    simulation_time_ms: Mapped[int] = mapped_column(BigInteger)
+    checksum_sha256: Mapped[str] = mapped_column(String(64))
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    ecu: Mapped[ElectronicControlUnit] = relationship(
+        back_populates="memory_snapshots", lazy="raise"
     )
 
 

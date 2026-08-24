@@ -247,6 +247,14 @@ def test_ecu_aggregate_contracts_and_safe_pagination_are_published() -> None:
     profile = paths["/api/v1/ecu-profiles/{ecu_type}"]
     assert "get" in profiles
     assert "get" in profile
+    snapshots = paths["/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/memory/snapshots"]
+    restore = paths[
+        "/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/memory/snapshots/{snapshot_id}/restore"
+    ]
+    corruption = paths["/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/memory/corrupt"]
+    assert {"get", "post"} <= set(snapshots)
+    assert "post" in restore
+    assert "post" in corruption
 
 
 def test_test_job_scheduler_contracts_and_safe_pagination_are_published() -> None:

@@ -66,6 +66,11 @@ allowed task schedules, bounded initial state, and deterministic counter transit
 type. Profiles do not import CAN, UDS, or infrastructure adapters. This keeps controller behavior
 reproducible while preserving protocol boundaries for later volumes.
 
+Volume III-4 divides the sparse 16-bit memory map into explicit volatile and non-volatile regions.
+Reset semantics operate on region metadata, while snapshots preserve bounded sparse cells with a
+canonical checksum. Corruption uses a caller-provided seed and the persisted simulation-command
+identity, so fault campaigns are reproducible and exact retries cannot apply changes twice.
+
 ## Decisions
 
 1. **PostgreSQL is the system of record.** Redis is reserved for ephemeral state, caching,

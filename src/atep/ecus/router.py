@@ -1,33 +1,46 @@
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atep.db.session import get_session
-from atep.ecus.models import EcuSimulationCommand, ElectronicControlUnit
+from atep.ecus.models import EcuMemorySnapshot, EcuSimulationCommand, ElectronicControlUnit
 from atep.ecus.profiles import behavior_profile, behavior_profiles
 from atep.ecus.schemas import (
     EcuAdvanceCommand,
     EcuAdvanceResponse,
     EcuBehaviorProfileResponse,
     EcuCreate,
+    EcuMemoryChange,
+    EcuMemoryCorruptionCommand,
+    EcuMemoryCorruptionResponse,
+    EcuMemorySnapshotPage,
+    EcuMemorySnapshotResponse,
     EcuPage,
     EcuProfileTaskResponse,
     EcuResetCommand,
     EcuResetResponse,
     EcuResponse,
+    EcuSnapshotCreate,
+    EcuSnapshotRestoreCommand,
     EcuStateReplace,
     EcuTaskRunSummary,
     EcuType,
 )
 from atep.ecus.service import (
+    corrupt_ecu_memory,
     create_ecu,
+    create_memory_snapshot,
     ecu_state_payload,
     execute_ecu_advance,
     execute_ecu_reset,
     list_ecus,
+    list_memory_snapshots,
     replace_ecu_state,
     require_ecu,
+    require_memory_snapshot,
+    restore_memory_snapshot,
 )
 from atep.identity.dependencies import require_permissions
 from atep.identity.models import User
@@ -114,6 +127,10 @@ def ecu_reset_response(
         simulation_time_ms=command.simulation_time_ms,
         boot_count=int(command.result["boot_count"]),
         memory_preserved=bool(command.result["memory_preserved"]),
+        volatile_cells_reset=int(command.result["volatile_cells_reset"]),
+        non_volatile_cells_preserved=int(
+            command.result["non_volatile_cells_preserved"]
+        ),
         faults_preserved=bool(command.result["faults_preserved"]),
         duplicate=duplicate,
         created_at=command.created_at,
@@ -269,3 +286,138 @@ async def get_ecu_profile_endpoint(
     _: Annotated[User, Depends(ecus_read)],
 ) -> EcuBehaviorProfileResponse:
     return profile_response(ecu_type)
+
+
+def memory_snapshot_response(
+    snapshot: EcuMemorySnapshot, vehicle: Vehicle, ecu: ElectronicControlUnit
+) -> EcuMemorySnapshotResponse:
+    return EcuMemorySnapshotResponse(
+        id=snapshot.id,
+        vehicle_id=vehicle.identifier,
+        ecu_id=ecu.identifier,
+        name=snapshot.name,
+        state_version=snapshot.state_version,
+        simulation_time_ms=snapshot.simulation_time_ms,
+        memory_cell_count=len(snapshot.memory),
+        checksum_sha256=snapshot.checksum_sha256,
+        created_at=snapshot.created_at,
+    )
+
+
+@router.post(
+    "/{ecu_id}/memory/snapshots",
+    response_model=EcuMemorySnapshotResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_memory_snapshot_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    command: EcuSnapshotCreate,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(ecus_manage)],
+) -> EcuMemorySnapshotResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    ecu = await require_ecu(session, vehicle=vehicle, identifier=ecu_id)
+    snapshot = await create_memory_snapshot(
+        session,
+        vehicle=vehicle,
+        ecu=ecu,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    return memory_snapshot_response(snapshot, vehicle, ecu)
+
+
+@router.get("/{ecu_id}/memory/snapshots", response_model=EcuMemorySnapshotPage)
+async def list_memory_snapshots_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(ecus_read)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
+) -> EcuMemorySnapshotPage:
+    vehicle = await require_vehicle(session, vehicle_id)
+    ecu = await require_ecu(session, vehicle=vehicle, identifier=ecu_id)
+    snapshots, total = await list_memory_snapshots(
+        session, ecu=ecu, limit=limit, offset=offset
+    )
+    return EcuMemorySnapshotPage(
+        items=[memory_snapshot_response(item, vehicle, ecu) for item in snapshots],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.post(
+    "/{ecu_id}/memory/snapshots/{snapshot_id}/restore", response_model=EcuResponse
+)
+async def restore_memory_snapshot_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    snapshot_id: UUID,
+    command: EcuSnapshotRestoreCommand,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(ecus_manage)],
+) -> EcuResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    ecu = await require_ecu(session, vehicle=vehicle, identifier=ecu_id)
+    snapshot = await require_memory_snapshot(session, ecu=ecu, snapshot_id=snapshot_id)
+    ecu = await restore_memory_snapshot(
+        session,
+        vehicle=vehicle,
+        ecu=ecu,
+        snapshot=snapshot,
+        expected_version=command.expected_version,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    return ecu_response(ecu, vehicle)
+
+
+@router.post(
+    "/{ecu_id}/memory/corrupt",
+    response_model=EcuMemoryCorruptionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def corrupt_ecu_memory_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    command: EcuMemoryCorruptionCommand,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(ecus_manage)],
+) -> EcuMemoryCorruptionResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    ecu = await require_ecu(session, vehicle=vehicle, identifier=ecu_id)
+    execution, duplicate = await corrupt_ecu_memory(
+        session,
+        vehicle=vehicle,
+        ecu=ecu,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(execution, attribute_names=["created_at"])
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+    return EcuMemoryCorruptionResponse(
+        command_id=execution.command_id,
+        vehicle_id=vehicle.identifier,
+        ecu_id=ecu.identifier,
+        seed=int(execution.result["seed"]),
+        requested_bit_flips=int(execution.result["requested_bit_flips"]),
+        changes=[EcuMemoryChange.model_validate(item) for item in execution.result["changes"]],
+        previous_version=execution.previous_version,
+        state_version=execution.state_version,
+        duplicate=duplicate,
+        created_at=execution.created_at,
+    )
