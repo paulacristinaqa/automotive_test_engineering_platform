@@ -3,7 +3,15 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    StrictBool,
+    StrictFloat,
+    StrictInt,
+    field_validator,
+    model_validator,
+)
 
 ECU_IDENTIFIER_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{2,79}$")
 FAULT_CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]{2,31}$")
@@ -43,6 +51,65 @@ class EcuFaultStatus(StrEnum):
     PENDING = "pending"
     CONFIRMED = "confirmed"
     HEALED = "healed"
+
+
+class EcuSignalDirection(StrEnum):
+    PRODUCED = "produced"
+    CONSUMED = "consumed"
+
+
+class EcuSignalDataType(StrEnum):
+    BOOLEAN = "boolean"
+    INTEGER = "integer"
+    DECIMAL = "decimal"
+
+
+class EcuSignalContract(BaseModel):
+    name: str = Field(min_length=3, max_length=40)
+    direction: EcuSignalDirection
+    data_type: EcuSignalDataType
+    unit: str = Field(default="", max_length=20)
+    minimum: float | None = None
+    maximum: float | None = None
+    cycle_time_ms: int | None = Field(default=None, ge=1, le=60_000)
+    value: StrictBool | StrictInt | StrictFloat
+    updated_at_ms: int = Field(default=0, ge=0)
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value: str) -> str:
+        normalized = value.strip().casefold()
+        if not TASK_ID_PATTERN.fullmatch(normalized):
+            raise ValueError("signal names must use lowercase canonical names")
+        return normalized
+
+    @field_validator("unit")
+    @classmethod
+    def strip_unit(cls, value: str) -> str:
+        return value.strip()
+
+    @model_validator(mode="after")
+    def validate_value_and_bounds(self) -> "EcuSignalContract":
+        if self.minimum is not None and self.maximum is not None and self.minimum > self.maximum:
+            raise ValueError("signal minimum must not exceed maximum")
+        valid_type = {
+            EcuSignalDataType.BOOLEAN: isinstance(self.value, bool),
+            EcuSignalDataType.INTEGER: (
+                isinstance(self.value, int) and not isinstance(self.value, bool)
+            ),
+            EcuSignalDataType.DECIMAL: (
+                isinstance(self.value, (int, float)) and not isinstance(self.value, bool)
+            ),
+        }[self.data_type]
+        if not valid_type:
+            raise ValueError("signal value does not match its declared data type")
+        if self.data_type is not EcuSignalDataType.BOOLEAN:
+            numeric = float(self.value)
+            if self.minimum is not None and numeric < self.minimum:
+                raise ValueError("signal value is below its minimum")
+            if self.maximum is not None and numeric > self.maximum:
+                raise ValueError("signal value is above its maximum")
+        return self
 
 
 class EcuMemoryCell(BaseModel):
@@ -149,6 +216,7 @@ class EcuStatePayload(BaseModel):
     memory: list[EcuMemoryCell] = Field(default_factory=list, max_length=256)
     memory_regions: list[EcuMemoryRegion] = Field(default_factory=list, max_length=16)
     faults: list[EcuFault] = Field(default_factory=list, max_length=64)
+    signals: list[EcuSignalContract] = Field(default_factory=list, max_length=64)
     cyclic_tasks: list[EcuCyclicTask] = Field(default_factory=list, max_length=32)
     behavior_state: dict[str, int | bool | str] = Field(default_factory=dict, max_length=32)
 
@@ -195,6 +263,9 @@ class EcuStatePayload(BaseModel):
         codes = [fault.code for fault in self.faults]
         if len(codes) != len(set(codes)):
             raise ValueError("ECU fault codes must be unique")
+        signal_keys = [(signal.direction, signal.name) for signal in self.signals]
+        if len(signal_keys) != len(set(signal_keys)):
+            raise ValueError("ECU signal names must be unique per direction")
         task_ids = [task.task_id for task in self.cyclic_tasks]
         if len(task_ids) != len(set(task_ids)):
             raise ValueError("ECU cyclic task IDs must be unique")
@@ -468,3 +539,90 @@ class EcuDtcCandidate(BaseModel):
 class EcuDtcCandidatePage(BaseModel):
     items: list[EcuDtcCandidate]
     total: int
+
+
+class EcuSignalPublishCommand(BaseModel):
+    command_id: str = Field(min_length=8, max_length=64)
+    expected_version: int = Field(ge=1)
+    value: StrictBool | StrictInt | StrictFloat
+
+    @field_validator("command_id")
+    @classmethod
+    def validate_command_id(cls, value: str) -> str:
+        return EcuAdvanceCommand.validate_command_id(value)
+
+
+class EcuSignalPublishResponse(BaseModel):
+    command_id: str
+    vehicle_id: str
+    ecu_id: str
+    signal: EcuSignalContract
+    previous_version: int
+    state_version: int
+    duplicate: bool = False
+    created_at: datetime
+
+
+class EcuSignalRouteCreate(BaseModel):
+    identifier: str = Field(min_length=3, max_length=80)
+    source_ecu_id: str = Field(min_length=3, max_length=80)
+    source_signal: str = Field(min_length=3, max_length=40)
+    target_ecu_id: str = Field(min_length=3, max_length=80)
+    target_signal: str = Field(min_length=3, max_length=40)
+    enabled: bool = True
+
+    @field_validator("identifier", "source_ecu_id", "target_ecu_id")
+    @classmethod
+    def validate_identifier(cls, value: str) -> str:
+        return EcuCreate.validate_identifier(value)
+
+    @field_validator("source_signal", "target_signal")
+    @classmethod
+    def validate_signal_name(cls, value: str) -> str:
+        return EcuSignalContract.validate_name(value)
+
+
+class EcuSignalRouteResponse(BaseModel):
+    id: UUID
+    vehicle_id: str
+    gateway_ecu_id: str
+    identifier: str
+    source_ecu_id: UUID
+    source_signal: str
+    target_ecu_id: UUID
+    target_signal: str
+    enabled: bool
+    created_at: datetime
+
+
+class EcuSignalRoutePage(BaseModel):
+    items: list[EcuSignalRouteResponse]
+    total: int
+    limit: int
+    offset: int
+
+
+class EcuSignalRouteTransferCommand(BaseModel):
+    command_id: str = Field(min_length=8, max_length=64)
+    expected_source_version: int = Field(ge=1)
+    expected_target_version: int = Field(ge=1)
+
+    @field_validator("command_id")
+    @classmethod
+    def validate_command_id(cls, value: str) -> str:
+        return EcuAdvanceCommand.validate_command_id(value)
+
+
+class EcuSignalRouteTransferResponse(BaseModel):
+    command_id: str
+    vehicle_id: str
+    gateway_ecu_id: str
+    route_id: UUID
+    source_ecu_id: str
+    target_ecu_id: str
+    source_signal: EcuSignalContract
+    target_signal: EcuSignalContract
+    previous_target_version: int
+    target_version: int
+    duplicate: bool = False
+    created_at: datetime

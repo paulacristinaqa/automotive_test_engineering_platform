@@ -2,6 +2,7 @@ import hashlib
 import json
 from uuid import UUID
 
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,15 +10,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from atep.audit.service import record_audit
 from atep.core.errors import (
     DuplicateEcuIdentifierError,
+    DuplicateEcuSignalRouteError,
     EcuExecutionStateError,
     EcuFaultContractError,
     EcuMemoryContractError,
     EcuProfileContractError,
+    EcuSignalContractError,
     EcuSimulationCommandConflictError,
     EcuStateVersionConflictError,
     ResourceNotFoundError,
 )
-from atep.ecus.models import EcuMemorySnapshot, EcuSimulationCommand, ElectronicControlUnit
+from atep.ecus.models import (
+    EcuMemorySnapshot,
+    EcuSignalRoute,
+    EcuSimulationCommand,
+    ElectronicControlUnit,
+)
 from atep.ecus.profiles import behavior_profile, execute_profile_transitions
 from atep.ecus.schemas import (
     EcuAdvanceCommand,
@@ -34,6 +42,11 @@ from atep.ecus.schemas import (
     EcuOperationalState,
     EcuResetCommand,
     EcuResetMode,
+    EcuSignalContract,
+    EcuSignalDirection,
+    EcuSignalPublishCommand,
+    EcuSignalRouteCreate,
+    EcuSignalRouteTransferCommand,
     EcuSnapshotCreate,
     EcuStatePayload,
     EcuStateReplace,
@@ -51,6 +64,7 @@ def ecu_state_payload(ecu: ElectronicControlUnit) -> EcuStatePayload:
             "memory": ecu.memory,
             "memory_regions": ecu.memory_regions,
             "faults": ecu.faults,
+            "signals": ecu.signals or [],
             "cyclic_tasks": ecu.cyclic_tasks,
             "behavior_state": ecu.behavior_state,
         }
@@ -92,6 +106,7 @@ async def create_ecu(
         memory=[item.model_dump(mode="json") for item in state.memory],
         memory_regions=[item.model_dump(mode="json") for item in state.memory_regions],
         faults=[item.model_dump(mode="json") for item in state.faults],
+        signals=[item.model_dump(mode="json") for item in state.signals],
         cyclic_tasks=[item.model_dump(mode="json") for item in state.cyclic_tasks],
         profile_version=profile.profile_version,
         behavior_state=state.behavior_state,
@@ -180,6 +195,8 @@ async def replace_ecu_state(
     current = ecu_state_payload(locked)
     if not requested.memory_regions:
         requested = requested.model_copy(update={"memory_regions": current.memory_regions})
+    if "signals" not in command.model_fields_set:
+        requested = requested.model_copy(update={"signals": current.signals})
     requested = _memory_state(requested, use_default_region=False)
     if command.expected_version != locked.version:
         if command.expected_version == locked.version - 1 and requested == current:
@@ -194,6 +211,7 @@ async def replace_ecu_state(
         item.model_dump(mode="json") for item in requested.memory_regions
     ]
     locked.faults = [item.model_dump(mode="json") for item in requested.faults]
+    locked.signals = [item.model_dump(mode="json") for item in requested.signals]
     locked.cyclic_tasks = [item.model_dump(mode="json") for item in requested.cyclic_tasks]
     locked.behavior_state = requested.behavior_state
     locked.version += 1
@@ -933,6 +951,338 @@ def dtc_candidates(ecu: ElectronicControlUnit) -> list[EcuDtcCandidate]:
             (EcuFault.model_validate(item) for item in ecu.faults), key=lambda item: item.code
         )
     ]
+
+
+async def publish_ecu_signal(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    ecu: ElectronicControlUnit,
+    signal_name: str,
+    command: EcuSignalPublishCommand,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> tuple[EcuSimulationCommand, bool]:
+    locked = await require_ecu(
+        session, vehicle=vehicle, identifier=ecu.identifier, for_update=True
+    )
+    request_payload = {**command.model_dump(mode="json"), "signal_name": signal_name}
+    existing = await _existing_simulation_command(
+        session, ecu=locked, command_id=command.command_id
+    )
+    if existing is not None:
+        if existing.kind == "signal_publish" and existing.request == request_payload:
+            return existing, True
+        raise EcuSimulationCommandConflictError()
+    if command.expected_version != locked.version:
+        raise EcuStateVersionConflictError(current_version=locked.version)
+    signals = [EcuSignalContract.model_validate(item) for item in (locked.signals or [])]
+    current = next(
+        (
+            item
+            for item in signals
+            if item.direction is EcuSignalDirection.PRODUCED and item.name == signal_name
+        ),
+        None,
+    )
+    if current is None:
+        raise EcuSignalContractError(reason="unknown produced signal")
+    updated = _signal_with_value(current, value=command.value, time_ms=locked.simulation_time_ms)
+    signals = [
+        updated
+        if item.direction is EcuSignalDirection.PRODUCED and item.name == signal_name
+        else item
+        for item in signals
+    ]
+    previous_version = locked.version
+    locked.signals = [item.model_dump(mode="json") for item in signals]
+    locked.version += 1
+    result = {"signal": updated.model_dump(mode="json")}
+    execution = EcuSimulationCommand(
+        ecu_id=locked.id,
+        command_id=command.command_id,
+        kind="signal_publish",
+        request=request_payload,
+        result=result,
+        previous_version=previous_version,
+        state_version=locked.version,
+        previous_time_ms=locked.simulation_time_ms,
+        simulation_time_ms=locked.simulation_time_ms,
+        requested_by_user_id=actor_user_id,
+    )
+    session.add(execution)
+    await session.flush()
+    evidence = {
+        **_simulation_evidence(execution, locked, vehicle),
+        "signal_name": updated.name,
+        "direction": updated.direction.value,
+        "data_type": updated.data_type.value,
+        "updated_at_ms": updated.updated_at_ms,
+    }
+    enqueue_event(
+        session,
+        event_type="atep.ecu.signal.published.v1",
+        aggregate_type="ecu",
+        aggregate_id=locked.id,
+        payload=evidence,
+        correlation_id=correlation_id,
+    )
+    record_audit(
+        session,
+        actor_user_id=actor_user_id,
+        action="ecu.signal_published",
+        resource_type="ecu",
+        resource_id=locked.id,
+        correlation_id=correlation_id,
+        details=evidence,
+    )
+    return execution, False
+
+
+async def create_signal_route(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    gateway: ElectronicControlUnit,
+    command: EcuSignalRouteCreate,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> EcuSignalRoute:
+    if gateway.ecu_type != EcuType.GATEWAY.value:
+        raise EcuSignalContractError(reason="signal routes must be owned by a gateway ECU")
+    if command.source_ecu_id == command.target_ecu_id:
+        raise EcuSignalContractError(reason="source and target ECUs must differ")
+    existing = await session.scalar(
+        select(EcuSignalRoute).where(
+            EcuSignalRoute.gateway_ecu_id == gateway.id,
+            EcuSignalRoute.identifier == command.identifier,
+        )
+    )
+    if existing is not None:
+        raise DuplicateEcuSignalRouteError()
+    source = await require_ecu(session, vehicle=vehicle, identifier=command.source_ecu_id)
+    target = await require_ecu(session, vehicle=vehicle, identifier=command.target_ecu_id)
+    source_signal = _require_signal(
+        source, name=command.source_signal, direction=EcuSignalDirection.PRODUCED
+    )
+    target_signal = _require_signal(
+        target, name=command.target_signal, direction=EcuSignalDirection.CONSUMED
+    )
+    if source_signal.data_type is not target_signal.data_type:
+        raise EcuSignalContractError(reason="route signal data types must match")
+    if source_signal.unit != target_signal.unit:
+        raise EcuSignalContractError(reason="route signal units must match")
+    route = EcuSignalRoute(
+        gateway_ecu_id=gateway.id,
+        identifier=command.identifier,
+        source_ecu_id=source.id,
+        source_signal=source_signal.name,
+        target_ecu_id=target.id,
+        target_signal=target_signal.name,
+        enabled=command.enabled,
+    )
+    try:
+        async with session.begin_nested():
+            session.add(route)
+            await session.flush()
+    except IntegrityError as exc:
+        raise DuplicateEcuSignalRouteError() from exc
+    evidence = {
+        **_ecu_evidence(gateway, vehicle),
+        "route_id": str(route.id),
+        "route_identifier": route.identifier,
+        "source_ecu_id": source.identifier,
+        "source_signal": route.source_signal,
+        "target_ecu_id": target.identifier,
+        "target_signal": route.target_signal,
+        "enabled": route.enabled,
+    }
+    enqueue_event(
+        session,
+        event_type="atep.ecu.signal.route.created.v1",
+        aggregate_type="ecu_signal_route",
+        aggregate_id=route.id,
+        payload=evidence,
+        correlation_id=correlation_id,
+    )
+    record_audit(
+        session,
+        actor_user_id=actor_user_id,
+        action="ecu.signal_route_created",
+        resource_type="ecu_signal_route",
+        resource_id=route.id,
+        correlation_id=correlation_id,
+        details=evidence,
+    )
+    return route
+
+
+async def list_signal_routes(
+    session: AsyncSession, *, gateway: ElectronicControlUnit, limit: int, offset: int
+) -> tuple[list[EcuSignalRoute], int]:
+    query = select(EcuSignalRoute).where(EcuSignalRoute.gateway_ecu_id == gateway.id)
+    total = await session.scalar(select(func.count()).select_from(query.subquery()))
+    result = await session.execute(
+        query.order_by(EcuSignalRoute.identifier).limit(limit).offset(offset)
+    )
+    return list(result.scalars().all()), int(total or 0)
+
+
+async def require_signal_route(
+    session: AsyncSession, *, gateway: ElectronicControlUnit, route_id: UUID
+) -> EcuSignalRoute:
+    route = await session.scalar(
+        select(EcuSignalRoute).where(
+            EcuSignalRoute.gateway_ecu_id == gateway.id, EcuSignalRoute.id == route_id
+        )
+    )
+    if route is None:
+        raise ResourceNotFoundError("ecu signal route")
+    return route
+
+
+async def transfer_signal_route(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    gateway: ElectronicControlUnit,
+    route: EcuSignalRoute,
+    command: EcuSignalRouteTransferCommand,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> tuple[EcuSimulationCommand, bool, ElectronicControlUnit, ElectronicControlUnit]:
+    if not route.enabled:
+        raise EcuSignalContractError(reason="signal route is disabled")
+    source = await session.scalar(
+        select(ElectronicControlUnit)
+        .where(ElectronicControlUnit.id == route.source_ecu_id)
+        .with_for_update()
+    )
+    target = await session.scalar(
+        select(ElectronicControlUnit)
+        .where(ElectronicControlUnit.id == route.target_ecu_id)
+        .with_for_update()
+    )
+    if source is None or target is None:
+        raise ResourceNotFoundError("route ECU")
+    request_payload = {
+        **command.model_dump(mode="json"),
+        "route_id": str(route.id),
+        "gateway_ecu_id": gateway.identifier,
+    }
+    existing = await _existing_simulation_command(
+        session, ecu=target, command_id=command.command_id
+    )
+    if existing is not None:
+        if existing.kind == "signal_route_transfer" and existing.request == request_payload:
+            return existing, True, source, target
+        raise EcuSimulationCommandConflictError()
+    if command.expected_source_version != source.version:
+        raise EcuStateVersionConflictError(current_version=source.version)
+    if command.expected_target_version != target.version:
+        raise EcuStateVersionConflictError(current_version=target.version)
+    source_signal = _require_signal(
+        source, name=route.source_signal, direction=EcuSignalDirection.PRODUCED
+    )
+    target_signal = _require_signal(
+        target, name=route.target_signal, direction=EcuSignalDirection.CONSUMED
+    )
+    updated_target = _signal_with_value(
+        target_signal, value=source_signal.value, time_ms=target.simulation_time_ms
+    )
+    target_signals = [EcuSignalContract.model_validate(item) for item in (target.signals or [])]
+    target.signals = []
+    for item in target_signals:
+        is_target = (
+            item.direction is EcuSignalDirection.CONSUMED
+            and item.name == route.target_signal
+        )
+        target.signals.append(
+            (updated_target if is_target else item).model_dump(mode="json")
+        )
+    previous_target_version = target.version
+    target.version += 1
+    result = {
+        "route_id": str(route.id),
+        "gateway_ecu_id": gateway.identifier,
+        "source_ecu_id": source.identifier,
+        "target_ecu_id": target.identifier,
+        "source_signal": source_signal.model_dump(mode="json"),
+        "target_signal": updated_target.model_dump(mode="json"),
+    }
+    execution = EcuSimulationCommand(
+        ecu_id=target.id,
+        command_id=command.command_id,
+        kind="signal_route_transfer",
+        request=request_payload,
+        result=result,
+        previous_version=previous_target_version,
+        state_version=target.version,
+        previous_time_ms=target.simulation_time_ms,
+        simulation_time_ms=target.simulation_time_ms,
+        requested_by_user_id=actor_user_id,
+    )
+    session.add(execution)
+    await session.flush()
+    evidence = {
+        "command_id": execution.command_id,
+        "vehicle_id": vehicle.identifier,
+        "gateway_ecu_id": gateway.identifier,
+        "route_id": str(route.id),
+        "source_ecu_id": source.identifier,
+        "source_signal": source_signal.name,
+        "source_version": source.version,
+        "target_ecu_id": target.identifier,
+        "target_signal": updated_target.name,
+        "previous_target_version": previous_target_version,
+        "target_version": target.version,
+    }
+    enqueue_event(
+        session,
+        event_type="atep.ecu.signal.routed.v1",
+        aggregate_type="ecu_signal_route",
+        aggregate_id=route.id,
+        payload=evidence,
+        correlation_id=correlation_id,
+    )
+    record_audit(
+        session,
+        actor_user_id=actor_user_id,
+        action="ecu.signal_routed",
+        resource_type="ecu_signal_route",
+        resource_id=route.id,
+        correlation_id=correlation_id,
+        details=evidence,
+    )
+    return execution, False, source, target
+
+
+def _require_signal(
+    ecu: ElectronicControlUnit, *, name: str, direction: EcuSignalDirection
+) -> EcuSignalContract:
+    signal = next(
+        (
+            EcuSignalContract.model_validate(item)
+            for item in (ecu.signals or [])
+            if item.get("name") == name and item.get("direction") == direction.value
+        ),
+        None,
+    )
+    if signal is None:
+        raise EcuSignalContractError(reason=f"unknown {direction.value} signal: {name}")
+    return signal
+
+
+def _signal_with_value(
+    signal: EcuSignalContract, *, value: bool | int | float, time_ms: int
+) -> EcuSignalContract:
+    try:
+        return EcuSignalContract.model_validate(
+            {**signal.model_dump(mode="json"), "value": value, "updated_at_ms": time_ms}
+        )
+    except ValidationError as exc:
+        reason = exc.errors()[0]["msg"] if exc.errors() else "invalid signal value"
+        raise EcuSignalContractError(reason=str(reason)) from exc
 
 
 def _apply_fault_operational_state(

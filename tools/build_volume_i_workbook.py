@@ -269,10 +269,13 @@ def configure_sections(doc: Document) -> None:
         section.page_height = Inches(11)
         section.top_margin = Inches(1)
         section.right_margin = Inches(1)
-        section.bottom_margin = Inches(1)
+        # Reserve enough body space for LibreOffice's footer layout. A one-inch
+        # margin allows tall table rows to reach the page-number baseline when
+        # the generated DOCX is rendered outside Microsoft Word.
+        section.bottom_margin = Inches(1.2)
         section.left_margin = Inches(1)
         section.header_distance = Inches(0.492)
-        section.footer_distance = Inches(0.492)
+        section.footer_distance = Inches(0.25)
         section.different_first_page_header_footer = True
 
         header = section.header

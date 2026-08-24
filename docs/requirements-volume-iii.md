@@ -1,6 +1,6 @@
 # ATEP Volume III — ECU Simulator Requirements
 
-Status: Increments III-1 through III-5 implemented.
+Status: Increments III-1 through III-6 implemented.
 
 ## Functional Requirements
 
@@ -43,6 +43,14 @@ Status: Increments III-1 through III-5 implemented.
 | ECU-FR-035 | Exact lifecycle-command retries shall not increment counters or versions twice. | Replay test |
 | ECU-FR-036 | Authorized clients shall read a protocol-independent DTC-candidate projection. | OpenAPI and bridge tests |
 | ECU-FR-037 | Fault mutations shall emit minimized audit and versioned outbox evidence atomically. | Service evidence test |
+| ECU-FR-038 | ECU state shall define at most 64 typed produced or consumed signal contracts. | Schema tests |
+| ECU-FR-039 | Signal names shall be canonical and unique per direction. | Schema tests |
+| ECU-FR-040 | Signal values shall match strict declared types and optional physical bounds. | Schema and publish tests |
+| ECU-FR-041 | Signal publication shall use ECU logical time, optimistic versioning, and exact replay. | Publication service test |
+| ECU-FR-042 | Only a gateway ECU shall own a route between distinct vehicle ECUs. | Route validation tests |
+| ECU-FR-043 | A route shall connect compatible produced and consumed signals with matching type and unit. | Compatibility tests |
+| ECU-FR-044 | Route transfer shall copy the source value atomically and reject stale source or target versions. | Transfer service test |
+| ECU-FR-045 | Signal publication, route creation, and transfer shall emit versioned outbox and minimized audit evidence. | Evidence tests |
 
 ## Non-Functional Requirements
 
@@ -61,3 +69,6 @@ Status: Increments III-1 through III-5 implemented.
 | ECU-NFR-011 | Memory operations shall remain deterministic and independent of host timing. | Seeded service tests |
 | ECU-NFR-012 | Fault lifecycle behavior shall remain deterministic and independent of wall-clock timing. | Logical-clock review |
 | ECU-NFR-013 | The DTC bridge shall not import UDS types or assign diagnostic codes. | Boundary review |
+| ECU-NFR-014 | Signal contracts shall remain independent of CAN IDs, frames, DBC files, arbitration, and bus timing. | Boundary review |
+| ECU-NFR-015 | Signal values and route listings shall remain bounded. | Schema and pagination limits |
+| ECU-NFR-016 | Signal publication and routing shall not depend on wall-clock timing. | Logical-time service tests |

@@ -143,6 +143,25 @@ class EcuFaultContractError(ApplicationError):
         )
 
 
+class EcuSignalContractError(ApplicationError):
+    def __init__(self, *, reason: str) -> None:
+        super().__init__(
+            code="ecu_signal_contract_invalid",
+            message="The ECU signal operation is invalid.",
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            details={"reason": reason},
+        )
+
+
+class DuplicateEcuSignalRouteError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="ecu_signal_route_already_exists",
+            message="A signal route with this identifier already exists for the gateway ECU.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
 class ModuleCapabilityRequiredError(ApplicationError):
     def __init__(self, capability: str) -> None:
         super().__init__(

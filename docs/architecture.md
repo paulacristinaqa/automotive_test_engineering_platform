@@ -76,6 +76,12 @@ bounded occurrence or healing counters, thresholds control confirmation and heal
 faults require an explicit clear command. A read-only DTC-candidate projection exposes diagnostic
 intent without importing UDS types or assigning protocol-specific DTC numbers.
 
+Volume III-6 adds bounded, strictly typed produced and consumed signal contracts to ECU state.
+Publication uses ECU logical time and persisted replay identity. Gateway-owned routes connect
+compatible signals between distinct ECUs and copy values under source/target version checks. The
+boundary contains no CAN identifier, frame payload, DBC, arbitration, bitrate, or bus-error concept;
+Volume IV adapters will translate these semantic signals to transport-specific representations.
+
 ## Decisions
 
 1. **PostgreSQL is the system of record.** Redis is reserved for ephemeral state, caching,
