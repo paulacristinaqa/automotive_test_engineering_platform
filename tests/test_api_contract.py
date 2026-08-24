@@ -255,6 +255,16 @@ def test_ecu_aggregate_contracts_and_safe_pagination_are_published() -> None:
     assert {"get", "post"} <= set(snapshots)
     assert "post" in restore
     assert "post" in corruption
+    observe_fault = paths["/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/faults/observe"]
+    clear_fault = paths[
+        "/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/faults/{fault_code}/clear"
+    ]
+    dtc_candidates = paths[
+        "/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/faults/dtc-candidates"
+    ]
+    assert "post" in observe_fault
+    assert "post" in clear_fault
+    assert "get" in dtc_candidates
 
 
 def test_test_job_scheduler_contracts_and_safe_pagination_are_published() -> None:

@@ -12,6 +12,11 @@ from atep.ecus.schemas import (
     EcuAdvanceResponse,
     EcuBehaviorProfileResponse,
     EcuCreate,
+    EcuDtcCandidatePage,
+    EcuFault,
+    EcuFaultClearCommand,
+    EcuFaultLifecycleResponse,
+    EcuFaultObservationCommand,
     EcuMemoryChange,
     EcuMemoryCorruptionCommand,
     EcuMemoryCorruptionResponse,
@@ -29,14 +34,17 @@ from atep.ecus.schemas import (
     EcuType,
 )
 from atep.ecus.service import (
+    clear_ecu_fault,
     corrupt_ecu_memory,
     create_ecu,
     create_memory_snapshot,
+    dtc_candidates,
     ecu_state_payload,
     execute_ecu_advance,
     execute_ecu_reset,
     list_ecus,
     list_memory_snapshots,
+    observe_ecu_fault,
     replace_ecu_state,
     require_ecu,
     require_memory_snapshot,
@@ -421,3 +429,101 @@ async def corrupt_ecu_memory_endpoint(
         duplicate=duplicate,
         created_at=execution.created_at,
     )
+
+
+def fault_lifecycle_response(
+    execution: EcuSimulationCommand,
+    vehicle: Vehicle,
+    ecu: ElectronicControlUnit,
+    *,
+    duplicate: bool,
+) -> EcuFaultLifecycleResponse:
+    return EcuFaultLifecycleResponse(
+        command_id=execution.command_id,
+        vehicle_id=vehicle.identifier,
+        ecu_id=ecu.identifier,
+        transition=str(execution.result["transition"]),
+        fault=EcuFault.model_validate(execution.result["fault"]),
+        previous_version=execution.previous_version,
+        state_version=execution.state_version,
+        duplicate=duplicate,
+        created_at=execution.created_at,
+    )
+
+
+@router.post(
+    "/{ecu_id}/faults/observe",
+    response_model=EcuFaultLifecycleResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def observe_ecu_fault_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    command: EcuFaultObservationCommand,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(ecus_manage)],
+) -> EcuFaultLifecycleResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    ecu = await require_ecu(session, vehicle=vehicle, identifier=ecu_id)
+    execution, duplicate = await observe_ecu_fault(
+        session,
+        vehicle=vehicle,
+        ecu=ecu,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(execution, attribute_names=["created_at"])
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+    return fault_lifecycle_response(execution, vehicle, ecu, duplicate=duplicate)
+
+
+@router.post(
+    "/{ecu_id}/faults/{fault_code}/clear",
+    response_model=EcuFaultLifecycleResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def clear_ecu_fault_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    fault_code: str,
+    command: EcuFaultClearCommand,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(ecus_manage)],
+) -> EcuFaultLifecycleResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    ecu = await require_ecu(session, vehicle=vehicle, identifier=ecu_id)
+    canonical_code = EcuFault(code=fault_code, severity="info").code
+    execution, duplicate = await clear_ecu_fault(
+        session,
+        vehicle=vehicle,
+        ecu=ecu,
+        fault_code=canonical_code,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(execution, attribute_names=["created_at"])
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+    return fault_lifecycle_response(execution, vehicle, ecu, duplicate=duplicate)
+
+
+@router.get("/{ecu_id}/faults/dtc-candidates", response_model=EcuDtcCandidatePage)
+async def list_ecu_dtc_candidates_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(ecus_read)],
+) -> EcuDtcCandidatePage:
+    vehicle = await require_vehicle(session, vehicle_id)
+    ecu = await require_ecu(session, vehicle=vehicle, identifier=ecu_id)
+    items = dtc_candidates(ecu)
+    return EcuDtcCandidatePage(items=items, total=len(items))

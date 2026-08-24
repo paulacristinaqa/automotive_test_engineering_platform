@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from atep.audit.models import AuditRecord
 from atep.core.errors import (
     EcuExecutionStateError,
+    EcuFaultContractError,
     EcuProfileContractError,
     EcuSimulationCommandConflictError,
     EcuStateVersionConflictError,
@@ -18,6 +19,8 @@ from atep.ecus.profiles import behavior_profile, behavior_profiles
 from atep.ecus.schemas import (
     EcuAdvanceCommand,
     EcuCreate,
+    EcuFaultClearCommand,
+    EcuFaultObservationCommand,
     EcuMemoryCorruptionCommand,
     EcuResetCommand,
     EcuSnapshotCreate,
@@ -25,11 +28,14 @@ from atep.ecus.schemas import (
     EcuStateReplace,
 )
 from atep.ecus.service import (
+    clear_ecu_fault,
     corrupt_ecu_memory,
     create_ecu,
     create_memory_snapshot,
+    dtc_candidates,
     execute_ecu_advance,
     execute_ecu_reset,
+    observe_ecu_fault,
     replace_ecu_state,
     restore_memory_snapshot,
 )
@@ -640,3 +646,242 @@ async def test_seeded_memory_corruption_is_deterministic_and_idempotent() -> Non
     assert returned is execution
     assert duplicate is True
     assert current.memory == memory_after_first_execution
+
+
+@pytest.mark.asyncio
+async def test_fault_debounce_confirmation_and_healing_use_logical_time() -> None:
+    target = vehicle()
+    current = ecu()
+    current.vehicle_id = target.id
+    current.operational_state = "running"
+    current.simulation_time_ms = 1_000
+    first = EcuFaultObservationCommand(
+        command_id="fault-observe-001",
+        expected_version=1,
+        code="BATT_OVER_TEMP",
+        severity="critical",
+        detected=True,
+        confirmation_threshold=2,
+        healing_threshold=2,
+    )
+    first_session = FakeSession(current, None)
+    execution, duplicate = await observe_ecu_fault(
+        cast(AsyncSession, first_session),
+        vehicle=target,
+        ecu=current,
+        command=first,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert duplicate is False
+    assert execution.result["transition"] == "pending"
+    assert current.operational_state == "running"
+    assert current.faults[0]["first_seen_ms"] == 1_000
+    outbox = next(item for item in first_session.added if isinstance(item, OutboxEvent))
+    audit = next(item for item in first_session.added if isinstance(item, AuditRecord))
+    assert outbox.event_type == "atep.ecu.fault.lifecycle.changed.v1"
+    assert "faults" not in outbox.payload
+    assert "faults" not in audit.details
+
+    current.simulation_time_ms = 1_100
+    execution, _ = await observe_ecu_fault(
+        cast(AsyncSession, FakeSession(current, None)),
+        vehicle=target,
+        ecu=current,
+        command=first.model_copy(
+            update={"command_id": "fault-observe-002", "expected_version": 2}
+        ),
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert execution.result["transition"] == "confirmed"
+    assert current.operational_state == "fault"
+    assert current.faults[0]["confirmed_at_ms"] == 1_100
+
+    for index, expected_transition in enumerate(("healing", "healed"), start=3):
+        current.simulation_time_ms += 100
+        execution, _ = await observe_ecu_fault(
+            cast(AsyncSession, FakeSession(current, None)),
+            vehicle=target,
+            ecu=current,
+            command=first.model_copy(
+                update={
+                    "command_id": f"fault-observe-00{index}",
+                    "expected_version": index,
+                    "detected": False,
+                }
+            ),
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+        assert execution.result["transition"] == expected_transition
+    assert current.faults[0]["status"] == "healed"
+    assert current.faults[0]["active"] is False
+    assert current.operational_state == "degraded"
+
+
+@pytest.mark.asyncio
+async def test_latched_fault_requires_explicit_clear_and_replays_exactly() -> None:
+    target = vehicle()
+    current = ecu()
+    current.vehicle_id = target.id
+    command = EcuFaultObservationCommand(
+        command_id="fault-latched-001",
+        expected_version=1,
+        code="HV_ISOLATION",
+        severity="critical",
+        detected=True,
+        confirmation_threshold=1,
+        healing_threshold=1,
+        latched=True,
+    )
+    execution, _ = await observe_ecu_fault(
+        cast(AsyncSession, FakeSession(current, None)),
+        vehicle=target,
+        ecu=current,
+        command=command,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    absent = command.model_copy(
+        update={"command_id": "fault-latched-002", "expected_version": 2, "detected": False}
+    )
+    absent_execution, _ = await observe_ecu_fault(
+        cast(AsyncSession, FakeSession(current, None)),
+        vehicle=target,
+        ecu=current,
+        command=absent,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert absent_execution.result["transition"] == "latched"
+    assert current.faults[0]["active"] is True
+
+    clear = EcuFaultClearCommand(command_id="fault-clear-001", expected_version=3)
+    cleared, duplicate = await clear_ecu_fault(
+        cast(AsyncSession, FakeSession(current, None)),
+        vehicle=target,
+        ecu=current,
+        fault_code="HV_ISOLATION",
+        command=clear,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert duplicate is False
+    assert cleared.result["transition"] == "cleared"
+    returned, duplicate = await clear_ecu_fault(
+        cast(AsyncSession, FakeSession(current, cleared)),
+        vehicle=target,
+        ecu=current,
+        fault_code="HV_ISOLATION",
+        command=clear,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert returned is cleared
+    assert duplicate is True
+
+
+def test_dtc_candidate_bridge_is_protocol_independent() -> None:
+    current = ecu()
+    current.faults = [
+        {
+            "code": "BATT_OVER_TEMP",
+            "severity": "critical",
+            "status": "confirmed",
+            "active": True,
+            "occurrence_count": 3,
+            "confirmation_threshold": 2,
+            "confirmed_at_ms": 200,
+            "first_seen_ms": 100,
+            "last_seen_ms": 200,
+        }
+    ]
+    candidates = dtc_candidates(current)
+    assert len(candidates) == 1
+    assert candidates[0].source_fault_code == "BATT_OVER_TEMP"
+    assert candidates[0].confirmed_dtc is True
+    assert candidates[0].warning_indicator_requested is True
+
+
+@pytest.mark.asyncio
+async def test_active_fault_policy_cannot_change() -> None:
+    target = vehicle()
+    current = ecu(version=2)
+    current.vehicle_id = target.id
+    current.faults = [
+        {
+            "code": "BATT_OVER_TEMP",
+            "severity": "warning",
+            "status": "pending",
+            "confirmation_threshold": 3,
+            "healing_threshold": 2,
+        }
+    ]
+    with pytest.raises(EcuFaultContractError) as exc_info:
+        await observe_ecu_fault(
+            cast(AsyncSession, FakeSession(current, None)),
+            vehicle=target,
+            ecu=current,
+            command=EcuFaultObservationCommand(
+                command_id="fault-policy-001",
+                expected_version=2,
+                code="BATT_OVER_TEMP",
+                severity="critical",
+                detected=True,
+                confirmation_threshold=3,
+                healing_threshold=2,
+            ),
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+    assert exc_info.value.details == {"reason": "active fault policy cannot be changed"}
+
+
+@pytest.mark.asyncio
+async def test_absent_observation_resets_pending_confirmation_sequence() -> None:
+    target = vehicle()
+    current = ecu()
+    current.vehicle_id = target.id
+    command = EcuFaultObservationCommand(
+        command_id="fault-sequence-001",
+        expected_version=1,
+        code="BATT_TEMP_WARN",
+        severity="warning",
+        detected=True,
+        confirmation_threshold=2,
+        healing_threshold=3,
+    )
+    await observe_ecu_fault(
+        cast(AsyncSession, FakeSession(current, None)),
+        vehicle=target,
+        ecu=current,
+        command=command,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    absent = command.model_copy(
+        update={"command_id": "fault-sequence-002", "expected_version": 2, "detected": False}
+    )
+    await observe_ecu_fault(
+        cast(AsyncSession, FakeSession(current, None)),
+        vehicle=target,
+        ecu=current,
+        command=absent,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert current.faults[0]["occurrence_count"] == 0
+    detected_again = command.model_copy(
+        update={"command_id": "fault-sequence-003", "expected_version": 3}
+    )
+    execution, _ = await observe_ecu_fault(
+        cast(AsyncSession, FakeSession(current, None)),
+        vehicle=target,
+        ecu=current,
+        command=detected_again,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert execution.result["transition"] == "detected"
+    assert current.faults[0]["status"] == "pending"
