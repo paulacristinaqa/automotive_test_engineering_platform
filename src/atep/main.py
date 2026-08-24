@@ -11,6 +11,7 @@ from atep.api.health import router as health_router
 from atep.artifacts.router import router as artifacts_router
 from atep.artifacts.storage import FilesystemArtifactStore, InstrumentedArtifactStore
 from atep.audit.router import router as audit_router
+from atep.can_network.router import router as can_network_router
 from atep.core.config import get_settings
 from atep.core.errors import install_exception_handlers
 from atep.core.logging import configure_logging
@@ -111,6 +112,7 @@ app.include_router(vehicles_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(ecus_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(ecu_profiles_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(ecu_scenarios_router, prefix="/api/v1", dependencies=rate_limited)
+app.include_router(can_network_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(vehicle_gateway_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(simulation_sessions_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(test_runs_router, prefix="/api/v1", dependencies=rate_limited)

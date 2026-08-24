@@ -358,3 +358,9 @@ contracts live under an explicit version and remain backward compatible during m
 - Production follow-ups include proxy-aware client attribution, capacity tuning,
   secret-manager integration, live proxy/certificate lifecycle evidence, artifact signing, and verifiable
   build provenance.
+# Volume IV CAN Network Boundary
+
+The `atep.can_network` module owns vehicle-scoped CAN topology, classic frame identifiers, DLC,
+payload evidence, deterministic sequence, and logical bus time. It references Volume III ECUs rather
+than duplicating controller state. Arbitration, DBC encoding, CAN FD, and network fault behavior are
+explicit later increments.

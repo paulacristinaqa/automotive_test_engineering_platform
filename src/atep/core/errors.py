@@ -171,6 +171,44 @@ class EcuScenarioExecutionConflictError(ApplicationError):
         )
 
 
+class CanNetworkAlreadyExistsError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="can_network_already_exists",
+            message="The vehicle already has a CAN network.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class CanNetworkVersionConflictError(ApplicationError):
+    def __init__(self, *, current_version: int) -> None:
+        super().__init__(
+            code="can_network_version_conflict",
+            message="The CAN network was changed by another operation.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_version": current_version},
+        )
+
+
+class CanFrameCommandConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="can_frame_command_conflict",
+            message="The CAN frame command identifier was already used differently.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class CanNetworkContractError(ApplicationError):
+    def __init__(self, *, reason: str) -> None:
+        super().__init__(
+            code="can_network_contract_invalid",
+            message="The CAN network operation violates its contract.",
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            details={"reason": reason},
+        )
+
+
 class ModuleCapabilityRequiredError(ApplicationError):
     def __init__(self, capability: str) -> None:
         super().__init__(

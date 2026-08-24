@@ -13,12 +13,12 @@ networks, diagnostics, electric-powertrain behavior, automated testing, observab
 analysis, and enterprise fleet capabilities.
 
 The repository contains the executable foundation of **Volume I — Core Platform**, the completed
-bounded baseline of **Volume II — Digital Vehicle**, and the first seven implemented increments of
-**Volume III — ECU Simulator**.
+bounded baseline of **Volume II — Digital Vehicle**, the first seven implemented increments of
+**Volume III — ECU Simulator**, and the initial **Volume IV — CAN Network** baseline.
 Implemented behavior is backed by requirements, architecture decisions, migrations, automated
 tests, a disposable integration environment, and an English engineering workbook.
 
-> **Project status:** active development. Volume III, Increments III-1 through III-7 are implemented. The first
+> **Project status:** active development. Volume III is baselined and Volume IV-1 is implemented. The first
 > ATEP-to-Android-Automotive integration contract now provides a vehicle catalogue and
 > idempotent telemetry and command delivery for the Vehicle Gateway. Persistent test runs now
 > publish authenticated live WebSocket updates to CarSystemUI, which continues to isolate
@@ -68,6 +68,9 @@ An intended end-to-end scenario is:
 - coupled battery-energy, thermal, regenerative-braking, steering, suspension, and automatic
   lighting behavior with an explicit deterministic energy balance;
 - bounded multi-vehicle simulation sessions with canonical SHA-256 snapshots and isolated restore;
+- vehicle-scoped classic CAN topology with bounded ECU nodes and standard/extended frame contracts;
+- deterministic CAN frame submission with logical microsecond time, replay safety, RBAC, audit,
+  transactional events, and payload-minimized evidence;
 - capability-protected Android Automotive telemetry ingestion with idempotent retry handling;
 - persistent vehicle-scoped test runs with controlled, optimistic lifecycle transitions;
 - authenticated Redis-backed WebSocket snapshots and live test-run updates for CarSystemUI;

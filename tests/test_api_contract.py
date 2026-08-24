@@ -297,6 +297,21 @@ def test_ecu_aggregate_contracts_and_safe_pagination_are_published() -> None:
     assert scenario_parameters["offset"]["maximum"] == 1_000_000
 
 
+def test_can_network_baseline_contracts_and_safe_pagination_are_published() -> None:
+    paths = core_app.openapi()["paths"]
+    collection = paths["/api/v1/vehicles/{vehicle_id}/can-networks"]
+    frames = paths["/api/v1/vehicles/{vehicle_id}/can-networks/frames"]
+    assert {"get", "post"} <= set(collection)
+    assert {"get", "post"} <= set(frames)
+    create_schema = collection["post"]["requestBody"]["content"]["application/json"]["schema"]
+    submit_schema = frames["post"]["requestBody"]["content"]["application/json"]["schema"]
+    assert create_schema["$ref"].endswith("/CanNetworkCreate")
+    assert submit_schema["$ref"].endswith("/CanFrameSubmitCommand")
+    parameters = {item["name"]: item["schema"] for item in frames["get"]["parameters"]}
+    assert parameters["limit"]["maximum"] == 200
+    assert parameters["offset"]["maximum"] == 1_000_000
+
+
 def test_test_job_scheduler_contracts_and_safe_pagination_are_published() -> None:
     paths = core_app.openapi()["paths"]
     collection = paths["/api/v1/test-jobs"]

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from atep.artifacts import models as artifact_models  # noqa: F401
 from atep.audit import models as audit_models  # noqa: F401
+from atep.can_network import models as can_network_models  # noqa: F401
 from atep.core.config import get_settings
 from atep.db.base import Base
 from atep.ecus import models as ecu_models  # noqa: F401
