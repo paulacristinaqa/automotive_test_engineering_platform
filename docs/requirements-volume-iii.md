@@ -1,6 +1,6 @@
 # ATEP Volume III — ECU Simulator Requirements
 
-Status: Increments III-1 through III-4 implemented.
+Status: Increments III-1 through III-5 implemented.
 
 ## Functional Requirements
 
@@ -36,6 +36,13 @@ Status: Increments III-1 through III-4 implemented.
 | ECU-FR-028 | Authorized clients shall create, list, and restore bounded memory snapshots with checksums. | Snapshot service and API tests |
 | ECU-FR-029 | Memory corruption shall use an explicit seed and bounded bit-flip count. | Determinism and validation tests |
 | ECU-FR-030 | Exact corruption retries shall not mutate memory or version twice. | Command replay test |
+| ECU-FR-031 | Fault observations shall use bounded confirmation and healing thresholds. | Lifecycle service tests |
+| ECU-FR-032 | Fault timing evidence shall use the ECU logical clock. | Timestamp assertions |
+| ECU-FR-033 | Confirmed critical faults shall move the ECU to fault state. | Confirmation transition test |
+| ECU-FR-034 | Latched confirmed faults shall require an explicit clear command. | Latch and clear test |
+| ECU-FR-035 | Exact lifecycle-command retries shall not increment counters or versions twice. | Replay test |
+| ECU-FR-036 | Authorized clients shall read a protocol-independent DTC-candidate projection. | OpenAPI and bridge tests |
+| ECU-FR-037 | Fault mutations shall emit minimized audit and versioned outbox evidence atomically. | Service evidence test |
 
 ## Non-Functional Requirements
 
@@ -52,3 +59,5 @@ Status: Increments III-1 through III-4 implemented.
 | ECU-NFR-009 | Behavior state and published profile metadata shall remain bounded and JSON-compatible. | Schema limits and typed registry |
 | ECU-NFR-010 | Snapshot and corruption evidence shall avoid copying complete memory into audit details. | Audit minimization review |
 | ECU-NFR-011 | Memory operations shall remain deterministic and independent of host timing. | Seeded service tests |
+| ECU-NFR-012 | Fault lifecycle behavior shall remain deterministic and independent of wall-clock timing. | Logical-clock review |
+| ECU-NFR-013 | The DTC bridge shall not import UDS types or assign diagnostic codes. | Boundary review |

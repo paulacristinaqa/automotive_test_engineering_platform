@@ -42,6 +42,7 @@ class EcuFaultSeverity(StrEnum):
 class EcuFaultStatus(StrEnum):
     PENDING = "pending"
     CONFIRMED = "confirmed"
+    HEALED = "healed"
 
 
 class EcuMemoryCell(BaseModel):
@@ -101,6 +102,16 @@ class EcuFault(BaseModel):
     severity: EcuFaultSeverity
     status: EcuFaultStatus = EcuFaultStatus.PENDING
     description: str = Field(default="", max_length=200)
+    active: bool = True
+    latched: bool = False
+    occurrence_count: int = Field(default=1, ge=0, le=1_000_000)
+    healing_count: int = Field(default=0, ge=0, le=1_000_000)
+    confirmation_threshold: int = Field(default=2, ge=1, le=100)
+    healing_threshold: int = Field(default=1, ge=1, le=100)
+    first_seen_ms: int = Field(default=0, ge=0)
+    last_seen_ms: int = Field(default=0, ge=0)
+    confirmed_at_ms: int | None = Field(default=None, ge=0)
+    healed_at_ms: int | None = Field(default=None, ge=0)
 
     @field_validator("code")
     @classmethod
@@ -114,6 +125,23 @@ class EcuFault(BaseModel):
     @classmethod
     def strip_description(cls, value: str) -> str:
         return value.strip()
+
+    @model_validator(mode="after")
+    def keep_lifecycle_consistent(self) -> "EcuFault":
+        if self.last_seen_ms < self.first_seen_ms:
+            raise ValueError("fault last-seen time must not precede first-seen time")
+        if (
+            self.status is EcuFaultStatus.PENDING
+            and self.occurrence_count >= self.confirmation_threshold
+        ):
+            raise ValueError("a fault meeting its confirmation threshold must be confirmed")
+        if self.status is EcuFaultStatus.CONFIRMED and self.confirmed_at_ms is None:
+            self.confirmed_at_ms = self.last_seen_ms
+        if self.status is EcuFaultStatus.HEALED and (self.active or self.healed_at_ms is None):
+            raise ValueError("a healed fault must be inactive and record healed-at logical time")
+        if self.latched and self.status is EcuFaultStatus.HEALED:
+            raise ValueError("a latched fault requires explicit clearing before healing")
+        return self
 
 
 class EcuStatePayload(BaseModel):
@@ -372,3 +400,71 @@ class EcuMemoryCorruptionResponse(BaseModel):
     state_version: int
     duplicate: bool = False
     created_at: datetime
+
+
+class EcuFaultObservationCommand(BaseModel):
+    command_id: str = Field(min_length=8, max_length=64)
+    expected_version: int = Field(ge=1)
+    code: str = Field(min_length=3, max_length=32)
+    severity: EcuFaultSeverity
+    detected: bool
+    description: str = Field(default="", max_length=200)
+    confirmation_threshold: int = Field(default=2, ge=1, le=100)
+    healing_threshold: int = Field(default=2, ge=1, le=100)
+    latched: bool = False
+
+    @field_validator("command_id")
+    @classmethod
+    def validate_command_id(cls, value: str) -> str:
+        return EcuAdvanceCommand.validate_command_id(value)
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, value: str) -> str:
+        return EcuFault.validate_code(value)
+
+    @field_validator("description")
+    @classmethod
+    def strip_description(cls, value: str) -> str:
+        return value.strip()
+
+
+class EcuFaultClearCommand(BaseModel):
+    command_id: str = Field(min_length=8, max_length=64)
+    expected_version: int = Field(ge=1)
+
+    @field_validator("command_id")
+    @classmethod
+    def validate_command_id(cls, value: str) -> str:
+        return EcuAdvanceCommand.validate_command_id(value)
+
+
+class EcuFaultLifecycleResponse(BaseModel):
+    command_id: str
+    vehicle_id: str
+    ecu_id: str
+    transition: str
+    fault: EcuFault
+    previous_version: int
+    state_version: int
+    duplicate: bool = False
+    created_at: datetime
+
+
+class EcuDtcCandidate(BaseModel):
+    source_fault_code: str
+    severity: EcuFaultSeverity
+    status: EcuFaultStatus
+    test_failed: bool
+    pending_dtc: bool
+    confirmed_dtc: bool
+    warning_indicator_requested: bool
+    occurrence_count: int
+    first_seen_ms: int
+    last_seen_ms: int
+    confirmed_at_ms: int | None
+
+
+class EcuDtcCandidatePage(BaseModel):
+    items: list[EcuDtcCandidate]
+    total: int

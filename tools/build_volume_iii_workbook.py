@@ -6,8 +6,8 @@ SOURCE = workbook.ROOT / "docs" / "workbook-volume-iii.md"
 OUTPUT = workbook.ROOT / "docs" / "ATEP_Volume_III_ECU_Simulator_Engineering_Workbook.docx"
 VOLUME_NUMBER = "III"
 VOLUME_NAME = "ECU Simulator"
-DOCUMENT_VERSION = "0.4.0"
-DOCUMENT_STATUS = "Living document - Increments III-1 through III-4 implemented"
+DOCUMENT_VERSION = "0.5.0"
+DOCUMENT_STATUS = "Living document - Increments III-1 through III-5 implemented"
 BASELINE_DATE = "24 August 2026"
 
 

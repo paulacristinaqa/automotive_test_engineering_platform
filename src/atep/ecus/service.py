@@ -10,6 +10,7 @@ from atep.audit.service import record_audit
 from atep.core.errors import (
     DuplicateEcuIdentifierError,
     EcuExecutionStateError,
+    EcuFaultContractError,
     EcuMemoryContractError,
     EcuProfileContractError,
     EcuSimulationCommandConflictError,
@@ -21,6 +22,12 @@ from atep.ecus.profiles import behavior_profile, execute_profile_transitions
 from atep.ecus.schemas import (
     EcuAdvanceCommand,
     EcuCreate,
+    EcuDtcCandidate,
+    EcuFault,
+    EcuFaultClearCommand,
+    EcuFaultObservationCommand,
+    EcuFaultSeverity,
+    EcuFaultStatus,
     EcuMemoryCorruptionCommand,
     EcuMemoryRegion,
     EcuMemoryRegionKind,
@@ -693,6 +700,291 @@ async def corrupt_ecu_memory(
         details={**evidence, "seed": command.seed, "bit_flips": command.bit_flips},
     )
     return execution, False
+
+
+async def observe_ecu_fault(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    ecu: ElectronicControlUnit,
+    command: EcuFaultObservationCommand,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> tuple[EcuSimulationCommand, bool]:
+    locked = await require_ecu(
+        session, vehicle=vehicle, identifier=ecu.identifier, for_update=True
+    )
+    request_payload = command.model_dump(mode="json")
+    existing_command = await _existing_simulation_command(
+        session, ecu=locked, command_id=command.command_id
+    )
+    if existing_command is not None:
+        if (
+            existing_command.kind == "fault_observation"
+            and existing_command.request == request_payload
+        ):
+            return existing_command, True
+        raise EcuSimulationCommandConflictError()
+    if command.expected_version != locked.version:
+        raise EcuStateVersionConflictError(current_version=locked.version)
+
+    faults = [EcuFault.model_validate(item) for item in locked.faults]
+    current = next((item for item in faults if item.code == command.code), None)
+    if current is not None and current.status is not EcuFaultStatus.HEALED:
+        policy = (
+            current.severity,
+            current.confirmation_threshold,
+            current.healing_threshold,
+            current.latched,
+        )
+        requested_policy = (
+            command.severity,
+            command.confirmation_threshold,
+            command.healing_threshold,
+            command.latched,
+        )
+        if policy != requested_policy:
+            raise EcuFaultContractError(reason="active fault policy cannot be changed")
+    if current is None and not command.detected:
+        raise EcuFaultContractError(reason="cannot heal an unknown fault")
+
+    now_ms = locked.simulation_time_ms
+    transition = "observed_absent"
+    if current is None or current.status is EcuFaultStatus.HEALED:
+        if not command.detected:
+            raise EcuFaultContractError(reason="a healed fault requires a new detection")
+        occurrence_count = 1
+        confirmed = occurrence_count >= command.confirmation_threshold
+        current = EcuFault(
+            code=command.code,
+            severity=command.severity,
+            status=EcuFaultStatus.CONFIRMED if confirmed else EcuFaultStatus.PENDING,
+            description=command.description,
+            active=True,
+            latched=command.latched,
+            occurrence_count=occurrence_count,
+            healing_count=0,
+            confirmation_threshold=command.confirmation_threshold,
+            healing_threshold=command.healing_threshold,
+            first_seen_ms=now_ms,
+            last_seen_ms=now_ms,
+            confirmed_at_ms=now_ms if confirmed else None,
+        )
+        faults = [item for item in faults if item.code != command.code] + [current]
+        transition = "confirmed" if confirmed else "pending"
+    elif command.detected:
+        occurrence_count = current.occurrence_count + 1
+        confirmed = (
+            current.status is EcuFaultStatus.CONFIRMED
+            or occurrence_count >= current.confirmation_threshold
+        )
+        transition = (
+            "confirmed"
+            if confirmed and current.status is not EcuFaultStatus.CONFIRMED
+            else "detected"
+        )
+        current = current.model_copy(
+            update={
+                "status": EcuFaultStatus.CONFIRMED if confirmed else EcuFaultStatus.PENDING,
+                "active": True,
+                "occurrence_count": occurrence_count,
+                "healing_count": 0,
+                "last_seen_ms": now_ms,
+                "confirmed_at_ms": now_ms if transition == "confirmed" else current.confirmed_at_ms,
+                "healed_at_ms": None,
+            }
+        )
+        faults = [current if item.code == command.code else item for item in faults]
+    else:
+        healing_count = current.healing_count + 1
+        may_heal = not (current.latched and current.status is EcuFaultStatus.CONFIRMED)
+        healed = may_heal and healing_count >= current.healing_threshold
+        transition = "healed" if healed else ("latched" if not may_heal else "healing")
+        current = current.model_copy(
+            update={
+                "status": EcuFaultStatus.HEALED if healed else current.status,
+                "active": not healed,
+                "occurrence_count": (
+                    0 if current.status is EcuFaultStatus.PENDING else current.occurrence_count
+                ),
+                "healing_count": healing_count,
+                "healed_at_ms": now_ms if healed else None,
+            }
+        )
+        faults = [current if item.code == command.code else item for item in faults]
+
+    previous_version = locked.version
+    locked.faults = [item.model_dump(mode="json") for item in faults]
+    _apply_fault_operational_state(locked, faults)
+    locked.version += 1
+    result = {"transition": transition, "fault": current.model_dump(mode="json")}
+    execution = EcuSimulationCommand(
+        ecu_id=locked.id,
+        command_id=command.command_id,
+        kind="fault_observation",
+        request=request_payload,
+        result=result,
+        previous_version=previous_version,
+        state_version=locked.version,
+        previous_time_ms=now_ms,
+        simulation_time_ms=now_ms,
+        requested_by_user_id=actor_user_id,
+    )
+    session.add(execution)
+    await session.flush()
+    _record_fault_evidence(
+        session,
+        execution=execution,
+        ecu=locked,
+        vehicle=vehicle,
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id,
+    )
+    return execution, False
+
+
+async def clear_ecu_fault(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    ecu: ElectronicControlUnit,
+    fault_code: str,
+    command: EcuFaultClearCommand,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> tuple[EcuSimulationCommand, bool]:
+    locked = await require_ecu(
+        session, vehicle=vehicle, identifier=ecu.identifier, for_update=True
+    )
+    request_payload = {**command.model_dump(mode="json"), "fault_code": fault_code}
+    existing_command = await _existing_simulation_command(
+        session, ecu=locked, command_id=command.command_id
+    )
+    if existing_command is not None:
+        if existing_command.kind == "fault_clear" and existing_command.request == request_payload:
+            return existing_command, True
+        raise EcuSimulationCommandConflictError()
+    if command.expected_version != locked.version:
+        raise EcuStateVersionConflictError(current_version=locked.version)
+    faults = [EcuFault.model_validate(item) for item in locked.faults]
+    current = next((item for item in faults if item.code == fault_code), None)
+    if current is None:
+        raise EcuFaultContractError(reason="cannot clear an unknown fault")
+    if current.status is EcuFaultStatus.HEALED:
+        raise EcuFaultContractError(reason="fault is already healed")
+    now_ms = locked.simulation_time_ms
+    current = current.model_copy(
+        update={
+            "status": EcuFaultStatus.HEALED,
+            "active": False,
+            "latched": False,
+            "healed_at_ms": now_ms,
+        }
+    )
+    faults = [current if item.code == fault_code else item for item in faults]
+    previous_version = locked.version
+    locked.faults = [item.model_dump(mode="json") for item in faults]
+    _apply_fault_operational_state(locked, faults)
+    locked.version += 1
+    result = {"transition": "cleared", "fault": current.model_dump(mode="json")}
+    execution = EcuSimulationCommand(
+        ecu_id=locked.id,
+        command_id=command.command_id,
+        kind="fault_clear",
+        request=request_payload,
+        result=result,
+        previous_version=previous_version,
+        state_version=locked.version,
+        previous_time_ms=now_ms,
+        simulation_time_ms=now_ms,
+        requested_by_user_id=actor_user_id,
+    )
+    session.add(execution)
+    await session.flush()
+    _record_fault_evidence(
+        session,
+        execution=execution,
+        ecu=locked,
+        vehicle=vehicle,
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id,
+    )
+    return execution, False
+
+
+def dtc_candidates(ecu: ElectronicControlUnit) -> list[EcuDtcCandidate]:
+    return [
+        EcuDtcCandidate(
+            source_fault_code=fault.code,
+            severity=fault.severity,
+            status=fault.status,
+            test_failed=fault.active,
+            pending_dtc=fault.status in {EcuFaultStatus.PENDING, EcuFaultStatus.CONFIRMED},
+            confirmed_dtc=fault.status is EcuFaultStatus.CONFIRMED,
+            warning_indicator_requested=(
+                fault.active and fault.severity is EcuFaultSeverity.CRITICAL
+            ),
+            occurrence_count=fault.occurrence_count,
+            first_seen_ms=fault.first_seen_ms,
+            last_seen_ms=fault.last_seen_ms,
+            confirmed_at_ms=fault.confirmed_at_ms,
+        )
+        for fault in sorted(
+            (EcuFault.model_validate(item) for item in ecu.faults), key=lambda item: item.code
+        )
+    ]
+
+
+def _apply_fault_operational_state(
+    ecu: ElectronicControlUnit, faults: list[EcuFault]
+) -> None:
+    critical = any(
+        fault.active
+        and fault.severity is EcuFaultSeverity.CRITICAL
+        and fault.status is EcuFaultStatus.CONFIRMED
+        for fault in faults
+    )
+    if critical:
+        ecu.operational_state = EcuOperationalState.FAULT.value
+    elif ecu.operational_state == EcuOperationalState.FAULT.value:
+        ecu.operational_state = EcuOperationalState.DEGRADED.value
+
+
+def _record_fault_evidence(
+    session: AsyncSession,
+    *,
+    execution: EcuSimulationCommand,
+    ecu: ElectronicControlUnit,
+    vehicle: Vehicle,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> None:
+    evidence = {
+        **_simulation_evidence(execution, ecu, vehicle),
+        "fault_code": execution.result["fault"]["code"],
+        "transition": execution.result["transition"],
+        "status": execution.result["fault"]["status"],
+        "active": execution.result["fault"]["active"],
+        "occurrence_count": execution.result["fault"]["occurrence_count"],
+        "healing_count": execution.result["fault"]["healing_count"],
+    }
+    enqueue_event(
+        session,
+        event_type="atep.ecu.fault.lifecycle.changed.v1",
+        aggregate_type="ecu",
+        aggregate_id=ecu.id,
+        payload=evidence,
+        correlation_id=correlation_id,
+    )
+    record_audit(
+        session,
+        actor_user_id=actor_user_id,
+        action="ecu.fault_lifecycle_changed",
+        resource_type="ecu",
+        resource_id=ecu.id,
+        correlation_id=correlation_id,
+        details=evidence,
+    )
 
 
 async def _existing_simulation_command(

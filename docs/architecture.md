@@ -58,8 +58,8 @@ creating parallel controller models.
 
 Each ECU now owns a monotonic logical clock and bounded cyclic-task definitions. Advance commands use
 period arithmetic to summarize due work without wall-clock sleep or per-cycle storage. Reset commands
-have fixed logical durations, persist replay identity, increment a boot counter, and deliberately
-preserve memory and faults until the III-4 memory-region contract is defined.
+have fixed logical durations, persist replay identity, increment a boot counter, and apply the
+defined memory-region persistence rules while preserving fault records.
 
 Volume III-3 adds an immutable, versioned behavior-profile registry above that clock. A profile owns
 allowed task schedules, bounded initial state, and deterministic counter transitions for one ECU
@@ -70,6 +70,11 @@ Volume III-4 divides the sparse 16-bit memory map into explicit volatile and non
 Reset semantics operate on region metadata, while snapshots preserve bounded sparse cells with a
 canonical checksum. Corruption uses a caller-provided seed and the persisted simulation-command
 identity, so fault campaigns are reproducible and exact retries cannot apply changes twice.
+
+Volume III-5 adds a logical-time fault lifecycle within the ECU aggregate. Observations increment
+bounded occurrence or healing counters, thresholds control confirmation and healing, and latched
+faults require an explicit clear command. A read-only DTC-candidate projection exposes diagnostic
+intent without importing UDS types or assigning protocol-specific DTC numbers.
 
 ## Decisions
 

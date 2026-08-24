@@ -133,6 +133,16 @@ class EcuMemoryContractError(ApplicationError):
         )
 
 
+class EcuFaultContractError(ApplicationError):
+    def __init__(self, *, reason: str) -> None:
+        super().__init__(
+            code="ecu_fault_contract_invalid",
+            message="The ECU fault lifecycle operation is invalid.",
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            details={"reason": reason},
+        )
+
+
 class ModuleCapabilityRequiredError(ApplicationError):
     def __init__(self, capability: str) -> None:
         super().__init__(

@@ -1,6 +1,6 @@
 # ATEP Volume III — ECU Simulator Engineering Workbook
 
-**Document status:** Living document — Increments III-1 through III-4 implemented
+**Document status:** Living document — Increments III-1 through III-5 implemented
 **Language:** English
 **Last updated:** 2026-08-24
 **Repository:** `paulacristinaqa/automotive_test_engineering_platform`
@@ -16,7 +16,7 @@ maintainable technical record for future ECU, CAN, and diagnostics development.
 | Field | Value |
 |---|---|
 | Volume | III — ECU Simulator |
-| Baseline | Increments III-1 through III-4 |
+| Baseline | Increments III-1 through III-5 |
 | Architecture style | Modular monolith with transactional domain services |
 | Primary runtime | Python 3.12, FastAPI, SQLAlchemy, PostgreSQL |
 | Quality gates | pytest, Ruff, strict mypy, Alembic migration checks |
@@ -29,6 +29,7 @@ maintainable technical record for future ECU, CAN, and diagnostics development.
 | 0.2.0 | 2026-08-24 | Added logical time, cyclic scheduling, reset modes, replay evidence, APIs, and tests. |
 | 0.3.0 | 2026-08-24 | Added versioned behavior profiles, profile APIs, deterministic state transitions, migration, and tests. |
 | 0.4.0 | 2026-08-24 | Added memory regions, reset persistence, snapshots, seeded corruption, APIs, migration, and tests. |
+| 0.5.0 | 2026-08-24 | Added logical-time fault lifecycle, debounce, healing, latching, clear, DTC projection, APIs, and tests. |
 
 ## 4. Scope and Boundaries
 
@@ -36,8 +37,8 @@ maintainable technical record for future ECU, CAN, and diagnostics development.
 
 - ECU identity unique within a vehicle.
 - Nine initial ECU types and six lifecycle states.
-- Bounded byte-addressable memory cells.
-- Explicit, typed, and bounded fault records.
+- Bounded memory with volatile/non-volatile regions, snapshots, and seeded corruption.
+- Bounded fault records with logical-time confirmation, healing, latching, clear, and DTC intent.
 - Optimistic state versioning and idempotent exact retries.
 - Nested REST APIs, safe pagination, and type filtering.
 - Independent read/manage permissions.
@@ -45,15 +46,14 @@ maintainable technical record for future ECU, CAN, and diagnostics development.
 - Per-ECU logical time, cyclic task schedules, and boot counters.
 - Idempotent advance/reset commands with persisted execution evidence.
 - Versioned profiles with allowed schedules, bounded initial state, and deterministic transitions.
-- Volatile/non-volatile regions, checksummed snapshots, and seeded corruption evidence.
 
 ### 4.2 Deferred
 
 - Firmware or instruction execution.
 - CAN, CAN FD, LIN, Ethernet, and gateway routing.
-- UDS/OBD-II services, DTC aging, security access, and flashing.
+- UDS/OBD-II services, assigned DTC numbers, status-byte aging, security access, and flashing.
 - Full binary firmware images and unrestricted memory dumps.
-- Time-based fault injection and healing.
+- Autonomous sensor-condition evaluation and fault injection campaigns.
 
 ## 5. Architecture
 
@@ -71,7 +71,8 @@ An ECU contains `vehicle_id`, `identifier`, `display_name`, `ecu_type`, `operati
 `version`, and
 timestamps. Memory has at most 256
 cells, each with a 16-bit address and an
-8-bit value. Faults have a canonical code, severity, pending/confirmed status, and description.
+8-bit value. Faults have a canonical code, severity, pending/confirmed/healed status, description,
+bounded debounce counters, logical timestamps, thresholds, active state, and latch policy.
 
 The lifecycle contains offline, booting, running, degraded, fault, and shutdown. A confirmed critical
 fault cannot coexist with a non-fault lifecycle state. This protects the simulator from representing
@@ -95,6 +96,9 @@ smaller than its period. A maximum of 32 tasks keeps configuration and execution
 | POST/GET | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/memory/snapshots` | `ecus:manage` / `ecus:read` | Create or list memory snapshots. |
 | POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/memory/snapshots/{snapshot_id}/restore` | `ecus:manage` | Restore a versioned snapshot. |
 | POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/memory/corrupt` | `ecus:manage` | Apply deterministic seeded bit flips. |
+| POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/faults/observe` | `ecus:manage` | Record one detected or absent observation. |
+| POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/faults/{fault_code}/clear` | `ecus:manage` | Explicitly clear an active fault. |
+| GET | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/faults/dtc-candidates` | `ecus:read` | Read diagnostic-intent projections. |
 
 The Android Automotive client continues to access only the public ATEP API. It never connects to
 PostgreSQL or RabbitMQ directly. Stable errors include `ecu_not_found`,
@@ -133,11 +137,25 @@ value while retaining non-volatile cells. Snapshots contain no more than 256 cel
 canonical SHA-256 checksum. Audit records store checksum and counts rather than full memory images.
 Seeded corruption flips a bounded number of bits and persists command identity for exact replay.
 
+### 8.4 Fault Lifecycle and Diagnostic Intent
+
+Each observation is evaluated at the ECU's current logical time. Consecutive detections increment
+the occurrence counter and confirm the fault at its configured threshold. Consecutive absences
+increment the healing counter and heal non-latched faults at their configured threshold. Confirmed
+critical faults force the ECU into fault state; after the final critical fault heals or is cleared,
+the ECU moves to degraded state for explicit recovery handling.
+
+Latched confirmed faults ignore automatic healing and require an explicit clear command. Observation
+and clear commands persist command identity, so exact retries do not mutate counters or versions
+twice. Audit and outbox evidence includes the transition, code, status, and bounded counts, not the
+complete fault collection. DTC candidates express diagnostic intent but deliberately contain no UDS
+types or assigned DTC numbers.
+
 ## 9. Functional Requirements
 
 The authoritative catalogue is `docs/requirements-volume-iii.md`. III-1 covers the aggregate, III-2
-covers deterministic execution and reset, III-3 covers versioned profiles, and III-4 covers memory
-regions, snapshots, persistence, and corruption.
+covers deterministic execution and reset, III-3 covers versioned profiles, III-4 covers memory
+regions, snapshots, persistence, and corruption, and III-5 covers fault lifecycle and DTC intent.
 
 ## 10. Architecture Decisions
 
@@ -189,6 +207,16 @@ portable across ECU types.
 Canonical checksums identify snapshot content without copying complete memory into audit logs. An
 explicit corruption seed, bounded flip count, optimistic version, and persisted command ID make
 fault injection repeatable and retry-safe.
+
+### ADR-ECU-010 — Use Logical-Time Observations for Fault Debounce
+
+Wall-clock timers make simulations host-dependent. Explicit detected/absent observations evaluated
+against bounded thresholds at the ECU logical time make confirmation and healing reproducible.
+
+### ADR-ECU-011 — Keep the DTC Bridge Protocol-Independent
+
+The ECU owns fault truth, while Diagnostics will own UDS identifiers, status bytes, and services.
+Publishing diagnostic intent prevents both domains from creating competing fault representations.
 
 ## 11. Verification Catalogue
 
@@ -257,6 +285,21 @@ fault injection repeatable and retry-safe.
 | Corruption replay | Avoid applying an exact command twice. | Service |
 | Memory RBAC and OpenAPI | Publish protected, typed memory endpoints. | Contract/integration |
 
+## 11.4 III-5 Verification
+
+| Test | Objective | Level |
+|---|---|---|
+| Confirmation debounce | Confirm only when the configured detection threshold is reached. | Service |
+| Healing debounce | Heal only after the configured consecutive-absence threshold. | Service |
+| Logical timestamps | Derive first-seen, last-seen, confirmed, and healed evidence from ECU time. | Service |
+| Critical transition | Move an ECU to fault state when a critical fault confirms. | Service |
+| Latched absence | Preserve an active confirmed latch despite absent observations. | Service |
+| Explicit clear | Heal and unlatch a fault only through an authorized clear command. | Service/API |
+| Exact replay | Avoid incrementing lifecycle counters or versions twice. | Service |
+| Policy conflict | Reject policy changes while one fault activation is active. | Service/API |
+| DTC projection | Publish protocol-independent diagnostic intent without UDS coupling. | Unit/contract |
+| Fault RBAC and OpenAPI | Publish protected, typed lifecycle endpoints. | Contract/integration |
+
 ## 12. Implemented Evidence
 
 - `src/atep/ecus/` contains models, schemas, services, and routers.
@@ -266,6 +309,7 @@ fault injection repeatable and retry-safe.
 - Events are `atep.ecu.created.v1` and `atep.ecu.state.updated.v1`.
 - Simulation events are `atep.ecu.simulation.advanced.v1` and `atep.ecu.reset.completed.v1`.
 - Memory events cover snapshot creation/restoration and deterministic corruption.
+- Fault events use `atep.ecu.fault.lifecycle.changed.v1` for observation and explicit-clear evidence.
 - Automated tests cover validation, atomic evidence, concurrency, idempotency, permissions, and API contracts.
 
 ## 13. Risks and Technical Debt
@@ -275,12 +319,13 @@ fault injection repeatable and retry-safe.
 - Coordination profiles for door, ADAS, climate, and lighting intentionally share a baseline and
   need specialization in later scenario-driven work.
 - Snapshot retention limits and deletion policy require an enterprise storage decision.
-- Fault-to-DTC mapping belongs to the Diagnostics boundary and is not implemented here.
+- Actual DTC identifiers, status-byte semantics, and aging belong to the Diagnostics boundary.
 
 ## 14. Roadmap
 
-The next increment adds fault activation lifecycle, debouncing, latching, healing, and a future DTC
-bridge. Later increments add CAN contracts and multi-ECU scenarios. See `docs/roadmap-volume-iii.md`.
+The next increment adds CAN production/consumption contracts and gateway routing hooks without
+embedding a bus implementation. Later increments add multi-ECU scenarios. See
+`docs/roadmap-volume-iii.md`.
 
 ## 15. Study Exercises
 
@@ -297,3 +342,6 @@ bridge. Later increments add CAN contracts and multi-ECU scenarios. See `docs/ro
 11. Model RAM and EEPROM regions for a BMS ECU and predict each reset mode's result.
 12. Explain why snapshot audits contain checksums and counts instead of the complete memory image.
 13. Design a corruption campaign that remains reproducible across CI machines.
+14. Trace three detected observations and two absent observations through configurable thresholds.
+15. Explain why a latched confirmed fault cannot heal from an absent observation alone.
+16. Map a DTC candidate to future UDS responsibilities without assigning a DTC number in the ECU.

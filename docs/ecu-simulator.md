@@ -47,9 +47,9 @@ clock twice. Successful advances emit `atep.ecu.simulation.advanced.v1`.
 
 `POST .../reset` supports soft, hard, and power-cycle modes with fixed logical durations of 10, 100,
 and 500 milliseconds. A reset increments `boot_count`, advances logical time, and returns the ECU to
-offline unless a confirmed critical fault requires it to remain in fault state. Memory and faults are
-preserved deliberately until volatile/non-volatile regions are defined in III-4. Successful resets
-emit `atep.ecu.reset.completed.v1`.
+offline unless a confirmed critical fault requires it to remain in fault state. Soft reset preserves
+memory; hard and power-cycle reset restore volatile cells and retain non-volatile cells. Faults are
+preserved. Successful resets emit `atep.ecu.reset.completed.v1`.
 
 ## Versioned Behavior Profiles
 
@@ -82,8 +82,25 @@ and a canonical SHA-256 checksum. Snapshot audit and events contain counts and c
 memory image. Seeded corruption flips 1 to 32 bits in selected initialized regions and persists its
 command identity, making exact retries safe and results reproducible.
 
+## Fault Lifecycle and DTC Bridge
+
+`POST .../faults/observe` records a detected or absent observation at the ECU's current logical
+time. Consecutive detections promote a pending fault to confirmed at its configured threshold;
+consecutive absences heal a non-latched fault at its healing threshold. Confirmed critical faults
+move the ECU to fault state. Latched confirmed faults remain active until `POST
+.../faults/{fault_code}/clear` is executed explicitly.
+
+Both commands use optimistic versions and persisted command IDs. Exact retries do not increment
+counters or versions twice. Lifecycle evidence is minimized and published as
+`atep.ecu.fault.lifecycle.changed.v1` in the same transaction as the aggregate and audit record.
+
+`GET .../faults/dtc-candidates` returns a protocol-independent projection containing pending,
+confirmed, test-failed, and warning-indicator intent. The Diagnostics volume will own actual UDS DTC
+numbers, aging rules, storage status bytes, and diagnostic services.
+
 ## Current Limits
 
-This baseline does not execute ECU firmware, model non-volatile memory, emit CAN frames, expose UDS
-services, or inject faults over time. Those capabilities are planned as
-separate increments so their timing and protocol contracts can be tested independently.
+This baseline does not execute ECU firmware, emit CAN frames, expose UDS services, or assign actual
+DTC numbers. Fault observations are explicit commands rather than autonomous sensor-condition
+evaluation. Those capabilities remain separate so timing and protocol contracts can be tested
+independently.
