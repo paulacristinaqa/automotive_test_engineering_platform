@@ -1,8 +1,8 @@
 # ATEP Volume III — ECU Simulator Engineering Workbook
 
-**Document status:** Living document — Increment III-1 implemented  
-**Language:** English  
-**Last updated:** 2026-08-24  
+**Document status:** Living document — Increments III-1 and III-2 implemented
+**Language:** English
+**Last updated:** 2026-08-24
 **Repository:** `paulacristinaqa/automotive_test_engineering_platform`
 
 ## 1. Document Purpose
@@ -16,7 +16,7 @@ maintainable technical record for future ECU, CAN, and diagnostics development.
 | Field | Value |
 |---|---|
 | Volume | III — ECU Simulator |
-| Baseline | Increment III-1 |
+| Baseline | Increments III-1 and III-2 |
 | Architecture style | Modular monolith with transactional domain services |
 | Primary runtime | Python 3.12, FastAPI, SQLAlchemy, PostgreSQL |
 | Quality gates | pytest, Ruff, strict mypy, Alembic migration checks |
@@ -26,6 +26,7 @@ maintainable technical record for future ECU, CAN, and diagnostics development.
 | Release | Date | Change |
 |---|---|---|
 | 0.1.0 | 2026-08-24 | Added ECU aggregate, lifecycle, memory, faults, API, RBAC, audit, outbox, migration, and tests. |
+| 0.2.0 | 2026-08-24 | Added logical time, cyclic scheduling, reset modes, replay evidence, APIs, and tests. |
 
 ## 4. Scope and Boundaries
 
@@ -39,14 +40,15 @@ maintainable technical record for future ECU, CAN, and diagnostics development.
 - Nested REST APIs, safe pagination, and type filtering.
 - Independent read/manage permissions.
 - Transactional audit and outbox evidence.
+- Per-ECU logical time, cyclic task schedules, and boot counters.
+- Idempotent advance/reset commands with persisted execution evidence.
 
 ### 4.2 Deferred
 
 - Firmware or instruction execution.
-- Logical execution cycles and task scheduling.
 - CAN, CAN FD, LIN, Ethernet, and gateway routing.
 - UDS/OBD-II services, DTC aging, security access, and flashing.
-- Persistent memory regions and reset semantics.
+- Persistent memory regions and reset persistence semantics.
 - Time-based fault injection and healing.
 
 ## 5. Architecture
@@ -61,12 +63,16 @@ PostgreSQL aggregate + audit record + transactional outbox event → HTTP respon
 ## 6. Domain Model
 
 An ECU contains `vehicle_id`, `identifier`, `display_name`, `ecu_type`, `operational_state`, `memory`,
-`faults`, `version`, and timestamps. Memory has at most 256 cells, each with a 16-bit address and an
+`faults`, cyclic tasks, logical time, boot count, `version`, and timestamps. Memory has at most 256
+cells, each with a 16-bit address and an
 8-bit value. Faults have a canonical code, severity, pending/confirmed status, and description.
 
 The lifecycle contains offline, booting, running, degraded, fault, and shutdown. A confirmed critical
 fault cannot coexist with a non-fault lifecycle state. This protects the simulator from representing
 an obviously contradictory safety state.
+
+Each cyclic task has a unique canonical ID, a period from 1 to 60,000 milliseconds, and an offset
+smaller than its period. A maximum of 32 tasks keeps configuration and execution evidence bounded.
 
 ## 7. Public API and Security
 
@@ -76,6 +82,8 @@ an obviously contradictory safety state.
 | GET | `/api/v1/vehicles/{vehicle_id}/ecus` | `ecus:read` | List and filter ECUs. |
 | GET | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}` | `ecus:read` | Retrieve one ECU. |
 | PUT | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/state` | `ecus:manage` | Replace versioned ECU state. |
+| POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/simulation/advance` | `ecus:manage` | Advance logical time and summarize due tasks. |
+| POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/reset` | `ecus:manage` | Execute a deterministic reset mode. |
 
 The Android Automotive client continues to access only the public ATEP API. It never connects to
 PostgreSQL or RabbitMQ directly. Stable errors include `ecu_not_found`,
@@ -88,10 +96,20 @@ State mutation locks the ECU row and compares `expected_version`. Exact replay o
 is accepted as idempotent; a different stale state is rejected. Audit evidence records counts and
 identity but excludes complete memory and fault payloads to reduce sensitive or excessive logging.
 
+### 8.1 Deterministic Scheduling and Reset
+
+The scheduler counts due executions over `(previous_time, new_time]` using arithmetic, not loops over
+every millisecond, and never real-time sleep. Each result reports count and first and last due times
+per task. Response size therefore follows configured task count rather than elapsed cycles.
+
+Reset durations are fixed: soft 10 ms, hard 100 ms, and power cycle 500 ms. Reset increments the boot
+counter, advances logical time, and becomes offline unless a confirmed critical fault requires fault
+state. Memory and faults remain unchanged pending the III-4 memory-region model.
+
 ## 9. Functional Requirements
 
-The authoritative catalogue is `docs/requirements-volume-iii.md`. III-1 covers ownership, uniqueness,
-retrieval, bounded state, consistency invariants, optimistic concurrency, RBAC, events, and audit.
+The authoritative catalogue is `docs/requirements-volume-iii.md`. III-1 covers the aggregate and III-2
+covers logical time, cyclic schedules, reset modes, replay, lifecycle guards, events, and audit.
 
 ## 10. Architecture Decisions
 
@@ -114,6 +132,16 @@ traceable inputs for later DTC, diagnostics, test generation, and root-cause ana
 
 One versioned command gives deterministic conflict behavior and atomic evidence. Fine-grained memory
 and fault commands can be introduced later when their timing semantics are defined.
+
+### ADR-ECU-005 — Use Logical Time and Aggregated Schedule Evidence
+
+Wall-clock scheduling would make tests slow and nondeterministic. Arithmetic task summaries provide
+due-cycle evidence with bounded storage and no dependency on host performance.
+
+### ADR-ECU-006 — Preserve State Until Memory Regions Exist
+
+Clearing state before defining volatile and non-volatile regions would invent behavior. III-2 records
+reset mode, duration, boot count, and preservation; III-4 will own persistence semantics.
 
 ## 11. Verification Catalogue
 
@@ -139,12 +167,27 @@ and fault commands can be introduced later when their timing semantics are defin
 | OpenAPI publication | Prove paths, schemas, filters, and safe limits are published. | Contract |
 | Migration upgrade/downgrade | Prove schema lifecycle on PostgreSQL. | Integration |
 
+## 11.1 III-2 Verification
+
+| Test | Objective | Level |
+|---|---|---|
+| Deterministic schedule | Reproduce task counts and due boundaries from the same inputs. | Service |
+| Large advance bound | Keep output proportional to tasks rather than elapsed cycles. | Service |
+| Offline execution rejection | Prevent cyclic execution outside running/degraded states. | Service/API |
+| Advance exact retry | Prevent logical time and version from advancing twice. | Service |
+| Command-ID conflict | Reject reuse of an ID with a different command. | Service/API |
+| Reset duration matrix | Verify fixed soft, hard, and power-cycle durations. | Unit/service |
+| Reset preservation | Prove memory and faults remain unchanged in III-2. | Service |
+| Reset boot counter | Increment boot count exactly once, including after retry. | Service |
+| Critical reset invariant | Keep fault state while a confirmed critical fault remains. | Service |
+
 ## 12. Implemented Evidence
 
 - `src/atep/ecus/` contains models, schemas, services, and routers.
-- Migration `0018_ecu_aggregate` owns the database schema.
+- Migrations `0018_ecu_aggregate` and `0019_ecu_execution_clock` own the database schema.
 - Permission catalogue contains `ecus:read` and `ecus:manage`.
 - Events are `atep.ecu.created.v1` and `atep.ecu.state.updated.v1`.
+- Simulation events are `atep.ecu.simulation.advanced.v1` and `atep.ecu.reset.completed.v1`.
 - Automated tests cover validation, atomic evidence, concurrency, idempotency, permissions, and API contracts.
 
 ## 13. Risks and Technical Debt
@@ -157,9 +200,9 @@ and fault commands can be introduced later when their timing semantics are defin
 
 ## 14. Roadmap
 
-The next increment adds a deterministic logical clock, cyclic tasks, and reset semantics without
-wall-clock sleeps. Later increments add ECU profiles, memory regions, fault lifecycle, CAN contracts,
-and multi-ECU scenarios. See `docs/roadmap-volume-iii.md`.
+The next increment adds ECU-specific behavior profiles on top of the deterministic task clock. Later
+increments add memory regions, fault lifecycle, CAN contracts, and multi-ECU scenarios. See
+`docs/roadmap-volume-iii.md`.
 
 ## 15. Study Exercises
 
@@ -168,10 +211,5 @@ and multi-ECU scenarios. See `docs/roadmap-volume-iii.md`.
 3. Add a schema test for the 257th memory cell and interpret the global validation response.
 4. Design reset behavior for volatile and non-volatile memory without implementing it.
 5. Propose how a BMS ECU fault should later become a UDS DTC without coupling the two modules.
-
-## 16. Workbook Maintenance Checklist
-
-- Update requirement status and evidence with every increment.
-- Add each architecture decision before introducing its implementation dependency.
-- Record public event names and stable errors.
-- Keep test objectives aligned with automated test names.
+6. Calculate the due times for a 100 ms task with a 20 ms offset over two consecutive advances.
+7. Explain why III-2 reset preserves memory and how III-4 can refine that contract safely.

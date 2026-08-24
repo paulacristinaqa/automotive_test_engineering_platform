@@ -235,6 +235,14 @@ def test_ecu_aggregate_contracts_and_safe_pagination_are_published() -> None:
     assert parameters["limit"]["maximum"] == 100
     assert parameters["offset"]["maximum"] == 1_000_000
     assert "ecu_type" in parameters
+    advance = paths["/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/simulation/advance"]
+    reset = paths["/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/reset"]
+    assert "post" in advance
+    assert "post" in reset
+    advance_schema = advance["post"]["requestBody"]["content"]["application/json"]["schema"]
+    reset_schema = reset["post"]["requestBody"]["content"]["application/json"]["schema"]
+    assert advance_schema["$ref"].endswith("/EcuAdvanceCommand")
+    assert reset_schema["$ref"].endswith("/EcuResetCommand")
 
 
 def test_test_job_scheduler_contracts_and_safe_pagination_are_published() -> None:

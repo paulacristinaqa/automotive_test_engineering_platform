@@ -56,6 +56,11 @@ and versioned outbox events commit atomically. The boundary remains independent 
 diagnostic protocols: CAN and UDS will reference the ECU aggregate in later volumes instead of
 creating parallel controller models.
 
+Each ECU now owns a monotonic logical clock and bounded cyclic-task definitions. Advance commands use
+period arithmetic to summarize due work without wall-clock sleep or per-cycle storage. Reset commands
+have fixed logical durations, persist replay identity, increment a boot counter, and deliberately
+preserve memory and faults until the III-4 memory-region contract is defined.
+
 ## Decisions
 
 1. **PostgreSQL is the system of record.** Redis is reserved for ephemeral state, caching,

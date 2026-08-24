@@ -1,6 +1,6 @@
 # ATEP Volume III — ECU Simulator Requirements
 
-Status: Increment III-1 implemented.
+Status: Increments III-1 and III-2 implemented.
 
 ## Functional Requirements
 
@@ -17,6 +17,13 @@ Status: Increment III-1 implemented.
 | ECU-FR-009 | Creation and state updates shall emit versioned outbox events. | Service atomicity tests |
 | ECU-FR-010 | Creation and state updates shall be auditable without copying full state into audit details. | Audit evidence tests |
 | ECU-FR-011 | Read and management operations shall use independent permissions. | RBAC and OpenAPI dependencies |
+| ECU-FR-012 | Each ECU shall maintain an independent monotonic logical clock. | Advance/reset service tests |
+| ECU-FR-013 | Cyclic tasks shall define unique IDs, bounded periods, and offsets smaller than periods. | Schema tests |
+| ECU-FR-014 | Advancing time shall calculate due task runs deterministically without wall-clock waits. | Scheduling tests |
+| ECU-FR-015 | Advance and reset commands shall persist identifiers and return exact retries idempotently. | Command evidence tests |
+| ECU-FR-016 | Cyclic execution shall be restricted to running or degraded ECUs. | Lifecycle conflict test |
+| ECU-FR-017 | Soft, hard, and power-cycle resets shall use fixed logical durations. | Reset-mode tests |
+| ECU-FR-018 | Reset shall preserve memory and faults until memory-region semantics are introduced. | Reset evidence test |
 
 ## Non-Functional Requirements
 
@@ -27,3 +34,5 @@ Status: Increment III-1 implemented.
 | ECU-NFR-003 | Public failures shall use the global stable error envelope. | Application error handler and contract tests |
 | ECU-NFR-004 | The aggregate shall remain protocol-independent. | Architecture review |
 | ECU-NFR-005 | The implementation shall pass pytest, Ruff, and strict mypy. | Local and CI quality gates |
+| ECU-NFR-006 | Scheduler output shall remain bounded independently of due execution count. | Aggregated task-run summaries |
+| ECU-NFR-007 | Deterministic simulation operations shall not call real-time sleep. | Design review and unit tests |

@@ -7,6 +7,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 ECU_IDENTIFIER_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{2,79}$")
 FAULT_CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]{2,31}$")
+COMMAND_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{7,63}$")
+TASK_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]{2,39}$")
 
 
 class EcuType(StrEnum):
@@ -46,6 +48,26 @@ class EcuMemoryCell(BaseModel):
     value: int = Field(ge=0, le=255)
 
 
+class EcuCyclicTask(BaseModel):
+    task_id: str = Field(min_length=3, max_length=40)
+    period_ms: int = Field(ge=1, le=60_000)
+    offset_ms: int = Field(default=0, ge=0, le=59_999)
+
+    @field_validator("task_id")
+    @classmethod
+    def validate_task_id(cls, value: str) -> str:
+        normalized = value.strip().casefold()
+        if not TASK_ID_PATTERN.fullmatch(normalized):
+            raise ValueError("task IDs must use lowercase letters, numbers, and underscores")
+        return normalized
+
+    @model_validator(mode="after")
+    def keep_offset_within_period(self) -> "EcuCyclicTask":
+        if self.offset_ms >= self.period_ms:
+            raise ValueError("task offset must be smaller than its period")
+        return self
+
+
 class EcuFault(BaseModel):
     code: str = Field(min_length=3, max_length=32)
     severity: EcuFaultSeverity
@@ -70,6 +92,7 @@ class EcuStatePayload(BaseModel):
     operational_state: EcuOperationalState = EcuOperationalState.OFFLINE
     memory: list[EcuMemoryCell] = Field(default_factory=list, max_length=256)
     faults: list[EcuFault] = Field(default_factory=list, max_length=64)
+    cyclic_tasks: list[EcuCyclicTask] = Field(default_factory=list, max_length=32)
 
     @model_validator(mode="after")
     def require_unique_entries_and_consistent_fault_state(self) -> "EcuStatePayload":
@@ -79,6 +102,9 @@ class EcuStatePayload(BaseModel):
         codes = [fault.code for fault in self.faults]
         if len(codes) != len(set(codes)):
             raise ValueError("ECU fault codes must be unique")
+        task_ids = [task.task_id for task in self.cyclic_tasks]
+        if len(task_ids) != len(set(task_ids)):
+            raise ValueError("ECU cyclic task IDs must be unique")
         has_critical_fault = any(
             fault.severity is EcuFaultSeverity.CRITICAL
             and fault.status is EcuFaultStatus.CONFIRMED
@@ -119,6 +145,8 @@ class EcuResponse(EcuStatePayload):
     display_name: str
     ecu_type: EcuType
     version: int
+    simulation_time_ms: int
+    boot_count: int
     created_at: datetime
     updated_at: datetime
 
@@ -128,3 +156,72 @@ class EcuPage(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class EcuResetMode(StrEnum):
+    SOFT = "soft"
+    HARD = "hard"
+    POWER_CYCLE = "power_cycle"
+
+
+class EcuAdvanceCommand(BaseModel):
+    command_id: str = Field(min_length=8, max_length=64)
+    expected_version: int = Field(ge=1)
+    duration_ms: int = Field(ge=1, le=600_000)
+
+    @field_validator("command_id")
+    @classmethod
+    def validate_command_id(cls, value: str) -> str:
+        normalized = value.strip()
+        if not COMMAND_ID_PATTERN.fullmatch(normalized):
+            raise ValueError("command IDs must be URL-safe and contain 8 to 64 characters")
+        return normalized
+
+
+class EcuResetCommand(BaseModel):
+    command_id: str = Field(min_length=8, max_length=64)
+    expected_version: int = Field(ge=1)
+    mode: EcuResetMode
+
+    @field_validator("command_id")
+    @classmethod
+    def validate_command_id(cls, value: str) -> str:
+        return EcuAdvanceCommand.validate_command_id(value)
+
+
+class EcuTaskRunSummary(BaseModel):
+    task_id: str
+    execution_count: int
+    first_due_ms: int | None
+    last_due_ms: int | None
+
+
+class EcuAdvanceResponse(BaseModel):
+    command_id: str
+    vehicle_id: str
+    ecu_id: str
+    duration_ms: int
+    previous_version: int
+    state_version: int
+    previous_time_ms: int
+    simulation_time_ms: int
+    task_runs: list[EcuTaskRunSummary]
+    duplicate: bool = False
+    created_at: datetime
+
+
+class EcuResetResponse(BaseModel):
+    command_id: str
+    vehicle_id: str
+    ecu_id: str
+    mode: EcuResetMode
+    reset_duration_ms: int
+    previous_version: int
+    state_version: int
+    previous_time_ms: int
+    simulation_time_ms: int
+    boot_count: int
+    memory_preserved: bool
+    faults_preserved: bool
+    duplicate: bool = False
+    created_at: datetime
