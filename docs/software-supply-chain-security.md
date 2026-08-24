@@ -81,18 +81,24 @@ runtime image, and should be removed after a verified `pip-tools` update support
 
 ## Active time-bounded exception
 
-As of 5 August 2026, Grype reports the following findings against the CPython binary in the
-official Python 3.14.6/Alpine 3.24 image. No stable fixed CPython release is available; the scanner
-identifies only Python 3.15 pre-release or future versions as fixed. The exception is encoded in
-`.grype.yaml` and cannot match another package name, version, package type, or advisory.
+As of 24 August 2026, Grype reports the following findings against the official Python
+3.14.6/Alpine 3.24 image. No applicable stable fixed release is available. Each exception is
+encoded in `.grype.yaml` and cannot match another package name, version, package type, or advisory.
 
 | Advisory | Exact component | Owner | Review and expiry | Compensating controls |
 |---|---|---|---|---|
 | CVE-2026-11940 | `python` 3.14.6, `binary` | ATEP maintainers | 5 September 2026 | Digest-pinned minimal official image, independent source/dependency analysis, weekly update review |
 | CVE-2026-15308 | `python` 3.14.6, `binary` | ATEP maintainers | 5 September 2026 | Digest-pinned minimal official image, independent source/dependency analysis, weekly update review |
 | CVE-2026-11972 | `python` 3.14.6, `binary` | ATEP maintainers | 5 September 2026 | Digest-pinned minimal official image, independent source/dependency analysis, weekly update review |
+| CVE-2026-14456 | `libcrypto3` 3.5.7-r0, `apk` | ATEP maintainers | 5 September 2026 | ATEP exposes HTTP/TCP through Uvicorn and does not instantiate the affected OpenSSL QUIC server listener; digest pinning and weekly update review remain enforced |
+| CVE-2026-14456 | `libssl3` 3.5.7-r0, `apk` | ATEP maintainers | 5 September 2026 | ATEP exposes HTTP/TCP through Uvicorn and does not instantiate the affected OpenSSL QUIC server listener; digest pinning and weekly update review remain enforced |
 
-A stable Python release that fixes any advisory triggers immediate image update, exception removal,
+The OpenSSL advisory describes unbounded pending-channel allocation in the QUIC server listener.
+That path is not reachable in ATEP's current Uvicorn HTTP/TCP runtime. OpenSSL identifies 3.5.8 as
+the corrected line, but no stable 3.5.8 release or fixed Alpine package was available when this
+exception was reviewed on 24 August 2026.
+
+A stable upstream release that fixes any advisory triggers immediate image update, exception removal,
 SBOM regeneration, and retest. Any new high or critical finding remains blocking. Maintainers must
 remove or formally re-review these entries no later than the stated date; expiry is not automatic
 acceptance of continued risk.

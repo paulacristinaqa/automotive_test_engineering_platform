@@ -94,8 +94,12 @@ def test_grype_exceptions_are_exact_time_bounded_and_owned() -> None:
         "CVE-2026-11940",
         "CVE-2026-15308",
         "CVE-2026-11972",
+        "CVE-2026-14456",
     }
-    assert all(
-        entry["package"] == {"name": "python", "version": "3.14.6", "type": "binary"}
-        for entry in exceptions
-    )
+    assert [entry["package"] for entry in exceptions] == [
+        {"name": "python", "version": "3.14.6", "type": "binary"},
+        {"name": "python", "version": "3.14.6", "type": "binary"},
+        {"name": "python", "version": "3.14.6", "type": "binary"},
+        {"name": "libcrypto3", "version": "3.5.7-r0", "type": "apk"},
+        {"name": "libssl3", "version": "3.5.7-r0", "type": "apk"},
+    ]
