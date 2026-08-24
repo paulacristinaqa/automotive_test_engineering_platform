@@ -25,6 +25,8 @@
 | DV-F-019 | A simulation session shall contain 1–20 unique registered vehicles. | Contract and creation tests |
 | DV-F-020 | Session snapshots shall store member states in canonical vehicle order with a SHA-256 content digest. | Canonical snapshot test |
 | DV-F-021 | Snapshot restore shall lock members deterministically, restore only matching vehicle state, preserve logical time, and increment versions. | Isolation and restore test |
+| DV-F-022 | A telemetry-authorized Vehicle Gateway shall retrieve one versioned mapping between reviewed Android Automotive property symbols and canonical ATEP properties. | Catalogue, authorization, and OpenAPI contract tests |
+| DV-F-023 | Every VHAL mapping shall declare value type, access, area semantics, source/target units, and conversion without granting direct infrastructure access. | Mapping invariant and area/unit tests |
 
 ## Non-functional requirements
 
@@ -40,3 +42,4 @@
 | DV-NF-008 | Equal state, command, and seed inputs shall produce equal sensor readings across runs. | Deterministic seed test |
 | DV-NF-009 | Published energy evidence shall satisfy `used - recovered = net` at contract precision and recovery shall never exceed bounded consumption. | Conservation assertions |
 | DV-NF-010 | Session creation, snapshot, and restore shall produce atomic bounded audit and outbox evidence without background loops. | Transaction assertions |
+| DV-NF-011 | The VHAL mapping contract shall remain symbolic and versioned so Android clients compile against their platform SDK while ATEP remains independent of Android numeric constant values. | Contract review and catalogue tests |

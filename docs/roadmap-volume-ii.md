@@ -13,10 +13,10 @@ and compatibility with the future Android Automotive gateway.
 | II-3 | Sensors and actuator models with noise, calibration, and fault modes | Implemented | Seeded simulations and boundary/fault tests |
 | II-4 | Thermal, battery-energy, powertrain, braking, steering, suspension, and lighting behavior | Implemented | Coupled drive-corner-brake and conservation/bounds tests |
 | II-5 | Multi-vehicle simulation sessions and reproducible snapshots | Implemented | Isolation, bounds, canonical snapshot, reset, and replay tests |
-| II-6 | Vehicle Gateway mapping to Android Automotive/VHAL contracts | Planned | Contract and end-to-end CarSystemUI evidence |
+| II-6 | Vehicle Gateway mapping to Android Automotive/VHAL contracts | Implemented | Versioned mapping/OpenAPI tests plus existing live CarSystemUI telemetry and command evidence |
 
 ## Recommended next increment
 
-Add Vehicle Gateway mappings to Android Automotive/VHAL contracts. Preserve public API isolation,
-explicit property units, authorization, idempotent telemetry, and end-to-end evidence between ATEP
-and CarSystemUI without allowing Android clients to access internal infrastructure directly.
+Start Volume III with the bounded ECU aggregate and lifecycle. Preserve the completed Digital
+Vehicle contract as the plant model, then add ECU identity, memory, operating state, and explicit
+fault state before introducing CAN frames or UDS behavior.
