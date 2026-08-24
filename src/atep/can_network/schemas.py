@@ -11,6 +11,14 @@ class CanFrameFormat(StrEnum):
     EXTENDED = "extended"
 
 
+class CanFrameProtocol(StrEnum):
+    CLASSIC = "classic"
+    FD = "fd"
+
+
+CAN_FD_PAYLOAD_LENGTHS = frozenset({0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 16, 20, 24, 32, 48, 64})
+
+
 class CanNodeRole(StrEnum):
     PARTICIPANT = "participant"
     GATEWAY = "gateway"
@@ -28,7 +36,9 @@ class CanFrameContract(BaseModel):
     identifier: str = Field(min_length=2, max_length=80, pattern=r"^[a-z][a-z0-9_-]+$")
     frame_id: int = Field(ge=0, le=0x1FFFFFFF)
     frame_format: CanFrameFormat = CanFrameFormat.STANDARD
-    dlc: int = Field(ge=0, le=8)
+    protocol: CanFrameProtocol = CanFrameProtocol.CLASSIC
+    dlc: int = Field(ge=0, le=64)
+    bitrate_switch: bool = False
     producer_node_id: UUID
     consumer_node_ids: list[UUID] = Field(default_factory=list, max_length=63)
 
@@ -36,6 +46,12 @@ class CanFrameContract(BaseModel):
     def validate_contract(self) -> "CanFrameContract":
         if self.frame_format is CanFrameFormat.STANDARD and self.frame_id > 0x7FF:
             raise ValueError("standard CAN frame_id must be at most 0x7FF")
+        if self.protocol is CanFrameProtocol.CLASSIC and self.dlc > 8:
+            raise ValueError("classic CAN frame DLC must be at most 8")
+        if self.protocol is CanFrameProtocol.CLASSIC and self.bitrate_switch:
+            raise ValueError("bitrate switching is available only for CAN FD frames")
+        if self.protocol is CanFrameProtocol.FD and self.dlc not in CAN_FD_PAYLOAD_LENGTHS:
+            raise ValueError("CAN FD payload length must use an ISO-defined DLC size")
         if self.producer_node_id in self.consumer_node_ids:
             raise ValueError("producer cannot also be a consumer")
         if len(set(self.consumer_node_ids)) != len(self.consumer_node_ids):
@@ -48,11 +64,20 @@ class CanNetworkCreate(BaseModel):
     identifier: str = Field(min_length=2, max_length=80, pattern=r"^[a-z][a-z0-9_-]+$")
     display_name: str = Field(min_length=2, max_length=120)
     bitrate_kbps: int = Field(default=500, ge=10, le=1000)
+    can_fd_enabled: bool = False
+    data_bitrate_kbps: int | None = Field(default=None, ge=10, le=8000)
     nodes: list[CanNode] = Field(min_length=1, max_length=64)
     frame_contracts: list[CanFrameContract] = Field(default_factory=list, max_length=256)
 
     @model_validator(mode="after")
     def validate_topology(self) -> "CanNetworkCreate":
+        if self.can_fd_enabled:
+            if self.data_bitrate_kbps is None:
+                raise ValueError("CAN FD networks require a data bitrate")
+            if self.data_bitrate_kbps < self.bitrate_kbps:
+                raise ValueError("CAN FD data bitrate must be at least the nominal bitrate")
+        elif self.data_bitrate_kbps is not None:
+            raise ValueError("classic CAN networks cannot define a data bitrate")
         node_ids = [item.ecu_id for item in self.nodes]
         if len(set(node_ids)) != len(node_ids):
             raise ValueError("CAN node ECU identifiers must be unique")
@@ -64,6 +89,8 @@ class CanNetworkCreate(BaseModel):
             raise ValueError("CAN frame identifiers must be unique per format")
         known = set(node_ids)
         for contract in self.frame_contracts:
+            if contract.protocol is CanFrameProtocol.FD and not self.can_fd_enabled:
+                raise ValueError("CAN FD frame contracts require a CAN FD-enabled network")
             if (
                 contract.producer_node_id not in known
                 or not set(contract.consumer_node_ids) <= known
@@ -78,7 +105,7 @@ class CanFrameSubmitCommand(BaseModel):
     expected_version: int = Field(ge=1)
     contract_id: str = Field(min_length=2, max_length=80, pattern=r"^[a-z][a-z0-9_-]+$")
     producer_node_id: UUID
-    payload: list[int] = Field(max_length=8)
+    payload: list[int] = Field(max_length=64)
     advance_time_us: int = Field(default=0, ge=0, le=10_000_000)
 
     @field_validator("payload")
@@ -95,6 +122,8 @@ class CanNetworkResponse(BaseModel):
     identifier: str
     display_name: str
     bitrate_kbps: int
+    can_fd_enabled: bool
+    data_bitrate_kbps: int | None
     nodes: list[CanNode]
     frame_contracts: list[CanFrameContract]
     version: int
@@ -112,6 +141,8 @@ class CanFrameTransmissionResponse(BaseModel):
     producer_node_id: UUID
     frame_id: int
     frame_format: CanFrameFormat
+    protocol: CanFrameProtocol
+    bitrate_switch: bool
     payload: list[int]
     sequence: int
     transmission_time_us: int
@@ -132,7 +163,7 @@ class CanArbitrationContender(BaseModel):
     model_config = ConfigDict(extra="forbid")
     contract_id: str = Field(min_length=2, max_length=80, pattern=r"^[a-z][a-z0-9_-]+$")
     producer_node_id: UUID
-    payload: list[int] = Field(max_length=8)
+    payload: list[int] = Field(max_length=64)
     ready_offset_us: int = Field(default=0, ge=0, le=10_000_000)
 
     @field_validator("payload")
@@ -169,9 +200,15 @@ class CanArbitratedFrame(BaseModel):
     contract_id: str
     frame_id: int
     frame_format: CanFrameFormat
+    protocol: CanFrameProtocol = CanFrameProtocol.CLASSIC
+    bitrate_switch: bool = False
     producer_node_id: UUID
     dlc: int
     bit_count: int
+    nominal_bit_count: int = 0
+    data_bit_count: int = 0
+    nominal_phase_duration_us: int = 0
+    data_phase_duration_us: int = 0
     ready_at_us: int
     started_at_us: int
     completed_at_us: int
@@ -216,8 +253,8 @@ class CanDbcByteOrder(StrEnum):
 class CanDbcSignal(BaseModel):
     model_config = ConfigDict(extra="forbid")
     identifier: str = Field(min_length=1, max_length=80, pattern=r"^[A-Za-z][A-Za-z0-9_]*$")
-    start_bit: int = Field(ge=0, le=63)
-    bit_length: int = Field(ge=1, le=64)
+    start_bit: int = Field(ge=0, le=511)
+    bit_length: int = Field(ge=1, le=512)
     byte_order: CanDbcByteOrder
     signed: bool = False
     factor: Decimal = Field(default=Decimal("1"), gt=0)
@@ -286,7 +323,7 @@ class CanSignalDecodeCommand(BaseModel):
     model_config = ConfigDict(extra="forbid")
     command_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]+$")
     contract_id: str = Field(min_length=2, max_length=80, pattern=r"^[a-z][a-z0-9_-]+$")
-    payload: list[int] = Field(max_length=8)
+    payload: list[int] = Field(max_length=64)
 
     @field_validator("payload")
     @classmethod

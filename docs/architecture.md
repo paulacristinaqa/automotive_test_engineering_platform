@@ -368,6 +368,7 @@ winners, records consumer delivery, and reports bus utilization. Batch request/r
 individual winner transmissions are persisted atomically with audit and outbox records. DBC
 catalogues map structured signals to existing frame contracts. The codec applies exact decimal
 scaling, offsets, signed raw ranges, Intel LSB-first placement, and Motorola DBC sawtooth placement;
-it persists replay-safe encode/decode evidence without exposing values in audit or events. CAN FD,
-textual DBC parsing, multiplexing, bit stuffing, acknowledgement, retransmission, and network faults
-remain explicit later increments.
+it persists replay-safe encode/decode evidence without exposing values in audit or events. The CAN
+FD extension adds 64-byte payload contracts, dual-rate phase timing, BRS evidence, and deterministic
+mixed classic/FD arbitration. Textual DBC parsing, multiplexing, bit stuffing, acknowledgement,
+retransmission, and network faults remain explicit later increments.

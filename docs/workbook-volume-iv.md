@@ -1,6 +1,6 @@
 # ATEP Volume IV - CAN Network Engineering Workbook
 
-**Document status:** Increments IV-1 through IV-3 implemented
+**Document status:** Increments IV-1 through IV-4 implemented
 **Language:** English
 **Last updated:** 2026-08-24
 **Repository:** `paulacristinaqa/automotive_test_engineering_platform`
@@ -15,7 +15,7 @@ evidence, verification strategy, risks, and study exercises for the CAN Network 
 | Field | Value |
 |---|---|
 | Volume | IV - CAN Network |
-| Baseline | Increments IV-1 through IV-3 |
+| Baseline | Increments IV-1 through IV-4 |
 | Architecture style | Vehicle-scoped aggregate with transactional domain service |
 | Primary runtime | Python 3.12, FastAPI, SQLAlchemy, PostgreSQL |
 | Quality gates | pytest, Ruff, strict mypy, Alembic and integration CI |
@@ -27,16 +27,18 @@ evidence, verification strategy, risks, and study exercises for the CAN Network 
 | 0.1.0 | 2026-08-24 | Added ECU-backed topology, classic CAN frame contracts, deterministic submission, RBAC, audit, outbox, migration, APIs, and tests. |
 | 0.2.0 | 2026-08-24 | Added deterministic arbitration, nominal transmission duration, delivery evidence, utilization metrics, replay-safe persistence, APIs, migration, and tests. |
 | 0.3.0 | 2026-08-24 | Added structured DBC catalogues, Intel/Motorola signal placement, exact decimal scaling, signed codec evidence, APIs, migration, and tests. |
+| 0.4.0 | 2026-08-24 | Added CAN FD network configuration, ISO payload lengths through 64 bytes, BRS, dual-rate phase timing, mixed classic/FD arbitration, extended DBC payloads, migration, and tests. |
 
 ## 4. Scope and Boundaries
 
 ### 4.1 Included
 
-- One classic CAN network per vehicle.
+- One classic or CAN FD-enabled network per vehicle.
 - One to 64 nodes referencing ECUs from the same vehicle.
 - Participant, gateway, and monitor node roles.
 - Up to 256 standard or extended frame contracts.
-- Classic CAN payloads from zero to eight bytes.
+- Classic CAN payloads from zero to eight bytes and ISO-defined CAN FD payloads through 64 bytes.
+- Nominal and data-phase bitrates, frame protocol, and bitrate-switch contracts.
 - Deterministic logical microsecond clock, sequence, and optimistic version.
 - Exact command replay and stable changed-reuse conflicts.
 - Protected create, retrieve, submit, and history APIs.
@@ -47,12 +49,13 @@ evidence, verification strategy, risks, and study exercises for the CAN Network 
 - One structured DBC catalogue mapped to existing frame contracts.
 - Exact signal encode/decode with Intel and Motorola byte order, signedness, scaling, and offsets.
 - Replay-safe codec evidence with payload-free audit and outbox metrics.
+- Deterministic mixed classic/FD arbitration with phase-specific timing evidence.
+- DBC signal placement and codec payloads through 512 contracted bits.
 
 ### 4.2 Deferred
 
 - Bit stuffing, acknowledgement, retransmission, and oscillator/physical-layer effects.
 - Textual `.dbc` parsing, attributes, value tables, comments, and multiplexing.
-- CAN FD payloads and data-phase bitrate.
 - Error frames, error counters, bus-off, recovery, loss, latency, and corruption.
 - LIN, automotive Ethernet, physical transceivers, and SocketCAN adapters.
 
@@ -69,7 +72,8 @@ CAN domain/arbitration/DBC service -> PostgreSQL aggregate/evidence + audit + tr
 
 ## 6. Domain Model
 
-`CanNetwork` stores vehicle ownership, identity, bitrate, nodes, frame contracts, version, logical
+`CanNetwork` stores vehicle ownership, identity, nominal bitrate, optional CAN FD data bitrate,
+FD enablement, nodes, frame contracts, version, logical
 microsecond time, and the next sequence. `CanFrameTransmission` stores command identity, contract,
 producer, CAN ID and format, request, payload, sequence, logical time, versions, and actor.
 
@@ -80,9 +84,10 @@ evidence so history remains coherent across individual and arbitrated sends.
 `CanDbcCatalogue` stores bounded structured messages and signals for one network. Each message
 references a frame contract rather than duplicating ID, DLC, producer, or consumers.
 `CanSignalCodecExecution` stores the canonical encode/decode request and deterministic payload, raw,
-and physical result for exact replay.
+and physical result for exact replay. Frame contracts and transmissions preserve classic/FD protocol
+and BRS identity; arbitration results also preserve per-phase bit counts and durations.
 
-Bounds are architectural controls: 64 nodes, 256 contracts, 8 payload bytes, a 10-second maximum
+Bounds are architectural controls: 64 nodes, 256 contracts, 8 classic or 64 FD payload bytes, a 10-second maximum
 logical advance per submission, safe history pagination, and one network aggregate per vehicle.
 
 ## 7. Public API and Security
@@ -152,10 +157,27 @@ Codec commands lock the network row to serialize command identity checks. Exact 
 stored result; changed reuse fails with `can_signal_codec_command_conflict`. Payload, raw values, and
 physical values are persisted as engineering evidence but excluded from audit and outbox messages.
 
+### 8.3 CAN FD and Mixed-Bus Semantics
+
+A CAN FD-enabled network defines a nominal bitrate and a data bitrate no lower than the nominal
+rate. Classic contracts remain limited to eight bytes. FD contracts accept only the ISO-defined
+payload lengths 0-8, 12, 16, 20, 24, 32, 48, and 64 bytes. BRS is valid only for FD contracts.
+
+The deterministic timing model excludes bit stuffing and electrical effects. Standard and extended
+FD frames allocate 32 and 52 nominal-phase bits. The data phase contains payload bits plus a 17-bit
+CRC through 16 bytes or 21-bit CRC above 16 bytes. Nominal and data phase durations are rounded up
+independently. BRS selects the data bitrate only for the data phase; without BRS, both phases use the
+nominal bitrate.
+
+Classic and FD contenders use the same CAN identifier, format, and contract tie-break rules. The
+protocol does not alter priority. Persisted arbitration evidence reports protocol, BRS, phase bit
+counts, phase durations, total duration, deliveries, and utilization. Audit and outbox metrics report
+FD and BRS frame counts without payload bytes.
+
 ## 9. Functional Requirements
 
-The authoritative catalogue is `docs/requirements-volume-iv.md`. IV-1 through IV-3 implement
-CAN-F-001 through CAN-F-030 and CAN-NF-001 through CAN-NF-011.
+The authoritative catalogue is `docs/requirements-volume-iv.md`. IV-1 through IV-4 implement
+CAN-F-001 through CAN-F-040 and CAN-NF-001 through CAN-NF-014.
 
 ## 10. Architecture Decisions
 
@@ -219,6 +241,22 @@ instead of selecting an implicit rounding policy that could hide test-data error
 Encoding creates a payload but does not automatically transmit it. A later caller may submit or
 arbitrate that payload, keeping semantic conversion and transport execution independently testable.
 
+### ADR-CAN-013 - Model CAN FD as a Backward-Compatible Contract Extension
+
+Classic is the default protocol for existing contracts and persisted rows. An FD-enabled network may
+carry classic and FD frames, so IV-1 through IV-3 clients remain valid while new clients opt into FD.
+
+### ADR-CAN-014 - Separate Nominal and Data Timing Phases
+
+CAN FD arbitration remains at the nominal rate. Only an FD data phase with BRS uses the configured
+data bitrate. Persisting both phases makes timing assumptions observable and independently testable.
+
+### ADR-CAN-015 - Use Payload Length Semantics at the API Boundary
+
+The public `dlc` field continues to represent payload bytes for compatibility. Validation restricts
+FD values to ISO-defined payload sizes, while a future wire adapter can map larger lengths to their
+four-bit encoded DLC values.
+
 ## 11. Verification Catalogue
 
 | Test | Objective | Level |
@@ -269,15 +307,26 @@ arbitrate that payload, keeping semantic conversion and transport execution inde
 | Codec conflict | Reject changed command reuse with a stable error. | Service/API |
 | Codec concurrency | Serialize command identity checks on the network row. | Integration |
 | Codec minimization | Exclude payload and values from audit and events. | Service |
+| FD enablement | Require a bounded data bitrate for an FD-enabled network. | Schema/service |
+| ISO FD length | Accept only 0-8, 12, 16, 20, 24, 32, 48, and 64-byte FD payloads. | Schema |
+| Classic compatibility | Preserve eight-byte limits and prior timing results. | Regression |
+| BRS restriction | Reject bitrate switching on classic contracts. | Schema |
+| Dual-rate timing | Calculate and expose nominal and data-phase durations separately. | Unit/service |
+| BRS timing | Apply data bitrate only to BRS-enabled FD data phases. | Unit |
+| Mixed arbitration | Preserve identifier priority across classic and FD contenders. | Service |
+| FD submission | Persist and replay 64-byte frames with protocol and BRS metadata. | Service/API |
+| FD DBC boundary | Encode and decode signals through bit 511 of a 64-byte payload. | Unit/service |
+| FD minimization | Exclude 64-byte payloads from audit and outbox evidence. | Service |
+| FD migration | Upgrade and downgrade CAN FD columns with safe classic defaults. | Integration |
 
 ## 12. Implemented Evidence
 
 - `src/atep/can_network/` contains models, schemas, service, and router.
-- Migrations `0024_can_network_baseline`, `0025_can_arbitration`, and `0026_can_dbc_codec` own the database schema.
+- Migrations `0024_can_network_baseline` through `0027_can_fd` own the database schema.
 - Events include `atep.can.network.created.v1`, `atep.can.frame.submitted.v1`, and `atep.can.arbitration.completed.v1`.
 - DBC events are `atep.can.dbc.catalogue.created.v1` and `atep.can.signal.codec.completed.v1`.
 - Permissions are `can_networks:read` and `can_networks:manage`.
-- Automated tests cover validation, priority, timing mathematics, readiness, delivery, utilization, versioning, replay, errors, DBC bit placement, signed scaling, exact conversion, evidence minimization, persistence, and OpenAPI.
+- Automated tests cover validation, priority, classic and FD timing mathematics, mixed arbitration, readiness, delivery, utilization, versioning, replay, errors, DBC bit placement through 512 bits, signed scaling, exact conversion, evidence minimization, persistence, and OpenAPI.
 
 ## 13. Risks and Technical Debt
 
@@ -289,11 +338,13 @@ arbitrate that payload, keeping semantic conversion and transport execution inde
 - The catalogue is structured JSON; importing and exporting textual `.dbc` files remains future work.
 - Multiplexed signals, value tables, attributes, and comments are not yet represented.
 - Encoding produces evidence but does not automatically submit the frame to the simulated bus.
+- CAN FD timing is a deterministic transparent model, not a bit-accurate physical trace; stuffing, synchronization, acknowledgement, and transceiver delay remain deferred.
+- The public DLC value represents payload length rather than the encoded four-bit wire DLC.
 
 ## 14. Roadmap
 
-The recommended next increment is IV-4: CAN FD payload and timing contracts with explicit nominal
-and data-phase bitrate plus mixed classic/FD compatibility. See `docs/roadmap-volume-iv.md`.
+The recommended next increment is IV-5: deterministic error frames, transmit/receive error counters,
+bus-off and recovery, plus bounded fault injection. See `docs/roadmap-volume-iv.md`.
 
 ## 15. Study Exercises
 
@@ -321,3 +372,9 @@ and data-phase bitrate plus mixed classic/FD compatibility. See `docs/roadmap-vo
 22. Design a test that detects overlap between one Intel and one Motorola signal.
 23. Trace encode evidence into a later arbitration command without coupling the two operations.
 24. Propose a backward-compatible textual `.dbc` import boundary.
+25. Compare a 64-byte FD frame with and without BRS at 500/2000 kbit/s.
+26. Explain why classic and FD frames share identifier arbitration priority.
+27. Map the ISO 64-byte payload length to a future four-bit wire DLC adapter.
+28. Design a mixed arbitration test in which a classic frame has a lower CAN ID than an FD frame.
+29. Explain why nominal and data phase durations are rounded upward independently.
+30. Propose a bit-stuffing extension that preserves the IV-4 transparent timing evidence.

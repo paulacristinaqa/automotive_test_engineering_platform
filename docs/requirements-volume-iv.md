@@ -34,6 +34,16 @@
 | CAN-F-028 | Codec execution shall persist payload, raw values, and physical values as replayable evidence. | Implemented |
 | CAN-F-029 | Exact codec replay shall be mutation-free; changed command reuse shall return a stable conflict. | Implemented |
 | CAN-F-030 | DBC catalogue and codec evidence shall be protected by CAN read/manage permissions. | Implemented |
+| CAN-F-031 | A CAN FD-enabled network shall define nominal and data-phase bitrates. | Implemented |
+| CAN-F-032 | CAN FD frame contracts shall accept only ISO-defined payload lengths through 64 bytes. | Implemented |
+| CAN-F-033 | Classic frame contracts shall remain limited to eight bytes on FD-enabled mixed networks. | Implemented |
+| CAN-F-034 | Bitrate switching shall be rejected for classic CAN frame contracts. | Implemented |
+| CAN-F-035 | Frame submission and arbitration shall preserve protocol and bitrate-switch metadata. | Implemented |
+| CAN-F-036 | CAN FD timing shall expose nominal and data bit counts and phase durations. | Implemented |
+| CAN-F-037 | Arbitration shall run at the nominal bitrate and apply the data bitrate only to BRS-enabled FD data phases. | Implemented |
+| CAN-F-038 | Classic and FD contenders shall share the same deterministic CAN identifier priority rules. | Implemented |
+| CAN-F-039 | DBC signals and codec payloads shall support contracted CAN FD payloads through 512 bits. | Implemented |
+| CAN-F-040 | CAN FD aggregate events shall report frame counts and timing metadata without payload bytes. | Implemented |
 
 ## Non-Functional Requirements
 
@@ -50,3 +60,6 @@
 | CAN-NF-009 | Decimal scaling and offset calculations shall avoid binary floating-point drift. | Implemented |
 | CAN-NF-010 | Codec audit and outbox evidence shall exclude payload and signal values. | Implemented |
 | CAN-NF-011 | Codec commands shall serialize on the network aggregate to prevent duplicate concurrent evidence. | Implemented |
+| CAN-NF-012 | Existing classic CAN contracts and timing results shall remain backward compatible. | Implemented |
+| CAN-NF-013 | CAN FD timing shall be deterministic and independent of host performance. | Implemented |
+| CAN-NF-014 | CAN FD persistence changes shall be reversible through Alembic. | Implemented |
