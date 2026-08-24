@@ -297,7 +297,8 @@ async def test_frame_submission_rejects_version_producer_and_dlc_conflicts() -> 
             actor_user_id=uuid4(),
             correlation_id=None,
         )
-    assert "producer" in producer_conflict.value.details["reason"]
+    producer_details = cast(dict[str, Any], producer_conflict.value.details)
+    assert "producer" in producer_details["reason"]
     with pytest.raises(CanNetworkContractError) as dlc_conflict:
         await submit_can_frame(
             cast(AsyncSession, FakeSession(scalar_values=[bus, None])),
@@ -306,7 +307,8 @@ async def test_frame_submission_rejects_version_producer_and_dlc_conflicts() -> 
             actor_user_id=uuid4(),
             correlation_id=None,
         )
-    assert "DLC" in dlc_conflict.value.details["reason"]
+    dlc_details = cast(dict[str, Any], dlc_conflict.value.details)
+    assert "DLC" in dlc_details["reason"]
 
 
 def test_can_permissions_are_independent() -> None:
