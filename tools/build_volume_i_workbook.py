@@ -376,7 +376,7 @@ def add_contents(doc: Document, lines: list[str], decimal_abstract_id: int) -> N
             apply_numbering(p, contents_num_id)
             p.paragraph_format.left_indent = Inches(0.15)
             p.paragraph_format.first_line_indent = Inches(0)
-            text = line[3:].strip()
+            text = re.sub(r"^\d+\.\s+", "", line[3:].strip())
             set_font(p.add_run(text), 10.5, NAVY, bold=True)
     doc.add_page_break()
 

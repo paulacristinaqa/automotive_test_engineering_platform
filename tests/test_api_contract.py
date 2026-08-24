@@ -301,15 +301,30 @@ def test_can_network_baseline_contracts_and_safe_pagination_are_published() -> N
     paths = core_app.openapi()["paths"]
     collection = paths["/api/v1/vehicles/{vehicle_id}/can-networks"]
     frames = paths["/api/v1/vehicles/{vehicle_id}/can-networks/frames"]
+    arbitrations = paths["/api/v1/vehicles/{vehicle_id}/can-networks/arbitrations"]
+    execute = paths["/api/v1/vehicles/{vehicle_id}/can-networks/arbitrations/execute"]
+    detail = paths[
+        "/api/v1/vehicles/{vehicle_id}/can-networks/arbitrations/{command_id}"
+    ]
     assert {"get", "post"} <= set(collection)
     assert {"get", "post"} <= set(frames)
+    assert "get" in arbitrations
+    assert "post" in execute
+    assert "get" in detail
     create_schema = collection["post"]["requestBody"]["content"]["application/json"]["schema"]
     submit_schema = frames["post"]["requestBody"]["content"]["application/json"]["schema"]
     assert create_schema["$ref"].endswith("/CanNetworkCreate")
     assert submit_schema["$ref"].endswith("/CanFrameSubmitCommand")
+    execute_schema = execute["post"]["requestBody"]["content"]["application/json"]["schema"]
+    assert execute_schema["$ref"].endswith("/CanArbitrationCommand")
     parameters = {item["name"]: item["schema"] for item in frames["get"]["parameters"]}
     assert parameters["limit"]["maximum"] == 200
     assert parameters["offset"]["maximum"] == 1_000_000
+    arbitration_parameters = {
+        item["name"]: item["schema"] for item in arbitrations["get"]["parameters"]
+    }
+    assert arbitration_parameters["limit"]["maximum"] == 200
+    assert arbitration_parameters["offset"]["maximum"] == 1_000_000
 
 
 def test_test_job_scheduler_contracts_and_safe_pagination_are_published() -> None:

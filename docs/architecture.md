@@ -362,5 +362,9 @@ contracts live under an explicit version and remain backward compatible during m
 
 The `atep.can_network` module owns vehicle-scoped CAN topology, classic frame identifiers, DLC,
 payload evidence, deterministic sequence, and logical bus time. It references Volume III ECUs rather
-than duplicating controller state. Arbitration, DBC encoding, CAN FD, and network fault behavior are
-explicit later increments.
+than duplicating controller state. Its arbitration service resolves bounded batches against frame
+contracts, selects the lowest ready identifier, calculates nominal classic CAN duration, serializes
+winners, records consumer delivery, and reports bus utilization. Batch request/result evidence and
+individual winner transmissions are persisted atomically with audit and outbox records. DBC
+encoding, CAN FD, bit stuffing, acknowledgement, retransmission, and network faults remain explicit
+later increments.

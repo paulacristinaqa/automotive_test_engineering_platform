@@ -209,6 +209,15 @@ class CanNetworkContractError(ApplicationError):
         )
 
 
+class CanArbitrationCommandConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="can_arbitration_command_conflict",
+            message="The CAN arbitration command identifier was already used differently.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
 class ModuleCapabilityRequiredError(ApplicationError):
     def __init__(self, capability: str) -> None:
         super().__init__(

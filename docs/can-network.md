@@ -1,7 +1,7 @@
-# CAN Network Baseline
+# CAN Network and Deterministic Arbitration
 
-Volume IV-1 introduces a vehicle-scoped classic CAN network aggregate. It references existing ECU
-identities and does not duplicate ECU state or semantic signal meaning.
+Volume IV-1 introduced a vehicle-scoped classic CAN aggregate. Volume IV-2 adds deterministic
+batch arbitration, calculated transmission duration, receive evidence, and bounded bus utilization.
 
 ## Implemented Boundary
 
@@ -13,10 +13,14 @@ identities and does not duplicate ECU state or semantic signal meaning.
 - deterministic logical microsecond clock and monotonically increasing frame sequence;
 - optimistic network versioning and exact command replay;
 - payload-free audit and outbox evidence.
+- batches of 1-64 unique contracted contenders;
+- CAN identifier priority with standard-format precedence for equal numeric identifiers;
+- classic CAN nominal duration excluding bit stuffing and including three-bit intermission;
+- consumer delivery evidence, latency, idle time, occupied time, and utilization;
+- persisted arbitration results with exact replay and stable changed-reuse conflict.
 
-CAN FD payloads, arbitration, bit stuffing, error counters, bus-off, DBC encoding, LIN, and Ethernet
-are deliberately deferred. `advance_time_us` is an explicit simulation input, not a measured host
-duration.
+CAN FD payloads, bit stuffing, retransmission, acknowledgement failure, error counters, bus-off,
+DBC encoding, LIN, and Ethernet are deliberately deferred. Simulated truth never uses host timing.
 
 ## Public API
 
@@ -24,6 +28,9 @@ duration.
 - `GET /api/v1/vehicles/{vehicle_id}/can-networks`
 - `POST /api/v1/vehicles/{vehicle_id}/can-networks/frames`
 - `GET /api/v1/vehicles/{vehicle_id}/can-networks/frames`
+- `POST /api/v1/vehicles/{vehicle_id}/can-networks/arbitrations/execute`
+- `GET /api/v1/vehicles/{vehicle_id}/can-networks/arbitrations`
+- `GET /api/v1/vehicles/{vehicle_id}/can-networks/arbitrations/{command_id}`
 
 Reads require `can_networks:read`; creation and submission require `can_networks:manage`.
 
@@ -37,3 +44,19 @@ stable `can_frame_command_conflict` error.
 
 The event `atep.can.frame.submitted.v1` contains identity, contract, frame ID, DLC, sequence, time,
 and versions. It intentionally excludes payload bytes.
+
+## Deterministic Arbitration
+
+Each contender declares a contracted frame, producer, payload, and ready offset. At each free-bus
+instant, the lowest numeric CAN identifier wins. Standard format precedes extended format when the
+numeric identifiers are equal; contract identity is the stable final tie-breaker. If no contender is
+ready, logical time advances to the next readiness instant.
+
+Nominal classic CAN size is `47 + 8 * DLC` bits for standard frames and `67 + 8 * DLC` bits for
+extended frames. Duration is the ceiling of bits divided by configured bitrate. These transparent
+engineering assumptions deliberately omit bit stuffing and physical error behavior.
+
+One arbitration batch increments the network version once and the sequence once per winner. The
+result stores frame order, timing, delivery to declared consumers, maximum latency, and utilization.
+The event `atep.can.arbitration.completed.v1` and its audit record contain aggregate metrics only;
+payload bytes remain confined to transmission evidence.
