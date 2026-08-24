@@ -282,6 +282,19 @@ def test_ecu_aggregate_contracts_and_safe_pagination_are_published() -> None:
     }
     assert route_parameters["limit"]["maximum"] == 100
     assert route_parameters["offset"]["maximum"] == 1_000_000
+    scenario_execute = paths["/api/v1/vehicles/{vehicle_id}/ecu-scenarios/execute"]
+    scenario_list = paths["/api/v1/vehicles/{vehicle_id}/ecu-scenarios"]
+    scenario_detail = paths[
+        "/api/v1/vehicles/{vehicle_id}/ecu-scenarios/{execution_id}"
+    ]
+    assert "post" in scenario_execute
+    assert "get" in scenario_list
+    assert "get" in scenario_detail
+    scenario_parameters = {
+        item["name"]: item["schema"] for item in scenario_list["get"]["parameters"]
+    }
+    assert scenario_parameters["limit"]["maximum"] == 50
+    assert scenario_parameters["offset"]["maximum"] == 1_000_000
 
 
 def test_test_job_scheduler_contracts_and_safe_pagination_are_published() -> None:

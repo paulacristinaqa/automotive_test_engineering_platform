@@ -1,6 +1,6 @@
 # ATEP Volume III — ECU Simulator Engineering Workbook
 
-**Document status:** Living document — Increments III-1 through III-6 implemented
+**Document status:** Volume III baseline — Increments III-1 through III-7 implemented
 **Language:** English
 **Last updated:** 2026-08-24
 **Repository:** `paulacristinaqa/automotive_test_engineering_platform`
@@ -16,7 +16,7 @@ maintainable technical record for future ECU, CAN, and diagnostics development.
 | Field | Value |
 |---|---|
 | Volume | III — ECU Simulator |
-| Baseline | Increments III-1 through III-6 |
+| Baseline | Increments III-1 through III-7 |
 | Architecture style | Modular monolith with transactional domain services |
 | Primary runtime | Python 3.12, FastAPI, SQLAlchemy, PostgreSQL |
 | Quality gates | pytest, Ruff, strict mypy, Alembic migration checks |
@@ -31,6 +31,7 @@ maintainable technical record for future ECU, CAN, and diagnostics development.
 | 0.4.0 | 2026-08-24 | Added memory regions, reset persistence, snapshots, seeded corruption, APIs, migration, and tests. |
 | 0.5.0 | 2026-08-24 | Added logical-time fault lifecycle, debounce, healing, latching, clear, DTC projection, APIs, and tests. |
 | 0.6.0 | 2026-08-24 | Added typed signal contracts, publication, gateway routes, atomic transfer, migration, APIs, and tests. |
+| 0.7.0 | 2026-08-24 | Added persisted multi-ECU scenarios, logical-clock diagnostics, bounded metrics, deterministic failure campaigns, APIs, migration, and tests. |
 
 ## 4. Scope and Boundaries
 
@@ -41,6 +42,7 @@ maintainable technical record for future ECU, CAN, and diagnostics development.
 - Bounded memory with volatile/non-volatile regions, snapshots, and seeded corruption.
 - Bounded fault records with logical-time confirmation, healing, latching, clear, and DTC intent.
 - Typed produced/consumed signals, logical-time publication, and gateway-owned routing hooks.
+- Bounded multi-ECU scenarios, logical-clock diagnostics, aggregate metrics, and repeatable campaigns.
 - Optimistic state versioning and idempotent exact retries.
 - Nested REST APIs, safe pagination, and type filtering.
 - Independent read/manage permissions.
@@ -55,7 +57,7 @@ maintainable technical record for future ECU, CAN, and diagnostics development.
 - CAN, CAN FD, LIN, Ethernet frames, DBC encoding, arbitration, and bus simulation.
 - UDS/OBD-II services, assigned DTC numbers, status-byte aging, security access, and flashing.
 - Full binary firmware images and unrestricted memory dumps.
-- Autonomous sensor-condition evaluation and fault injection campaigns.
+- Autonomous sensor-condition evaluation and continuous fault-trigger rules.
 
 ## 5. Architecture
 
@@ -65,6 +67,11 @@ protocol-independent: later CAN and UDS modules will reference the ECU rather th
 
 Request flow: authenticated client → FastAPI router → RBAC dependency → ECU domain service →
 PostgreSQL aggregate + audit record + transactional outbox event → HTTP response.
+
+The scenario orchestrator is a vehicle-scoped application service above the ECU primitives. It
+serializes execution-ID claims with a vehicle row lock and performs all ordered actions in the API
+transaction. Its diagnostics use ECU logical clocks; host resource sampling and wall-clock timing are
+not part of simulated truth.
 
 ## 6. Domain Model
 
@@ -88,6 +95,11 @@ an obviously contradictory safety state.
 Each cyclic task has a unique canonical ID, a period from 1 to 60,000 milliseconds, and an offset
 smaller than its period. A maximum of 32 tasks keeps configuration and execution evidence bounded.
 
+An ECU scenario execution stores a request hash, bounded request, bounded aggregate result, iteration
+count, actor, and timestamps. One request has 1 to 32 actions, references at most 16 ECUs, repeats at
+most eight times, and returns at most 256 action summaries. Results include before/after counts and
+per-ECU clock lag rather than complete memory, signal-value, or fault payloads.
+
 ## 7. Public API and Security
 
 | Method | Path | Permission | Purpose |
@@ -109,6 +121,9 @@ smaller than its period. A maximum of 32 tasks keeps configuration and execution
 | POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/signals/{signal_name}/publish` | `ecus:manage` | Publish one produced signal value. |
 | POST/GET | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/signal-routes` | `ecus:manage` / `ecus:read` | Create or list gateway routes. |
 | POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/signal-routes/{route_id}/transfer` | `ecus:manage` | Transfer a routed value atomically. |
+| POST | `/api/v1/vehicles/{vehicle_id}/ecu-scenarios/execute` | `ecus:manage` | Execute a bounded deterministic scenario or campaign. |
+| GET | `/api/v1/vehicles/{vehicle_id}/ecu-scenarios` | `ecus:read` | List persisted scenario evidence safely. |
+| GET | `/api/v1/vehicles/{vehicle_id}/ecu-scenarios/{execution_id}` | `ecus:read` | Inspect one scenario execution. |
 
 The Android Automotive client continues to access only the public ATEP API. It never connects to
 PostgreSQL or RabbitMQ directly. Stable errors include `ecu_not_found`,
@@ -174,12 +189,26 @@ ECUs, compares source and target versions, copies the source value to the target
 time, and increments only the target version. This is an adapter hook: no CAN ID, frame, DBC,
 arbitration, bitrate, or bus timing exists in the ECU domain.
 
+### 8.6 Scenario Orchestration and Timing Diagnostics
+
+Scenario actions call the existing advance, fault, corruption, publication, and transfer services.
+The orchestrator supplies each primitive's current version and derives a stable command ID from the
+execution ID, iteration, and action index. Corruption seeds derive from the declared base seed and
+the same logical coordinates, making a campaign repeatable from an identical initial state.
+
+Exact request replay returns persisted evidence without executing actions again; changed reuse of an
+execution ID fails with `ecu_scenario_execution_conflict`. Before/after evidence counts ECUs, memory
+cells, semantic signals, active faults, routes, and aggregate versions. Timing evidence reports the
+minimum and maximum ECU clocks, skew, synchronization state, and lag for at most 16 ECUs. Aggregate
+audit and outbox evidence excludes action requests, memory contents, physical values, and fault sets.
+
 ## 9. Functional Requirements
 
 The authoritative catalogue is `docs/requirements-volume-iii.md`. III-1 covers the aggregate, III-2
 covers deterministic execution and reset, III-3 covers versioned profiles, III-4 covers memory
 regions, snapshots, persistence, and corruption, III-5 covers fault lifecycle and DTC intent, and
-III-6 covers semantic signal contracts and gateway routing hooks.
+III-6 covers semantic signal contracts and gateway routing hooks. III-7 covers multi-ECU scenarios,
+logical-clock diagnostics, bounded resource evidence, and deterministic campaigns.
 
 ## 10. Architecture Decisions
 
@@ -253,6 +282,21 @@ Ethernet or simulation adapters to reuse the same ECU contract.
 Persistent routes provide reviewable source/target ownership. Matching type/unit rules prevent
 implicit conversion, while source and target versions expose stale transfers rather than silently
 copying a different value.
+
+### ADR-ECU-014 — Orchestrate Existing Commands Instead of Duplicating ECU Behavior
+
+Scenario actions call the already validated ECU primitives and calculate optimistic versions at the
+point of execution. This keeps fault, memory, timing, and signal invariants in one implementation.
+
+### ADR-ECU-015 — Treat Logical Clocks as Timing Diagnostics
+
+Clock skew and lag come only from ECU simulation clocks. Host CPU/GPU load and wall-clock duration
+describe the test environment, not vehicle behavior, and therefore never affect scenario results.
+
+### ADR-ECU-016 — Bound and Minimize Campaign Evidence
+
+Iteration, action, and ECU limits cap response and transaction size. Aggregate evidence retains
+identities, counts, versions, and skew while excluding memory images, physical values, and full faults.
 
 ## 11. Verification Catalogue
 
@@ -353,16 +397,37 @@ copying a different value.
 | Signal RBAC/OpenAPI | Publish protected, typed, safely paginated endpoints. | Contract/integration |
 | Transport boundary | Verify no CAN ID, frame, DBC, arbitration, or bitrate type is imported. | Review |
 
+## 11.6 III-7 Verification
+
+| Test | Objective | Level |
+|---|---|---|
+| Action contract | Require kind-specific fields and reject the 33rd action. | Schema |
+| ECU scope | Reject a scenario referencing more than 16 ECUs. | Schema |
+| Campaign bound | Reject the ninth iteration and cap results at 256 summaries. | Schema |
+| Ordered orchestration | Execute existing ECU commands in declared iteration/action order. | Service |
+| Deterministic seed | Derive the same corruption seed and command identity from the same coordinates. | Unit/service |
+| Timing diagnostic | Report logical minimum, maximum, skew, synchronization, and lag. | Service |
+| Resource evidence | Compare bounded before/after aggregate counts without host sampling. | Service |
+| Exact replay | Return persisted evidence without applying actions twice. | Service/API |
+| Execution-ID conflict | Return one stable conflict for a changed request. | Service/API |
+| Concurrent claim | Serialize one vehicle's scenario identifiers with a row lock. | Design/integration |
+| Atomic campaign | Commit primitive mutations, scenario, audit, and outbox together. | Integration |
+| Evidence minimization | Exclude action payloads, physical values, memory, and full faults. | Service |
+| Scenario RBAC/OpenAPI | Publish protected execute, list, and detail endpoints with safe limits. | Contract/integration |
+| Protocol boundary | Keep CAN frames, DBC, UDS, and wall-clock schedulers outside the orchestrator. | Review |
+
 ## 12. Implemented Evidence
 
 - `src/atep/ecus/` contains models, schemas, services, and routers.
 - Migrations `0018_ecu_aggregate`, `0019_ecu_execution_clock`, and
-  `0020_ecu_behavior_profiles`, `0021_ecu_memory_regions`, and `0022_ecu_signal_contracts` own the database schema.
+  `0020_ecu_behavior_profiles`, `0021_ecu_memory_regions`, `0022_ecu_signal_contracts`, and
+  `0023_ecu_scenarios` own the database schema.
 - Permission catalogue contains `ecus:read` and `ecus:manage`.
 - Events are `atep.ecu.created.v1` and `atep.ecu.state.updated.v1`.
 - Simulation events are `atep.ecu.simulation.advanced.v1` and `atep.ecu.reset.completed.v1`.
 - Memory events cover snapshot creation/restoration and deterministic corruption.
 - Fault events use `atep.ecu.fault.lifecycle.changed.v1` for observation and explicit-clear evidence; signal events cover publication, route creation, and routed transfer without physical values in audit evidence.
+- Scenario completion uses `atep.ecu.scenario.completed.v1` with bounded counts and clock skew.
 - Automated tests cover validation, atomic evidence, concurrency, idempotency, permissions, and API contracts.
 
 ## 13. Risks and Technical Debt
@@ -375,12 +440,17 @@ copying a different value.
 - Actual DTC identifiers, status-byte semantics, and aging belong to the Diagnostics boundary.
 - Cross-route lock ordering must be hardened before high-concurrency multi-gateway execution.
 - Unit conversion is intentionally absent; routes currently require exact unit equality.
+- Vehicle-level serialization is intentionally conservative; later scale work may introduce ordered
+  multi-aggregate locks after measuring real campaign contention.
+- Scenario definitions are request-persisted execution evidence, not yet a reusable catalogue with
+  approval workflow or scheduled execution.
 
 ## 14. Roadmap
 
-The next increment adds multi-ECU scenarios, logical-time diagnostics, bounded resource metrics, and
-repeatable failure campaigns. CAN bus implementation remains in Volume IV. See
-`docs/roadmap-volume-iii.md`.
+The initial Volume III baseline is complete. The recommended next development starts Volume IV with a
+protocol-independent CAN network aggregate, bounded frame contracts, topology, and deterministic bus
+submission semantics. DBC encoding, arbitration, CAN FD, fault injection, and timing follow in later
+Volume IV increments. See `docs/roadmap-volume-iii.md`.
 
 ## 15. Study Exercises
 
@@ -404,3 +474,7 @@ repeatable failure campaigns. CAN bus implementation remains in Volume IV. See
 18. Explain why a gateway route rejects Celsius-to-Kelvin transfer instead of converting silently.
 19. Trace publication and transfer versions through an exact retry and one stale-source conflict.
 20. Design the future Volume IV adapter that maps a semantic signal to a DBC without changing ECU state.
+21. Build a two-ECU scenario and calculate every derived command ID and campaign seed.
+22. Compare synchronized ECU clocks with a 250 ms skew and explain the diagnostic result.
+23. Prove why aggregate scenario evidence is safer than copying action requests and physical values.
+24. Propose a reusable scenario catalogue without weakening immutable execution evidence.

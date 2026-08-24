@@ -82,6 +82,15 @@ compatible signals between distinct ECUs and copy values under source/target ver
 boundary contains no CAN identifier, frame payload, DBC, arbitration, bitrate, or bus-error concept;
 Volume IV adapters will translate these semantic signals to transport-specific representations.
 
+Volume III-7 adds a vehicle-scoped scenario orchestrator above those ECU primitives. A bounded
+scenario can advance logical clocks, observe faults, apply deterministically seeded corruption,
+publish signals, and transfer gateway routes. It persists only bounded execution summaries,
+before/after aggregate counts, and per-ECU logical-clock skew. It never treats host CPU, GPU,
+memory, or elapsed wall time as simulated vehicle truth. A vehicle row lock serializes execution-ID
+claims, while the surrounding API transaction makes all primitive mutations and final scenario
+evidence atomic. CAN transport, UDS services, autonomous conditions, and real-time scheduling remain
+outside this orchestration boundary.
+
 ## Decisions
 
 1. **PostgreSQL is the system of record.** Redis is reserved for ephemeral state, caching,

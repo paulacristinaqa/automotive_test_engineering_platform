@@ -626,3 +626,143 @@ class EcuSignalRouteTransferResponse(BaseModel):
     target_version: int
     duplicate: bool = False
     created_at: datetime
+
+
+class EcuScenarioActionKind(StrEnum):
+    ADVANCE_TIME = "advance_time"
+    OBSERVE_FAULT = "observe_fault"
+    CORRUPT_MEMORY = "corrupt_memory"
+    PUBLISH_SIGNAL = "publish_signal"
+    TRANSFER_SIGNAL = "transfer_signal"
+
+
+class EcuScenarioAction(BaseModel):
+    kind: EcuScenarioActionKind
+    ecu_id: str | None = Field(default=None, min_length=3, max_length=80)
+    gateway_ecu_id: str | None = Field(default=None, min_length=3, max_length=80)
+    duration_ms: int | None = Field(default=None, ge=1, le=600_000)
+    signal_name: str | None = Field(default=None, min_length=3, max_length=40)
+    value: StrictBool | StrictInt | StrictFloat | None = None
+    route_id: str | None = Field(default=None, min_length=3, max_length=80)
+    fault_code: str | None = Field(default=None, min_length=3, max_length=32)
+    severity: EcuFaultSeverity | None = None
+    detected: bool | None = None
+    description: str = Field(default="", max_length=200)
+    confirmation_threshold: int = Field(default=2, ge=1, le=100)
+    healing_threshold: int = Field(default=2, ge=1, le=100)
+    latched: bool = False
+    bit_flips: int | None = Field(default=None, ge=1, le=32)
+    region_names: list[str] = Field(default_factory=list, max_length=16)
+
+    @field_validator("ecu_id", "gateway_ecu_id", "route_id")
+    @classmethod
+    def validate_optional_identifier(cls, value: str | None) -> str | None:
+        return EcuCreate.validate_identifier(value) if value is not None else None
+
+    @field_validator("signal_name")
+    @classmethod
+    def validate_optional_signal(cls, value: str | None) -> str | None:
+        return EcuSignalContract.validate_name(value) if value is not None else None
+
+    @field_validator("fault_code")
+    @classmethod
+    def validate_optional_fault(cls, value: str | None) -> str | None:
+        return EcuFault.validate_code(value) if value is not None else None
+
+    @model_validator(mode="after")
+    def require_kind_fields(self) -> "EcuScenarioAction":
+        required: dict[EcuScenarioActionKind, tuple[str, ...]] = {
+            EcuScenarioActionKind.ADVANCE_TIME: ("ecu_id", "duration_ms"),
+            EcuScenarioActionKind.OBSERVE_FAULT: (
+                "ecu_id",
+                "fault_code",
+                "severity",
+                "detected",
+            ),
+            EcuScenarioActionKind.CORRUPT_MEMORY: ("ecu_id", "bit_flips"),
+            EcuScenarioActionKind.PUBLISH_SIGNAL: ("ecu_id", "signal_name", "value"),
+            EcuScenarioActionKind.TRANSFER_SIGNAL: ("gateway_ecu_id", "route_id"),
+        }
+        missing = [name for name in required[self.kind] if getattr(self, name) is None]
+        if missing:
+            raise ValueError(f"{self.kind.value} requires {', '.join(missing)}")
+        return self
+
+
+class EcuScenarioExecuteCommand(BaseModel):
+    execution_id: str = Field(min_length=8, max_length=40)
+    iterations: int = Field(default=1, ge=1, le=8)
+    base_seed: int = Field(default=0, ge=0, le=2_147_483_647)
+    actions: list[EcuScenarioAction] = Field(min_length=1, max_length=32)
+
+    @field_validator("execution_id")
+    @classmethod
+    def validate_execution_id(cls, value: str) -> str:
+        return EcuAdvanceCommand.validate_command_id(value)
+
+    @model_validator(mode="after")
+    def bound_ecu_scope(self) -> "EcuScenarioExecuteCommand":
+        identifiers = {
+            identifier
+            for action in self.actions
+            for identifier in (action.ecu_id, action.gateway_ecu_id)
+            if identifier is not None
+        }
+        if len(identifiers) > 16:
+            raise ValueError("a scenario may reference at most 16 ECUs")
+        return self
+
+
+class EcuScenarioResourceMetrics(BaseModel):
+    ecu_count: int
+    memory_cell_count: int
+    signal_count: int
+    active_fault_count: int
+    route_count: int
+    aggregate_version: int
+
+
+class EcuScenarioClockDiagnostic(BaseModel):
+    ecu_id: str
+    simulation_time_ms: int
+    lag_from_max_ms: int
+
+
+class EcuScenarioTimingDiagnostics(BaseModel):
+    minimum_time_ms: int
+    maximum_time_ms: int
+    clock_skew_ms: int
+    synchronized: bool
+    ecus: list[EcuScenarioClockDiagnostic]
+
+
+class EcuScenarioActionResult(BaseModel):
+    iteration: int
+    action_index: int
+    kind: EcuScenarioActionKind
+    ecu_id: str
+    state_version: int
+    simulation_time_ms: int
+    outcome: str
+
+
+class EcuScenarioExecutionResponse(BaseModel):
+    id: UUID
+    execution_id: str
+    vehicle_id: str
+    iterations: int
+    base_seed: int
+    action_count: int
+    duplicate: bool = False
+    resources_before: EcuScenarioResourceMetrics
+    resources_after: EcuScenarioResourceMetrics
+    timing: EcuScenarioTimingDiagnostics
+    actions: list[EcuScenarioActionResult] = Field(max_length=256)
+    created_at: datetime
+
+
+class EcuScenarioExecutionPage(BaseModel):
+    items: list[EcuScenarioExecutionResponse]
+    total: int
+    limit: int
+    offset: int

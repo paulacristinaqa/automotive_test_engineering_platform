@@ -1,6 +1,6 @@
 # ATEP Volume III — ECU Simulator Requirements
 
-Status: Increments III-1 through III-6 implemented.
+Status: Increments III-1 through III-7 implemented.
 
 ## Functional Requirements
 
@@ -51,6 +51,13 @@ Status: Increments III-1 through III-6 implemented.
 | ECU-FR-043 | A route shall connect compatible produced and consumed signals with matching type and unit. | Compatibility tests |
 | ECU-FR-044 | Route transfer shall copy the source value atomically and reject stale source or target versions. | Transfer service test |
 | ECU-FR-045 | Signal publication, route creation, and transfer shall emit versioned outbox and minimized audit evidence. | Evidence tests |
+| ECU-FR-046 | Authorized clients shall execute and inspect persisted, vehicle-scoped multi-ECU scenarios. | Scenario service, API, and RBAC tests |
+| ECU-FR-047 | A scenario shall contain 1 to 32 actions, reference at most 16 ECUs, and repeat at most eight iterations. | Schema boundary tests |
+| ECU-FR-048 | Scenario actions shall orchestrate logical-time advance, fault observation, seeded memory corruption, signal publication, and gateway transfer. | Action dispatch tests and existing primitive tests |
+| ECU-FR-049 | Campaign corruption seeds and command identifiers shall derive deterministically from the scenario identity, base seed, iteration, and action index. | Determinism and exact-replay tests |
+| ECU-FR-050 | Scenario results shall report bounded before/after aggregate resource metrics and per-ECU logical-clock skew diagnostics. | Response-contract and service tests |
+| ECU-FR-051 | Exact execution retries shall return persisted evidence without applying actions twice; changed reuse shall return a stable conflict. | Replay and conflict tests |
+| ECU-FR-052 | Scenario actions, execution evidence, audit, and outbox records shall commit in one transaction. | Service rollback design and integration migration gate |
 
 ## Non-Functional Requirements
 
@@ -72,3 +79,7 @@ Status: Increments III-1 through III-6 implemented.
 | ECU-NFR-014 | Signal contracts shall remain independent of CAN IDs, frames, DBC files, arbitration, and bus timing. | Boundary review |
 | ECU-NFR-015 | Signal values and route listings shall remain bounded. | Schema and pagination limits |
 | ECU-NFR-016 | Signal publication and routing shall not depend on wall-clock timing. | Logical-time service tests |
+| ECU-NFR-017 | Scenario execution shall not sample host CPU, GPU, memory, or wall-clock duration as simulation truth. | Architecture boundary review |
+| ECU-NFR-018 | One scenario response shall contain at most 256 action summaries and 16 clock diagnostics. | Schema and orchestration bounds |
+| ECU-NFR-019 | Concurrent scenario identifiers for one vehicle shall serialize through a vehicle row lock. | Service design and concurrency review |
+| ECU-NFR-020 | Scenario evidence shall exclude physical signal values, memory contents, and complete fault payloads from aggregate audit and outbox records. | Evidence minimization tests |
