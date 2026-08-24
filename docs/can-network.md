@@ -1,7 +1,7 @@
 # CAN Network and Deterministic Arbitration
 
-Volume IV-1 introduced a vehicle-scoped classic CAN aggregate. Volume IV-2 adds deterministic
-batch arbitration, calculated transmission duration, receive evidence, and bounded bus utilization.
+Volume IV-1 introduced a vehicle-scoped classic CAN aggregate. Volume IV-2 added deterministic
+arbitration and timing. Volume IV-3 adds a structured DBC catalogue and exact signal codec.
 
 ## Implemented Boundary
 
@@ -18,9 +18,14 @@ batch arbitration, calculated transmission duration, receive evidence, and bound
 - classic CAN nominal duration excluding bit stuffing and including three-bit intermission;
 - consumer delivery evidence, latency, idle time, occupied time, and utilization;
 - persisted arbitration results with exact replay and stable changed-reuse conflict.
+- one bounded DBC catalogue mapped to existing frame contracts;
+- Intel LSB-first and Motorola MSB-first sawtooth bit placement;
+- unsigned and two's-complement signed signals with decimal factor and offset;
+- exact physical-to-raw representability, optional physical bounds, and overlap detection;
+- replay-safe encode/decode evidence with payload-free audit and events.
 
 CAN FD payloads, bit stuffing, retransmission, acknowledgement failure, error counters, bus-off,
-DBC encoding, LIN, and Ethernet are deliberately deferred. Simulated truth never uses host timing.
+textual `.dbc` parsing, multiplexed signals, LIN, and Ethernet are deliberately deferred.
 
 ## Public API
 
@@ -31,6 +36,12 @@ DBC encoding, LIN, and Ethernet are deliberately deferred. Simulated truth never
 - `POST /api/v1/vehicles/{vehicle_id}/can-networks/arbitrations/execute`
 - `GET /api/v1/vehicles/{vehicle_id}/can-networks/arbitrations`
 - `GET /api/v1/vehicles/{vehicle_id}/can-networks/arbitrations/{command_id}`
+- `POST /api/v1/vehicles/{vehicle_id}/can-networks/dbc-catalogues`
+- `GET /api/v1/vehicles/{vehicle_id}/can-networks/dbc-catalogues`
+- `POST /api/v1/vehicles/{vehicle_id}/can-networks/dbc/encode`
+- `POST /api/v1/vehicles/{vehicle_id}/can-networks/dbc/decode`
+- `GET /api/v1/vehicles/{vehicle_id}/can-networks/dbc/executions`
+- `GET /api/v1/vehicles/{vehicle_id}/can-networks/dbc/executions/{command_id}`
 
 Reads require `can_networks:read`; creation and submission require `can_networks:manage`.
 
@@ -60,3 +71,21 @@ One arbitration batch increments the network version once and the sequence once 
 result stores frame order, timing, delivery to declared consumers, maximum latency, and utilization.
 The event `atep.can.arbitration.completed.v1` and its audit record contain aggregate metrics only;
 payload bytes remain confined to transmission evidence.
+
+## Structured DBC Signal Codec
+
+Each catalogue message references an existing frame contract, so frame ID, format, DLC, producer,
+and consumers remain owned by the CAN topology. Signals add transport interpretation: start bit,
+length, byte order, signedness, factor, offset, optional physical bounds, and unit. Catalogue
+creation rejects unknown contracts, signals outside the DLC, and overlapping occupied bits.
+
+Intel positions increase from the declared least-significant start bit. Motorola positions begin at
+the signal's most-significant bit and follow DBC sawtooth numbering: decrement within a byte, then
+jump from bit 0 to bit 15 of the next byte. Signed raw values use two's complement.
+
+Encoding calculates `(physical - offset) / factor` with decimal arithmetic and rejects fractional raw
+results instead of rounding silently. Decoding calculates `raw * factor + offset`. Commands require
+exact signal sets, are serialized on the network row, and persist deterministic payload, raw, and
+physical evidence. Exact retries reuse the stored result; changed reuse returns
+`can_signal_codec_command_conflict`. The event `atep.can.signal.codec.completed.v1` exposes only
+operation, identities, signal count, and DLC.

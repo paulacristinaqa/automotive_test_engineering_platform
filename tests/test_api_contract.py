@@ -306,17 +306,39 @@ def test_can_network_baseline_contracts_and_safe_pagination_are_published() -> N
     detail = paths[
         "/api/v1/vehicles/{vehicle_id}/can-networks/arbitrations/{command_id}"
     ]
+    dbc_catalogue = paths["/api/v1/vehicles/{vehicle_id}/can-networks/dbc-catalogues"]
+    dbc_encode = paths["/api/v1/vehicles/{vehicle_id}/can-networks/dbc/encode"]
+    dbc_decode = paths["/api/v1/vehicles/{vehicle_id}/can-networks/dbc/decode"]
+    codec_executions = paths[
+        "/api/v1/vehicles/{vehicle_id}/can-networks/dbc/executions"
+    ]
+    codec_detail = paths[
+        "/api/v1/vehicles/{vehicle_id}/can-networks/dbc/executions/{command_id}"
+    ]
     assert {"get", "post"} <= set(collection)
     assert {"get", "post"} <= set(frames)
     assert "get" in arbitrations
     assert "post" in execute
     assert "get" in detail
+    assert {"get", "post"} <= set(dbc_catalogue)
+    assert "post" in dbc_encode
+    assert "post" in dbc_decode
+    assert "get" in codec_executions
+    assert "get" in codec_detail
     create_schema = collection["post"]["requestBody"]["content"]["application/json"]["schema"]
     submit_schema = frames["post"]["requestBody"]["content"]["application/json"]["schema"]
     assert create_schema["$ref"].endswith("/CanNetworkCreate")
     assert submit_schema["$ref"].endswith("/CanFrameSubmitCommand")
     execute_schema = execute["post"]["requestBody"]["content"]["application/json"]["schema"]
     assert execute_schema["$ref"].endswith("/CanArbitrationCommand")
+    catalogue_schema = dbc_catalogue["post"]["requestBody"]["content"]["application/json"][
+        "schema"
+    ]
+    encode_schema = dbc_encode["post"]["requestBody"]["content"]["application/json"]["schema"]
+    decode_schema = dbc_decode["post"]["requestBody"]["content"]["application/json"]["schema"]
+    assert catalogue_schema["$ref"].endswith("/CanDbcCatalogueCreate")
+    assert encode_schema["$ref"].endswith("/CanSignalEncodeCommand")
+    assert decode_schema["$ref"].endswith("/CanSignalDecodeCommand")
     parameters = {item["name"]: item["schema"] for item in frames["get"]["parameters"]}
     assert parameters["limit"]["maximum"] == 200
     assert parameters["offset"]["maximum"] == 1_000_000
@@ -325,6 +347,11 @@ def test_can_network_baseline_contracts_and_safe_pagination_are_published() -> N
     }
     assert arbitration_parameters["limit"]["maximum"] == 200
     assert arbitration_parameters["offset"]["maximum"] == 1_000_000
+    codec_parameters = {
+        item["name"]: item["schema"] for item in codec_executions["get"]["parameters"]
+    }
+    assert codec_parameters["limit"]["maximum"] == 200
+    assert codec_parameters["offset"]["maximum"] == 1_000_000
 
 
 def test_test_job_scheduler_contracts_and_safe_pagination_are_published() -> None:
