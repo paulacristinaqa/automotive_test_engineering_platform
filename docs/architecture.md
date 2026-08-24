@@ -44,6 +44,18 @@ This aggregate is a control-plane representation, not yet a time-stepped physics
 simulation engines, ECUs, CAN/UDS adapters, and AAOS/VHAL gateways will translate their state into
 this contract rather than writing PostgreSQL directly.
 
+## Volume III boundary: ECU simulator
+
+Each electronic control unit belongs to one vehicle but has an independent lifecycle and versioned
+state. The `atep.ecus` domain owns ECU identity, type, bounded sparse byte memory, and explicit fault
+records. Nested REST APIs enforce `ecus:read` and `ecus:manage`; clients do not write state stores or
+the message broker directly.
+
+State replacement uses a row lock and expected version. Aggregate changes, minimized audit evidence,
+and versioned outbox events commit atomically. The boundary remains independent of transport and
+diagnostic protocols: CAN and UDS will reference the ECU aggregate in later volumes instead of
+creating parallel controller models.
+
 ## Decisions
 
 1. **PostgreSQL is the system of record.** Redis is reserved for ephemeral state, caching,
