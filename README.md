@@ -18,7 +18,7 @@ bounded baseline of **Volume II — Digital Vehicle**, the first seven implement
 Implemented behavior is backed by requirements, architecture decisions, migrations, automated
 tests, a disposable integration environment, and an English engineering workbook.
 
-> **Project status:** active development. Volume III is baselined and Volume IV-6 is implemented. The first
+> **Project status:** active development. Volume III is baselined and Volume IV is implemented. The first
 > ATEP-to-Android-Automotive integration contract now provides a vehicle catalogue and
 > idempotent telemetry and command delivery for the Vehicle Gateway. Persistent test runs now
 > publish authenticated live WebSocket updates to CarSystemUI, which continues to isolate
@@ -347,7 +347,7 @@ operational guidance, and review worksheets.
 | I | Core Platform | In progress |
 | II | Digital Vehicle | Baseline complete — increments II-1 through II-6 implemented |
 | III | ECU Simulator | Baseline complete — increments III-1 through III-7 implemented |
-| IV | CAN Network | In progress — increments IV-1 through IV-6 implemented |
+| IV | CAN Network | Implemented — increments IV-1 through IV-7 |
 | V | Diagnostics | Planned |
 | VI | Electric Vehicle | Planned |
 | VII | ADAS | Planned |

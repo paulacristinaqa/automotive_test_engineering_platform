@@ -309,6 +309,13 @@ def test_can_network_baseline_contracts_and_safe_pagination_are_published() -> N
     gateway_detail = paths[
         "/api/v1/vehicles/{vehicle_id}/can-networks/gateway/executions/{command_id}"
     ]
+    campaigns = paths["/api/v1/vehicles/{vehicle_id}/can-networks/multibus/campaigns"]
+    campaign_execute = paths[
+        "/api/v1/vehicles/{vehicle_id}/can-networks/multibus/campaigns/execute"
+    ]
+    campaign_detail = paths[
+        "/api/v1/vehicles/{vehicle_id}/can-networks/multibus/campaigns/{command_id}"
+    ]
     assert {"get", "post"} <= set(collection)
     assert {"get", "post"} <= set(frames)
     assert "get" in arbitrations
@@ -327,6 +334,9 @@ def test_can_network_baseline_contracts_and_safe_pagination_are_published() -> N
     assert "post" in gateway_execute
     assert "get" in gateway_executions
     assert "get" in gateway_detail
+    assert "get" in campaigns
+    assert "post" in campaign_execute
+    assert "get" in campaign_detail
     create_schema = collection["post"]["requestBody"]["content"]["application/json"]["schema"]
     submit_schema = frames["post"]["requestBody"]["content"]["application/json"]["schema"]
     assert create_schema["$ref"].endswith("/CanNetworkCreate")
@@ -349,6 +359,10 @@ def test_can_network_baseline_contracts_and_safe_pagination_are_published() -> N
     gateway_schema = gateway_execute["post"]["requestBody"]["content"]["application/json"]["schema"]
     assert multibus_schema["$ref"].endswith("/MultiBusConfigurationCommand")
     assert gateway_schema["$ref"].endswith("/GatewayRouteCommand")
+    campaign_schema = campaign_execute["post"]["requestBody"]["content"]["application/json"][
+        "schema"
+    ]
+    assert campaign_schema["$ref"].endswith("/MultiBusCampaignCommand")
     schemas = core_app.openapi()["components"]["schemas"]
     network_properties = schemas["CanNetworkCreate"]["properties"]
     assert network_properties["can_fd_enabled"]["default"] is False
@@ -379,6 +393,11 @@ def test_can_network_baseline_contracts_and_safe_pagination_are_published() -> N
     }
     assert gateway_parameters["limit"]["maximum"] == 200
     assert gateway_parameters["offset"]["maximum"] == 1_000_000
+    campaign_parameters = {
+        item["name"]: item["schema"] for item in campaigns["get"]["parameters"]
+    }
+    assert campaign_parameters["limit"]["maximum"] == 200
+    assert campaign_parameters["offset"]["maximum"] == 1_000_000
 
 
 def test_test_job_scheduler_contracts_and_safe_pagination_are_published() -> None:

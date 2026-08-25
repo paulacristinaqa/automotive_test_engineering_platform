@@ -1,8 +1,8 @@
 # ATEP Volume IV - CAN Network Engineering Workbook
 
-**Document status:** Increments IV-1 through IV-6 implemented
+**Document status:** Increments IV-1 through IV-7 implemented
 **Language:** English
-**Last updated:** 2026-08-24
+**Last updated:** 2026-08-25
 **Repository:** `paulacristinaqa/automotive_test_engineering_platform`
 
 ## 1. Document Purpose
@@ -15,7 +15,7 @@ evidence, verification strategy, risks, and study exercises for the CAN Network 
 | Field | Value |
 |---|---|
 | Volume | IV - CAN Network |
-| Baseline | Increments IV-1 through IV-6 |
+| Baseline | Increments IV-1 through IV-7 |
 | Architecture style | Vehicle-scoped aggregate with transactional domain service |
 | Primary runtime | Python 3.12, FastAPI, SQLAlchemy, PostgreSQL |
 | Quality gates | pytest, Ruff, strict mypy, Alembic and integration CI |
@@ -30,6 +30,7 @@ evidence, verification strategy, risks, and study exercises for the CAN Network 
 | 0.4.0 | 2026-08-24 | Added CAN FD network configuration, ISO payload lengths through 64 bytes, BRS, dual-rate phase timing, mixed classic/FD arbitration, extended DBC payloads, migration, and tests. |
 | 0.5.0 | 2026-08-25 | Added TEC/REC error confinement, deterministic transmission/reception faults and loss, bus-off enforcement and recovery, replay-safe evidence, APIs, migration, and tests. |
 | 0.6.0 | 2026-08-25 | Added bounded LIN and automotive Ethernet contracts, cross-protocol gateway routing, deterministic protocol timing, replay-safe evidence, APIs, migration, and tests. |
+| 0.7.0 | 2026-08-25 | Added atomic multi-bus campaigns, ordered traces, deterministic performance metrics, integrated failure scenarios, fingerprinted replay, APIs, migration, and tests. |
 
 ## 4. Scope and Boundaries
 
@@ -55,6 +56,8 @@ evidence, verification strategy, risks, and study exercises for the CAN Network 
 - DBC signal placement and codec payloads through 512 contracted bits.
 - TEC/REC error confinement, bounded fault injection, frame loss, bus-off enforcement, and recovery.
 - Bounded LIN channels, automotive Ethernet segments, and transparent gateway routes.
+- Atomic campaigns of one to 64 route steps with latency budgets and integrated fault modes.
+- Ordered payload-free traces, utilization, maximum and p95 latency, protocol and outcome metrics.
 
 ### 4.2 Deferred
 
@@ -100,6 +103,10 @@ The aggregate also stores bounded LIN channels, Ethernet segments, and gateway r
 sequence, versions, and actor. Routed payloads remain in command evidence but are excluded from
 audit and outbox records.
 
+`MultiBusCampaignExecution` stores a canonical SHA-256 request fingerprint, payload-free request
+summary, passed/degraded/failed status, ordered trace, deterministic performance result, aggregate
+versions, and actor. The service prevalidates all steps before mutating logical time or sequence.
+
 Bounds are architectural controls: 64 nodes, 256 contracts, 8 classic or 64 FD payload bytes, a 10-second maximum
 logical advance per submission, safe history pagination, and one network aggregate per vehicle.
 
@@ -128,6 +135,9 @@ logical advance per submission, safe history pagination, and one network aggrega
 | POST | `/api/v1/vehicles/{vehicle_id}/can-networks/gateway/routes/execute` | `can_networks:manage` | Execute a transparent route. |
 | GET | `/api/v1/vehicles/{vehicle_id}/can-networks/gateway/executions` | `can_networks:read` | List multi-bus evidence. |
 | GET | `/api/v1/vehicles/{vehicle_id}/can-networks/gateway/executions/{command_id}` | `can_networks:read` | Retrieve multi-bus evidence. |
+| POST | `/api/v1/vehicles/{vehicle_id}/can-networks/multibus/campaigns/execute` | `can_networks:manage` | Execute an atomic bounded campaign. |
+| GET | `/api/v1/vehicles/{vehicle_id}/can-networks/multibus/campaigns` | `can_networks:read` | List safely paginated campaign evidence. |
+| GET | `/api/v1/vehicles/{vehicle_id}/can-networks/multibus/campaigns/{command_id}` | `can_networks:read` | Retrieve one campaign trace and result. |
 
 The Android Automotive application and future gateways continue to use the public ATEP API. They
 never connect directly to PostgreSQL or RabbitMQ.
@@ -226,10 +236,29 @@ Transparent routing requires equal source and destination payload lengths. Execu
 aggregate, validates optimistic version, assigns one sequence, advances logical time using the
 destination protocol, and persists exact replay evidence atomically with audit and outbox records.
 
+### 8.6 Campaign, Trace, and Performance Semantics
+
+A campaign contains one to 64 uniquely identified route steps. Each step supplies its payload,
+logical advance, optional latency budget, and explicit fault mode. All routes and payload lengths
+are validated before the first mutation, so a rejected campaign cannot partially advance the
+aggregate.
+
+Normal and frame-loss steps consume destination-protocol duration and one sequence. Frame loss
+records failed delivery after consuming bus time. A gateway-unavailable step consumes only its
+requested idle advance and allocates no sequence. The ordered trace records route and protocol
+identity, outcome, fault, budget result, logical start/completion, duration, and timing metadata,
+but never payload byte values.
+
+Campaign evidence derives total window, occupied and idle microseconds, utilization percentage,
+maximum latency, nearest-rank p95 latency, protocol counts, delivery/failure counts, and latency
+budget violations. Status is `passed`, `performance_degraded`, or `failed`. One campaign increments
+the aggregate version once. A canonical SHA-256 fingerprint distinguishes an exact retry from
+changed command reuse without persisting payload values in the request summary.
+
 ## 9. Functional Requirements
 
-The authoritative catalogue is `docs/requirements-volume-iv.md`. IV-1 through IV-6 implement
-CAN-F-001 through CAN-F-060 and CAN-NF-001 through CAN-NF-020.
+The authoritative catalogue is `docs/requirements-volume-iv.md`. IV-1 through IV-7 implement
+CAN-F-001 through CAN-F-070 and CAN-NF-001 through CAN-NF-023.
 
 ## 10. Architecture Decisions
 
@@ -319,6 +348,18 @@ logical time, sequence, replay, and audit remain atomic during the bounded basel
 IV-6 requires equal payload lengths and preserves bytes unchanged. This separates deterministic
 transport timing and gateway control from future DBC-to-SOME/IP or application-level conversion.
 
+### ADR-CAN-018 - Execute Campaigns as One Aggregate Transaction
+
+All steps are prevalidated and then applied under one network row lock. This prevents partial
+campaign state, makes one version represent one test action, and preserves deterministic sequence
+and logical-time evidence across normal and failed routes.
+
+### ADR-CAN-019 - Fingerprint Full Input and Persist Minimized Summaries
+
+Exact idempotency must account for payload values, but traces and queryable metadata do not need
+them. The service hashes canonical full input and persists only lengths and control fields alongside
+the fingerprint, reducing sensitive evidence duplication without weakening conflict detection.
+
 ## 11. Verification Catalogue
 
 | Test | Objective | Level |
@@ -404,17 +445,31 @@ transport timing and gateway control from future DBC-to-SOME/IP or application-l
 | Gateway RBAC | Require manage for configuration/routing and read for evidence. | API/integration |
 | Gateway minimization | Exclude routed payload and full configuration from audit/outbox. | Service |
 | Multi-bus migration | Upgrade and downgrade contracts and execution evidence. | Integration |
+| Campaign bounds | Reject zero, duplicate, or more than 64 campaign steps. | Schema |
+| Campaign prevalidation | Reject an invalid route or payload before any state mutation. | Service |
+| Campaign ordering | Preserve declared step order in trace and sequence evidence. | Service |
+| Campaign timing | Derive idle, occupied, window, and utilization only from logical inputs. | Unit/service |
+| Campaign percentile | Calculate nearest-rank p95 deterministically from routed durations. | Unit/service |
+| Latency budget | Mark delivered steps and campaign status when a budget is exceeded. | Service |
+| Integrated loss | Consume route duration and sequence while recording failed delivery. | Service |
+| Gateway unavailable | Consume idle advance without route duration or sequence allocation. | Service |
+| Campaign status | Distinguish passed, performance-degraded, and failed results. | Service |
+| Campaign replay | Return exact persisted evidence without repeating time or sequence. | Service/API |
+| Campaign conflict | Reject changed command-ID reuse using the canonical fingerprint. | Service/API |
+| Campaign minimization | Exclude payload values from summaries, traces, audit, and outbox. | Service |
+| Campaign RBAC | Require manage for execution and read for history/detail. | API/integration |
+| Campaign migration | Upgrade and downgrade execution persistence and indexes. | Integration |
 
 ## 12. Implemented Evidence
 
 - `src/atep/can_network/` contains models, schemas, service, and router.
-- Migrations `0024_can_network_baseline` through `0029_multibus_gateway` own the database schema.
+- Migrations `0024_can_network_baseline` through `0030_multibus_campaigns` own the database schema.
 - Events include `atep.can.network.created.v1`, `atep.can.frame.submitted.v1`, and `atep.can.arbitration.completed.v1`.
 - DBC events are `atep.can.dbc.catalogue.created.v1` and `atep.can.signal.codec.completed.v1`.
 - Fault events are `atep.can.fault.injected.v1` and `atep.can.bus.recovered.v1`.
-- Multi-bus events are `atep.vehicle.multibus.configured.v1` and `atep.vehicle.gateway.routed.v1`.
+- Multi-bus events are `atep.vehicle.multibus.configured.v1`, `atep.vehicle.gateway.routed.v1`, and `atep.vehicle.multibus.campaign.completed.v1`.
 - Permissions are `can_networks:read` and `can_networks:manage`.
-- Automated tests cover validation, priority, classic and FD timing mathematics, mixed arbitration, readiness, delivery, utilization, versioning, replay, errors, DBC bit placement through 512 bits, signed scaling, exact conversion, TEC/REC thresholds, loss, bus-off enforcement, recovery timing, LIN/Ethernet bounds and timing, gateway routing, evidence minimization, persistence, and OpenAPI.
+- Automated tests cover validation, priority, classic and FD timing mathematics, mixed arbitration, readiness, delivery, utilization, versioning, replay, errors, DBC bit placement through 512 bits, signed scaling, exact conversion, TEC/REC thresholds, loss, bus-off enforcement, recovery timing, LIN/Ethernet bounds and timing, gateway routing, campaign traces, latency budgets, integrated failures, evidence minimization, persistence, and OpenAPI.
 
 ## 13. Risks and Technical Debt
 
@@ -431,11 +486,13 @@ transport timing and gateway control from future DBC-to-SOME/IP or application-l
 - Error-frame timing intentionally excludes bit stuffing, intermission, overload frames, acknowledgement errors, and automatic retransmission.
 - LIN and Ethernet timing are transparent deterministic models, not physical transceiver simulations.
 - Gateway payload transformation, SOME/IP, DoIP, VLAN scheduling, and traffic shaping remain deferred.
+- Campaign percentiles operate on bounded in-memory duration sets; large fleet analytics belong in the future Data Lake volume.
+- Failure modes are deterministic test controls, not electrical or physical gateway-failure simulations.
 
 ## 14. Roadmap
 
-The recommended next increment is IV-7: multi-bus campaigns, traces, performance evidence, and
-integrated failure scenarios. See `docs/roadmap-volume-iv.md`.
+Volume IV is complete through IV-7. The recommended next development is Volume V-1: diagnostic
+sessions, DTC storage, and foundational UDS service contracts.
 
 ## 15. Study Exercises
 
@@ -469,3 +526,8 @@ integrated failure scenarios. See `docs/roadmap-volume-iv.md`.
 28. Design a mixed arbitration test in which a classic frame has a lower CAN ID than an FD frame.
 29. Explain why nominal and data phase durations are rounded upward independently.
 30. Propose a bit-stuffing extension that preserves the IV-4 transparent timing evidence.
+31. Calculate campaign utilization for 3154 occupied microseconds in a 3229-microsecond window.
+32. Explain why a lost routed frame consumes sequence and bus time while an unavailable gateway does not.
+33. Prove the nearest-rank p95 result for a campaign containing durations of 4 and 3150 microseconds.
+34. Design a three-step campaign that becomes performance-degraded without any delivery failure.
+35. Explain how a full-input fingerprint permits payload-free persisted request summaries.

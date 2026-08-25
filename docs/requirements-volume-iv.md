@@ -64,6 +64,16 @@
 | CAN-F-058 | Route execution shall assign deterministic sequence, logical start/completion time, and destination timing. | Implemented |
 | CAN-F-059 | Configuration and routing shall support exact replay and stable changed-command conflicts. | Implemented |
 | CAN-F-060 | Multi-bus configuration and route evidence shall be protected, safely paginated, audited, and evented. | Implemented |
+| CAN-F-061 | A campaign shall contain 1-64 uniquely identified multi-bus route steps. | Implemented |
+| CAN-F-062 | Each campaign step shall define payload, logical advance, optional latency budget, and an explicit fault mode. | Implemented |
+| CAN-F-063 | Campaign execution shall validate all routes and payload lengths before mutating aggregate state. | Implemented |
+| CAN-F-064 | Campaign traces shall preserve ordered route identity, protocol, sequence, timing, outcome, fault, and budget evidence. | Implemented |
+| CAN-F-065 | Frame-loss scenarios shall consume deterministic destination time while recording failed delivery. | Implemented |
+| CAN-F-066 | Gateway-unavailable scenarios shall consume only requested idle time and shall not allocate a transport sequence. | Implemented |
+| CAN-F-067 | Campaign metrics shall include window, occupied and idle time, utilization, maximum latency, p95 latency, protocol counts, and outcome counts. | Implemented |
+| CAN-F-068 | Campaign status shall distinguish passed, performance-degraded, and failed executions. | Implemented |
+| CAN-F-069 | Exact campaign replay shall be mutation-free; changed command reuse shall return a stable conflict. | Implemented |
+| CAN-F-070 | Campaign execution and history shall be RBAC-protected, audited, evented, and safely paginated. | Implemented |
 
 ## Non-Functional Requirements
 
@@ -89,3 +99,6 @@
 | CAN-NF-018 | LIN and Ethernet timing shall remain deterministic across host CPU, GPU, and wall-clock conditions. | Implemented |
 | CAN-NF-019 | Gateway audit and outbox evidence shall exclude routed payload bytes and full configuration bodies. | Implemented |
 | CAN-NF-020 | Multi-bus persistence changes shall be reversible through Alembic. | Implemented |
+| CAN-NF-021 | Campaign order, timing, percentile, and utilization results shall be independent of host CPU, GPU, and wall clock. | Implemented |
+| CAN-NF-022 | Campaign traces, request summaries, audit, and outbox evidence shall exclude payload byte values. | Implemented |
+| CAN-NF-023 | Campaign persistence shall use a canonical request fingerprint and a reversible Alembic migration. | Implemented |
