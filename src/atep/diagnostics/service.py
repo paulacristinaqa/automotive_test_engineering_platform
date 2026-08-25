@@ -12,6 +12,8 @@ from atep.core.errors import (
 from atep.diagnostics.models import (
     DiagnosticCommand,
     DiagnosticDataIdentifier,
+    DiagnosticRoutine,
+    DiagnosticRoutineState,
     DiagnosticSessionState,
     DiagnosticTroubleCode,
 )
@@ -24,6 +26,9 @@ from atep.diagnostics.schemas import (
     DidWriteCommand,
     DtcClearCommand,
     DtcReportCommand,
+    RoutineControlCommand,
+    RoutineControlType,
+    RoutineCreate,
     UdsNegativeResponseCode,
     UdsServiceId,
 )
@@ -50,6 +55,253 @@ async def get_or_create_session(
         session.add(state)
         await session.flush()
     return state
+
+
+async def create_routine(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    ecu: ElectronicControlUnit,
+    command: RoutineCreate,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> tuple[DiagnosticRoutine, DiagnosticRoutineState]:
+    existing = await session.scalar(
+        select(DiagnosticRoutine).where(
+            DiagnosticRoutine.ecu_id == ecu.id,
+            DiagnosticRoutine.identifier == command.identifier,
+        )
+    )
+    if existing is not None:
+        raise DiagnosticContractError(
+            reason=f"routine 0x{command.identifier:04X} already exists",
+            negative_response_code=UdsNegativeResponseCode.REQUEST_OUT_OF_RANGE,
+        )
+    total = await session.scalar(select(func.count()).where(DiagnosticRoutine.ecu_id == ecu.id))
+    if int(total or 0) >= 64:
+        raise DiagnosticContractError(
+            reason="an ECU may define at most 64 routines in V-3",
+            negative_response_code=UdsNegativeResponseCode.REQUEST_OUT_OF_RANGE,
+        )
+    routine = DiagnosticRoutine(
+        ecu_id=ecu.id,
+        identifier=command.identifier,
+        name=command.name,
+        description=command.description,
+        allowed_sessions=[item.value for item in command.allowed_sessions],
+        execution_time_ms=command.execution_time_ms,
+        supports_stop=command.supports_stop,
+        result_template=command.result_template,
+        version=1,
+        created_by_user_id=actor_user_id,
+    )
+    session.add(routine)
+    await session.flush()
+    state = DiagnosticRoutineState(
+        routine_id=routine.id,
+        status="idle",
+        invocation_count=0,
+        started_at_ms=None,
+        completes_at_ms=None,
+        stopped_at_ms=None,
+        input_parameters={},
+        result={},
+        version=1,
+    )
+    session.add(state)
+    await session.flush()
+    evidence = {
+        **_base_evidence(vehicle, ecu),
+        "routine_id": str(routine.id),
+        "identifier": routine.identifier,
+        "identifier_hex": f"0x{routine.identifier:04X}",
+        "execution_time_ms": routine.execution_time_ms,
+        "supports_stop": routine.supports_stop,
+        "definition_version": routine.version,
+        "routine_version": state.version,
+    }
+    enqueue_event(
+        session,
+        event_type="atep.diagnostics.routine.created.v1",
+        aggregate_type="diagnostic_routine",
+        aggregate_id=routine.id,
+        payload=evidence,
+        correlation_id=correlation_id,
+    )
+    record_audit(
+        session,
+        actor_user_id=actor_user_id,
+        action="diagnostics.routine_created",
+        resource_type="diagnostic_routine",
+        resource_id=routine.id,
+        correlation_id=correlation_id,
+        details=evidence,
+    )
+    return routine, state
+
+
+async def list_routines(
+    session: AsyncSession, *, ecu: ElectronicControlUnit, limit: int, offset: int
+) -> tuple[list[tuple[DiagnosticRoutine, DiagnosticRoutineState]], int]:
+    base = select(DiagnosticRoutine).where(DiagnosticRoutine.ecu_id == ecu.id)
+    total = await session.scalar(select(func.count()).select_from(base.subquery()))
+    result = await session.execute(
+        select(DiagnosticRoutine, DiagnosticRoutineState)
+        .join(DiagnosticRoutineState, DiagnosticRoutineState.routine_id == DiagnosticRoutine.id)
+        .where(DiagnosticRoutine.ecu_id == ecu.id)
+        .order_by(DiagnosticRoutine.identifier)
+        .limit(limit)
+        .offset(offset)
+    )
+    return [(routine, state) for routine, state in result.all()], int(total or 0)
+
+
+async def require_routine(
+    session: AsyncSession,
+    *,
+    ecu: ElectronicControlUnit,
+    identifier: int,
+    lock: bool = False,
+    uds_request: bool = False,
+) -> tuple[DiagnosticRoutine, DiagnosticRoutineState]:
+    routine_query = select(DiagnosticRoutine).where(
+        DiagnosticRoutine.ecu_id == ecu.id,
+        DiagnosticRoutine.identifier == identifier,
+    )
+    if lock:
+        routine_query = routine_query.with_for_update()
+    routine = await session.scalar(routine_query)
+    if routine is None:
+        if uds_request:
+            raise DiagnosticContractError(
+                reason=f"routine 0x{identifier:04X} is not supported",
+                negative_response_code=UdsNegativeResponseCode.REQUEST_OUT_OF_RANGE,
+            )
+        raise ResourceNotFoundError("diagnostic routine")
+    state_query = select(DiagnosticRoutineState).where(
+        DiagnosticRoutineState.routine_id == routine.id
+    )
+    if lock:
+        state_query = state_query.with_for_update()
+    state = await session.scalar(state_query)
+    if state is None:
+        raise ResourceNotFoundError("diagnostic routine state")
+    return routine, state
+
+
+async def control_routine(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    ecu: ElectronicControlUnit,
+    identifier: int,
+    command: RoutineControlCommand,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> tuple[DiagnosticCommand, bool]:
+    request = {"identifier": identifier, **command.model_dump(mode="json")}
+    existing = await _existing_command(session, ecu=ecu, command_id=command.command_id)
+    if existing is not None:
+        if existing.service_id == UdsServiceId.ROUTINE_CONTROL and existing.request == request:
+            return existing, True
+        raise DiagnosticCommandConflictError()
+    diagnostic_session = await get_or_create_session(session, ecu=ecu, lock=True)
+    routine, state = await require_routine(
+        session, ecu=ecu, identifier=identifier, lock=True, uds_request=True
+    )
+    if command.expected_session_version != diagnostic_session.version:
+        raise DiagnosticContractError(
+            reason=f"session version is {diagnostic_session.version}",
+            negative_response_code=UdsNegativeResponseCode.CONDITIONS_NOT_CORRECT,
+        )
+    if command.expected_routine_version != state.version:
+        raise DiagnosticContractError(
+            reason=f"routine version is {state.version}",
+            negative_response_code=UdsNegativeResponseCode.CONDITIONS_NOT_CORRECT,
+        )
+    if diagnostic_session.session_type not in routine.allowed_sessions:
+        raise DiagnosticContractError(
+            reason=(
+                f"routine 0x{routine.identifier:04X} is not available in "
+                f"{diagnostic_session.session_type} session"
+            ),
+            negative_response_code=UdsNegativeResponseCode.SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION,
+        )
+    _refresh_routine_state(routine=routine, state=state, simulation_time_ms=ecu.simulation_time_ms)
+    if command.control_type == RoutineControlType.START:
+        if state.status == "running":
+            raise DiagnosticContractError(
+                reason="routine is already running",
+                negative_response_code=UdsNegativeResponseCode.CONDITIONS_NOT_CORRECT,
+            )
+        state.status = "running"
+        state.invocation_count += 1
+        state.started_at_ms = ecu.simulation_time_ms
+        state.completes_at_ms = ecu.simulation_time_ms + routine.execution_time_ms
+        state.stopped_at_ms = None
+        state.input_parameters = command.parameters
+        state.result = {}
+        state.version += 1
+        _refresh_routine_state(
+            routine=routine, state=state, simulation_time_ms=ecu.simulation_time_ms
+        )
+    elif command.control_type == RoutineControlType.STOP:
+        if not routine.supports_stop:
+            raise DiagnosticContractError(
+                reason="routine does not support stopRoutine",
+                negative_response_code=UdsNegativeResponseCode.REQUEST_OUT_OF_RANGE,
+            )
+        if state.status != "running":
+            raise DiagnosticContractError(
+                reason=f"routine status is {state.status}",
+                negative_response_code=UdsNegativeResponseCode.CONDITIONS_NOT_CORRECT,
+            )
+        state.status = "stopped"
+        state.stopped_at_ms = ecu.simulation_time_ms
+        state.completes_at_ms = None
+        state.result = {}
+        state.version += 1
+    elif state.status == "idle":
+        raise DiagnosticContractError(
+            reason="routine has not been started",
+            negative_response_code=UdsNegativeResponseCode.CONDITIONS_NOT_CORRECT,
+        )
+    result = {
+        "identifier": routine.identifier,
+        "identifier_hex": f"0x{routine.identifier:04X}",
+        "control_type": int(command.control_type),
+        "status": state.status,
+        "invocation_count": state.invocation_count,
+        "started_at_ms": state.started_at_ms,
+        "completes_at_ms": state.completes_at_ms,
+        "stopped_at_ms": state.stopped_at_ms,
+        "routine_version": state.version,
+        "result": state.result,
+    }
+    execution = DiagnosticCommand(
+        ecu_id=ecu.id,
+        command_id=command.command_id,
+        service_id=UdsServiceId.ROUTINE_CONTROL,
+        request=request,
+        result=result,
+        previous_version=diagnostic_session.version,
+        session_version=diagnostic_session.version,
+        requested_by_user_id=actor_user_id,
+    )
+    session.add(execution)
+    await session.flush()
+    _record_routine_evidence(
+        session,
+        vehicle=vehicle,
+        ecu=ecu,
+        routine=routine,
+        state=state,
+        execution=execution,
+        control_type=command.control_type,
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id,
+    )
+    return execution, False
 
 
 async def create_did(
@@ -639,6 +891,68 @@ def _record_did_command_evidence(
         action=action,
         resource_type="ecu",
         resource_id=ecu.id,
+        correlation_id=correlation_id,
+        details=evidence,
+    )
+
+
+def _refresh_routine_state(
+    *,
+    routine: DiagnosticRoutine,
+    state: DiagnosticRoutineState,
+    simulation_time_ms: int,
+) -> None:
+    if (
+        state.status == "running"
+        and state.completes_at_ms is not None
+        and simulation_time_ms >= state.completes_at_ms
+    ):
+        state.status = "completed"
+        state.result = routine.result_template
+        state.version += 1
+
+
+def _record_routine_evidence(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    ecu: ElectronicControlUnit,
+    routine: DiagnosticRoutine,
+    state: DiagnosticRoutineState,
+    execution: DiagnosticCommand,
+    control_type: RoutineControlType,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> None:
+    evidence = {
+        **_base_evidence(vehicle, ecu),
+        "command_id": execution.command_id,
+        "service_id": execution.service_id,
+        "positive_response_service_id": execution.service_id + 0x40,
+        "routine_id": str(routine.id),
+        "identifier": routine.identifier,
+        "identifier_hex": f"0x{routine.identifier:04X}",
+        "control_type": int(control_type),
+        "status": state.status,
+        "invocation_count": state.invocation_count,
+        "routine_version": state.version,
+        "session_version": execution.session_version,
+        "simulation_time_ms": ecu.simulation_time_ms,
+    }
+    enqueue_event(
+        session,
+        event_type="atep.diagnostics.routine.controlled.v1",
+        aggregate_type="diagnostic_routine",
+        aggregate_id=routine.id,
+        payload=evidence,
+        correlation_id=correlation_id,
+    )
+    record_audit(
+        session,
+        actor_user_id=actor_user_id,
+        action="diagnostics.routine_controlled",
+        resource_type="diagnostic_routine",
+        resource_id=routine.id,
         correlation_id=correlation_id,
         details=evidence,
     )

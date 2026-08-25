@@ -4,7 +4,7 @@ Volume V owns diagnostic protocol semantics. Volume III continues to own ECU exe
 signals, and internal fault lifecycle; Volume V converts selected fault evidence into persisted
 Diagnostic Trouble Codes without making the two representations identical.
 
-## V-1/V-2 Request Flow
+## V-1/V-2/V-3 Request Flow
 
 Authenticated client -> FastAPI diagnostic route -> diagnostic RBAC -> vehicle and ECU lookup ->
 UDS domain service -> PostgreSQL diagnostic state/evidence + audit + transactional outbox -> stable
@@ -17,6 +17,7 @@ response or platform error envelope with a UDS negative response code.
 - `0x14` Clear Diagnostic Information: all-DTC group `FFFFFF`.
 - `0x22` Read Data by Identifier: one to sixteen typed DIDs per command.
 - `0x2E` Write Data by Identifier: session-authorized, versioned DID mutation.
+- `0x31` Routine Control: session-authorized start, stop, and result retrieval.
 
 Positive response service IDs are calculated as request service ID plus `0x40`. The domain reports
 NRC `0x22` for stale versions, `0x31` for invalid values/ranges, and `0x7F` when a DID service is not
@@ -34,6 +35,14 @@ V-2 adds an ECU-scoped catalogue capped at 128 DIDs. Boolean, integer, decimal, 
 have explicit constraints. Reads and writes persist exact command results for idempotent replay,
 while audit and outbox evidence contains only identifiers, counts, service IDs, and versions—never
 the DID values themselves.
+
+V-3 adds an ECU-scoped catalogue capped at 64 routines. Each routine declares its allowed
+sessions, bounded logical execution duration, stop capability, and a bounded scalar result
+template. Start, stop, and result requests check session and routine versions. Running routines
+complete only when ECU logical time reaches their completion timestamp, so tests never sleep.
+Protected command evidence preserves parameters and results for exact replay, while audit and
+outbox records expose only identifiers, statuses, service/subfunction identities, counters, and
+versions.
 
 The current POST DTC endpoint is a controlled simulator/test-fixture ingestion boundary. A later
 bridge will translate confirmed Volume III fault candidates or received UDS responses into this

@@ -409,6 +409,12 @@ writable DID, an authorized active session, matching session/DID versions, and a
 Exact results retain values for replay, while shared audit and outbox evidence contains only DID
 identifiers, counts, service identities, and versions.
 
+V-3 adds Routine Control (`0x31`) through a bounded ECU routine catalogue and a separate execution
+state. Start, stop, and request-results subfunctions are active-session authorized and
+optimistic-versioned. Completion derives exclusively from ECU simulation time. Routine parameters
+and results remain in protected state/command evidence for truthful replay and are excluded from
+shared audit and outbox payloads.
+
 Each ECU owns one current, optimistic-versioned diagnostic session. Mutating commands have
 ECU-scoped idempotency identities. Exact retry returns stored evidence; changed reuse is rejected.
 DTCs use ECU simulation time, retain bounded snapshots in protected persistence, and exclude those

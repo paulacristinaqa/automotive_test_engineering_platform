@@ -17,7 +17,11 @@
 | DG-F-011 | UDS `0x2E` shall write only writable DIDs authorized for the active session. | Implemented in V-2 |
 | DG-F-012 | DID writes shall validate declared type, numeric bounds, string length, session version, and DID version. | Implemented in V-2 |
 | DG-F-013 | DID read and write commands shall provide exact replay and stable changed-reuse conflicts. | Implemented in V-2 |
-| DG-F-014 | Routine Control, Security Access, ECU reset, and flashing shall be implemented incrementally. | Planned |
+| DG-F-014 | The platform shall maintain at most 64 typed routine definitions and one versioned execution state per routine and ECU. | Implemented in V-3 |
+| DG-F-015 | UDS `0x31` shall support startRoutine, stopRoutine, and requestRoutineResults with active-session authorization. | Implemented in V-3 |
+| DG-F-016 | Routine completion shall be deterministic from ECU logical time and return the configured bounded result. | Implemented in V-3 |
+| DG-F-017 | Routine control shall reject stale versions and provide exact replay for repeated command identities. | Implemented in V-3 |
+| DG-F-018 | Security Access, ECU reset, and flashing shall be implemented incrementally. | Planned |
 
 ## Non-Functional Requirements
 
@@ -33,9 +37,14 @@
 | DG-NF-008 | An ECU shall define at most 128 DIDs; catalogue pages shall return at most 128 entries. | Implemented in V-2 |
 | DG-NF-009 | DID values shall remain in command/catalogue storage and responses but shall not be copied into audit or outbox evidence. | Implemented in V-2 |
 | DG-NF-010 | DID catalogue changes, reads, and writes shall commit atomically with audit and outbox evidence. | Implemented in V-2 |
+| DG-NF-011 | Routine definitions shall contain at most 16 scalar result fields and accept at most 16 scalar start parameters. | Implemented in V-3 |
+| DG-NF-012 | Routine execution time shall be bounded from zero through 600,000 logical milliseconds. | Implemented in V-3 |
+| DG-NF-013 | Routine input parameters and result values shall not be copied into audit or outbox evidence. | Implemented in V-3 |
+| DG-NF-014 | Routine definitions, state transitions, command evidence, audit, and outbox writes shall be atomic. | Implemented in V-3 |
 
 ## Traceability
 
-V-1 and V-2 evidence is provided by `src/atep/diagnostics`, migrations
-`0031_diagnostics_foundation` and `0032_diagnostic_data_identifiers`,
+V-1 through V-3 evidence is provided by `src/atep/diagnostics`, migrations
+`0031_diagnostics_foundation`, `0032_diagnostic_data_identifiers`, and
+`0033_diagnostic_routines`,
 `tests/test_diagnostics.py`, API contract tests, and the separate Volume V engineering workbook.

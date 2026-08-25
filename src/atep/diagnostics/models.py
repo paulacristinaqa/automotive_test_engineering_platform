@@ -97,6 +97,67 @@ class DiagnosticDataIdentifier(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
 
+class DiagnosticRoutine(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "diagnostic_routines"
+    __table_args__ = (
+        UniqueConstraint("ecu_id", "identifier", name="uq_diagnostic_routine_identifier"),
+        CheckConstraint(
+            "identifier >= 0 AND identifier <= 65535", name="ck_diagnostic_routine_identifier"
+        ),
+        CheckConstraint(
+            "execution_time_ms >= 0 AND execution_time_ms <= 600000",
+            name="ck_diagnostic_routine_execution_time",
+        ),
+        CheckConstraint("version >= 1", name="ck_diagnostic_routine_version"),
+    )
+
+    ecu_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("electronic_control_units.id", ondelete="CASCADE"),
+        index=True,
+    )
+    identifier: Mapped[int] = mapped_column(Integer, index=True)
+    name: Mapped[str] = mapped_column(String(80))
+    description: Mapped[str] = mapped_column(String(240), default="")
+    allowed_sessions: Mapped[list[str]] = mapped_column(JSON)
+    execution_time_ms: Mapped[int] = mapped_column(Integer, default=0)
+    supports_stop: Mapped[bool] = mapped_column(Boolean, default=False)
+    result_template: Mapped[dict[str, bool | int | float | str]] = mapped_column(JSON)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+
+
+class DiagnosticRoutineState(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "diagnostic_routine_states"
+    __table_args__ = (
+        UniqueConstraint("routine_id", name="uq_diagnostic_routine_state"),
+        CheckConstraint(
+            "status IN ('idle', 'running', 'completed', 'stopped')",
+            name="ck_diagnostic_routine_state_status",
+        ),
+        CheckConstraint("invocation_count >= 0", name="ck_diagnostic_routine_invocations"),
+        CheckConstraint("version >= 1", name="ck_diagnostic_routine_state_version"),
+    )
+
+    routine_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("diagnostic_routines.id", ondelete="CASCADE"),
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(String(16), default="idle", index=True)
+    invocation_count: Mapped[int] = mapped_column(Integer, default=0)
+    started_at_ms: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    completes_at_ms: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    stopped_at_ms: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    input_parameters: Mapped[dict[str, bool | int | float | str]] = mapped_column(
+        JSON, default=dict
+    )
+    result: Mapped[dict[str, bool | int | float | str]] = mapped_column(JSON, default=dict)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+
 class DiagnosticTroubleCode(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "diagnostic_trouble_codes"
     __table_args__ = (UniqueConstraint("ecu_id", "code", name="uq_diagnostic_trouble_code"),)
