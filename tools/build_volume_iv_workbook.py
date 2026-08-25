@@ -6,8 +6,8 @@ SOURCE = workbook.ROOT / "docs" / "workbook-volume-iv.md"
 OUTPUT = workbook.ROOT / "docs" / "ATEP_Volume_IV_CAN_Network_Engineering_Workbook.docx"
 VOLUME_NUMBER = "IV"
 VOLUME_NAME = "CAN Network"
-DOCUMENT_VERSION = "0.5.0"
-DOCUMENT_STATUS = "Implemented increments: IV-1 to IV-5"
+DOCUMENT_VERSION = "0.6.0"
+DOCUMENT_STATUS = "Implemented increments: IV-1 to IV-6"
 BASELINE_DATE = "25 August 2026"
 
 

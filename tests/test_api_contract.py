@@ -256,37 +256,27 @@ def test_ecu_aggregate_contracts_and_safe_pagination_are_published() -> None:
     assert "post" in restore
     assert "post" in corruption
     observe_fault = paths["/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/faults/observe"]
-    clear_fault = paths[
-        "/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/faults/{fault_code}/clear"
-    ]
-    dtc_candidates = paths[
-        "/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/faults/dtc-candidates"
-    ]
+    clear_fault = paths["/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/faults/{fault_code}/clear"]
+    dtc_candidates = paths["/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/faults/dtc-candidates"]
     assert "post" in observe_fault
     assert "post" in clear_fault
     assert "get" in dtc_candidates
     signal_publish = paths[
         "/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/signals/{signal_name}/publish"
     ]
-    signal_routes = paths[
-        "/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/signal-routes"
-    ]
+    signal_routes = paths["/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/signal-routes"]
     route_transfer = paths[
         "/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/signal-routes/{route_id}/transfer"
     ]
     assert "post" in signal_publish
     assert {"get", "post"} <= set(signal_routes)
     assert "post" in route_transfer
-    route_parameters = {
-        item["name"]: item["schema"] for item in signal_routes["get"]["parameters"]
-    }
+    route_parameters = {item["name"]: item["schema"] for item in signal_routes["get"]["parameters"]}
     assert route_parameters["limit"]["maximum"] == 100
     assert route_parameters["offset"]["maximum"] == 1_000_000
     scenario_execute = paths["/api/v1/vehicles/{vehicle_id}/ecu-scenarios/execute"]
     scenario_list = paths["/api/v1/vehicles/{vehicle_id}/ecu-scenarios"]
-    scenario_detail = paths[
-        "/api/v1/vehicles/{vehicle_id}/ecu-scenarios/{execution_id}"
-    ]
+    scenario_detail = paths["/api/v1/vehicles/{vehicle_id}/ecu-scenarios/{execution_id}"]
     assert "post" in scenario_execute
     assert "get" in scenario_list
     assert "get" in scenario_detail
@@ -303,23 +293,21 @@ def test_can_network_baseline_contracts_and_safe_pagination_are_published() -> N
     frames = paths["/api/v1/vehicles/{vehicle_id}/can-networks/frames"]
     arbitrations = paths["/api/v1/vehicles/{vehicle_id}/can-networks/arbitrations"]
     execute = paths["/api/v1/vehicles/{vehicle_id}/can-networks/arbitrations/execute"]
-    detail = paths[
-        "/api/v1/vehicles/{vehicle_id}/can-networks/arbitrations/{command_id}"
-    ]
+    detail = paths["/api/v1/vehicles/{vehicle_id}/can-networks/arbitrations/{command_id}"]
     dbc_catalogue = paths["/api/v1/vehicles/{vehicle_id}/can-networks/dbc-catalogues"]
     dbc_encode = paths["/api/v1/vehicles/{vehicle_id}/can-networks/dbc/encode"]
     dbc_decode = paths["/api/v1/vehicles/{vehicle_id}/can-networks/dbc/decode"]
-    codec_executions = paths[
-        "/api/v1/vehicles/{vehicle_id}/can-networks/dbc/executions"
-    ]
-    codec_detail = paths[
-        "/api/v1/vehicles/{vehicle_id}/can-networks/dbc/executions/{command_id}"
-    ]
+    codec_executions = paths["/api/v1/vehicles/{vehicle_id}/can-networks/dbc/executions"]
+    codec_detail = paths["/api/v1/vehicles/{vehicle_id}/can-networks/dbc/executions/{command_id}"]
     faults = paths["/api/v1/vehicles/{vehicle_id}/can-networks/faults"]
     inject_fault = paths["/api/v1/vehicles/{vehicle_id}/can-networks/faults/inject"]
     recover_fault = paths["/api/v1/vehicles/{vehicle_id}/can-networks/faults/recover"]
-    fault_detail = paths[
-        "/api/v1/vehicles/{vehicle_id}/can-networks/faults/{command_id}"
+    fault_detail = paths["/api/v1/vehicles/{vehicle_id}/can-networks/faults/{command_id}"]
+    multibus_configure = paths["/api/v1/vehicles/{vehicle_id}/can-networks/multibus/configure"]
+    gateway_execute = paths["/api/v1/vehicles/{vehicle_id}/can-networks/gateway/routes/execute"]
+    gateway_executions = paths["/api/v1/vehicles/{vehicle_id}/can-networks/gateway/executions"]
+    gateway_detail = paths[
+        "/api/v1/vehicles/{vehicle_id}/can-networks/gateway/executions/{command_id}"
     ]
     assert {"get", "post"} <= set(collection)
     assert {"get", "post"} <= set(frames)
@@ -335,15 +323,17 @@ def test_can_network_baseline_contracts_and_safe_pagination_are_published() -> N
     assert "post" in inject_fault
     assert "post" in recover_fault
     assert "get" in fault_detail
+    assert "post" in multibus_configure
+    assert "post" in gateway_execute
+    assert "get" in gateway_executions
+    assert "get" in gateway_detail
     create_schema = collection["post"]["requestBody"]["content"]["application/json"]["schema"]
     submit_schema = frames["post"]["requestBody"]["content"]["application/json"]["schema"]
     assert create_schema["$ref"].endswith("/CanNetworkCreate")
     assert submit_schema["$ref"].endswith("/CanFrameSubmitCommand")
     execute_schema = execute["post"]["requestBody"]["content"]["application/json"]["schema"]
     assert execute_schema["$ref"].endswith("/CanArbitrationCommand")
-    catalogue_schema = dbc_catalogue["post"]["requestBody"]["content"]["application/json"][
-        "schema"
-    ]
+    catalogue_schema = dbc_catalogue["post"]["requestBody"]["content"]["application/json"]["schema"]
     encode_schema = dbc_encode["post"]["requestBody"]["content"]["application/json"]["schema"]
     decode_schema = dbc_decode["post"]["requestBody"]["content"]["application/json"]["schema"]
     assert catalogue_schema["$ref"].endswith("/CanDbcCatalogueCreate")
@@ -353,6 +343,12 @@ def test_can_network_baseline_contracts_and_safe_pagination_are_published() -> N
     recover_schema = recover_fault["post"]["requestBody"]["content"]["application/json"]["schema"]
     assert inject_schema["$ref"].endswith("/CanFaultInjectionCommand")
     assert recover_schema["$ref"].endswith("/CanBusRecoveryCommand")
+    multibus_schema = multibus_configure["post"]["requestBody"]["content"]["application/json"][
+        "schema"
+    ]
+    gateway_schema = gateway_execute["post"]["requestBody"]["content"]["application/json"]["schema"]
+    assert multibus_schema["$ref"].endswith("/MultiBusConfigurationCommand")
+    assert gateway_schema["$ref"].endswith("/GatewayRouteCommand")
     schemas = core_app.openapi()["components"]["schemas"]
     network_properties = schemas["CanNetworkCreate"]["properties"]
     assert network_properties["can_fd_enabled"]["default"] is False
@@ -378,6 +374,11 @@ def test_can_network_baseline_contracts_and_safe_pagination_are_published() -> N
     fault_parameters = {item["name"]: item["schema"] for item in faults["get"]["parameters"]}
     assert fault_parameters["limit"]["maximum"] == 200
     assert fault_parameters["offset"]["maximum"] == 1_000_000
+    gateway_parameters = {
+        item["name"]: item["schema"] for item in gateway_executions["get"]["parameters"]
+    }
+    assert gateway_parameters["limit"]["maximum"] == 200
+    assert gateway_parameters["offset"]["maximum"] == 1_000_000
 
 
 def test_test_job_scheduler_contracts_and_safe_pagination_are_published() -> None:

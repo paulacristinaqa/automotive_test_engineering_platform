@@ -54,6 +54,16 @@
 | CAN-F-048 | Fault executions shall be queryable by bounded history and command identifier. | Implemented |
 | CAN-F-049 | Fault and recovery operations shall produce atomic audit and outbox evidence. | Implemented |
 | CAN-F-050 | Network reads shall expose the current error state of affected nodes. | Implemented |
+| CAN-F-051 | The network aggregate shall configure at most eight bounded LIN channels. | Implemented |
+| CAN-F-052 | LIN frame identifiers shall be six-bit values with one publisher, 1-15 subscribers, and 1-8 payload bytes. | Implemented |
+| CAN-F-053 | LIN channels shall use a bitrate from 1 through 20 kbit/s and explicit checksum semantics. | Implemented |
+| CAN-F-054 | The aggregate shall configure at most eight automotive Ethernet segments at 100 or 1000 Mbit/s. | Implemented |
+| CAN-F-055 | Ethernet messages shall define EtherType, source, destinations, optional VLAN, and 1-1500 payload bytes. | Implemented |
+| CAN-F-056 | Gateway routes shall connect different protocols and reference an ECU declared with gateway role. | Implemented |
+| CAN-F-057 | Transparent gateway routes shall require equal source and destination payload lengths. | Implemented |
+| CAN-F-058 | Route execution shall assign deterministic sequence, logical start/completion time, and destination timing. | Implemented |
+| CAN-F-059 | Configuration and routing shall support exact replay and stable changed-command conflicts. | Implemented |
+| CAN-F-060 | Multi-bus configuration and route evidence shall be protected, safely paginated, audited, and evented. | Implemented |
 
 ## Non-Functional Requirements
 
@@ -76,3 +86,6 @@
 | CAN-NF-015 | Fault timing and counter transitions shall be independent of host CPU, GPU, and wall clock. | Implemented |
 | CAN-NF-016 | Fault audit and outbox records shall exclude CAN payload bytes and full request bodies. | Implemented |
 | CAN-NF-017 | Error-state and execution persistence shall be reversible through Alembic. | Implemented |
+| CAN-NF-018 | LIN and Ethernet timing shall remain deterministic across host CPU, GPU, and wall-clock conditions. | Implemented |
+| CAN-NF-019 | Gateway audit and outbox evidence shall exclude routed payload bytes and full configuration bodies. | Implemented |
+| CAN-NF-020 | Multi-bus persistence changes shall be reversible through Alembic. | Implemented |

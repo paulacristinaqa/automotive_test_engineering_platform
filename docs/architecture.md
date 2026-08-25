@@ -374,4 +374,12 @@ mixed classic/FD arbitration. Error confinement is aggregate-owned JSON state; r
 executions apply TEC/REC transitions, frame loss, bus-off exclusion, and explicit recovery under the
 same network row lock used by frame commands. Audit/outbox evidence is committed in the same
 transaction and excludes payload bytes. Textual DBC parsing, multiplexing, bit stuffing,
-acknowledgement, retransmission, LIN, and automotive Ethernet remain later increments.
+acknowledgement, retransmission, physical adapters, and payload transformation remain later increments.
+
+IV-6 extends the aggregate into a bounded multi-bus model without giving Android clients or external
+modules direct access to transport infrastructure. LIN channels, Ethernet segments, and transparent
+gateway routes are stored as versioned contracts. A route must cross protocol boundaries through a
+node with gateway role and preserves payload length; protocol-specific transformation remains an
+explicit future feature. The route executor locks the aggregate, derives destination duration from
+logical inputs, advances sequence and simulation time once, and atomically persists replay, audit,
+and outbox evidence without payload bytes.

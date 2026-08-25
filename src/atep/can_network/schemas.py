@@ -43,6 +43,108 @@ class CanNodeErrorState(BaseModel):
     state: CanNodeErrorMode
 
 
+class VehicleBusProtocol(StrEnum):
+    CAN = "can"
+    LIN = "lin"
+    ETHERNET = "ethernet"
+
+
+class LinChecksumModel(StrEnum):
+    CLASSIC = "classic"
+    ENHANCED = "enhanced"
+
+
+class LinFrameContract(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    identifier: str = Field(min_length=2, max_length=80, pattern=r"^[a-z][a-z0-9_-]+$")
+    frame_id: int = Field(ge=0, le=63)
+    publisher_node_id: UUID
+    subscriber_node_ids: list[UUID] = Field(min_length=1, max_length=15)
+    payload_length: int = Field(ge=1, le=8)
+    checksum_model: LinChecksumModel = LinChecksumModel.ENHANCED
+
+    @model_validator(mode="after")
+    def validate_nodes(self) -> "LinFrameContract":
+        if self.publisher_node_id in self.subscriber_node_ids:
+            raise ValueError("LIN publisher cannot also be a subscriber")
+        if len(set(self.subscriber_node_ids)) != len(self.subscriber_node_ids):
+            raise ValueError("LIN subscriber identifiers must be unique")
+        return self
+
+
+class LinChannelContract(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    identifier: str = Field(min_length=2, max_length=80, pattern=r"^[a-z][a-z0-9_-]+$")
+    bitrate_kbps: int = Field(default=20, ge=1, le=20)
+    master_node_id: UUID
+    frames: list[LinFrameContract] = Field(min_length=1, max_length=64)
+
+
+class EthernetMessageContract(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    identifier: str = Field(min_length=2, max_length=80, pattern=r"^[a-z][a-z0-9_-]+$")
+    ether_type: int = Field(ge=0x0600, le=0xFFFF)
+    source_node_id: UUID
+    destination_node_ids: list[UUID] = Field(min_length=1, max_length=63)
+    payload_length: int = Field(ge=1, le=1500)
+    vlan_id: int | None = Field(default=None, ge=1, le=4094)
+
+
+class EthernetSegmentContract(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    identifier: str = Field(min_length=2, max_length=80, pattern=r"^[a-z][a-z0-9_-]+$")
+    speed_mbps: int = Field(default=100, ge=100, le=1000)
+    messages: list[EthernetMessageContract] = Field(min_length=1, max_length=256)
+
+    @field_validator("speed_mbps")
+    @classmethod
+    def validate_speed(cls, value: int) -> int:
+        if value not in {100, 1000}:
+            raise ValueError("automotive Ethernet speed must be 100 or 1000 Mbps")
+        return value
+
+
+class GatewayRouteContract(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    identifier: str = Field(min_length=2, max_length=80, pattern=r"^[a-z][a-z0-9_-]+$")
+    gateway_node_id: UUID
+    source_protocol: VehicleBusProtocol
+    source_contract_id: str = Field(min_length=2, max_length=80)
+    destination_protocol: VehicleBusProtocol
+    destination_contract_id: str = Field(min_length=2, max_length=80)
+
+    @model_validator(mode="after")
+    def validate_protocols(self) -> "GatewayRouteContract":
+        if self.source_protocol is self.destination_protocol:
+            raise ValueError("gateway routes must connect different bus protocols")
+        return self
+
+
+class MultiBusConfigurationCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    command_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]+$")
+    expected_version: int = Field(ge=1)
+    lin_channels: list[LinChannelContract] = Field(default_factory=list, max_length=8)
+    ethernet_segments: list[EthernetSegmentContract] = Field(default_factory=list, max_length=8)
+    gateway_routes: list[GatewayRouteContract] = Field(min_length=1, max_length=128)
+
+
+class GatewayRouteCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    command_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]+$")
+    expected_version: int = Field(ge=1)
+    route_id: str = Field(min_length=2, max_length=80, pattern=r"^[a-z][a-z0-9_-]+$")
+    payload: list[int] = Field(min_length=1, max_length=1500)
+    advance_time_us: int = Field(default=0, ge=0, le=10_000_000)
+
+    @field_validator("payload")
+    @classmethod
+    def validate_payload_bytes(cls, value: list[int]) -> list[int]:
+        if any(item < 0 or item > 255 for item in value):
+            raise ValueError("gateway payload bytes must be between 0 and 255")
+        return value
+
+
 class CanNode(BaseModel):
     model_config = ConfigDict(extra="forbid")
     ecu_id: UUID
@@ -145,6 +247,9 @@ class CanNetworkResponse(BaseModel):
     nodes: list[CanNode]
     frame_contracts: list[CanFrameContract]
     error_states: dict[str, CanNodeErrorState]
+    lin_channels: list[LinChannelContract]
+    ethernet_segments: list[EthernetSegmentContract]
+    gateway_routes: list[GatewayRouteContract]
     version: int
     simulation_time_us: int
     next_sequence: int
@@ -212,6 +317,26 @@ class CanFaultExecutionResponse(BaseModel):
 
 class CanFaultExecutionPage(BaseModel):
     items: list[CanFaultExecutionResponse]
+    total: int
+    limit: int
+    offset: int
+
+
+class MultiBusGatewayExecutionResponse(BaseModel):
+    command_id: str
+    vehicle_id: str
+    network_id: str
+    operation: str
+    route_id: str | None
+    result: dict[str, object]
+    previous_version: int
+    network_version: int
+    duplicate: bool
+    created_at: datetime
+
+
+class MultiBusGatewayExecutionPage(BaseModel):
+    items: list[MultiBusGatewayExecutionResponse]
     total: int
     limit: int
     offset: int
