@@ -10,6 +10,7 @@ from atep.audit import models as audit_models  # noqa: F401
 from atep.can_network import models as can_network_models  # noqa: F401
 from atep.core.config import get_settings
 from atep.db.base import Base
+from atep.diagnostics import models as diagnostic_models  # noqa: F401
 from atep.ecus import models as ecu_models  # noqa: F401
 from atep.environment_profiles import models as environment_profile_models  # noqa: F401
 from atep.events import models as event_models  # noqa: F401

@@ -390,3 +390,21 @@ and occupied time, utilization, maximum and nearest-rank p95 latency, protocol c
 and latency-budget violations. Explicit frame-loss and gateway-unavailable modes create integrated
 failure evidence without host-time dependence. A SHA-256 fingerprint supports exact replay while
 the persisted request summary, trace, audit, and outbox omit payload byte values.
+
+# Volume V Diagnostics Boundary
+
+The `atep.diagnostics` module owns externally observable diagnostic sessions, UDS command evidence,
+and DTC persistence. It references a Volume III ECU and its logical clock without importing ECU
+memory, signal, or internal fault ownership. A future bridge may promote confirmed fault candidates
+to DTC reports, but the two lifecycles remain explicit and independently testable.
+
+V-1 implements Diagnostic Session Control (`0x10`), the Read DTC Information (`0x19`) query
+boundary, and Clear Diagnostic Information (`0x14`) for the all-DTC group. Positive response IDs
+and selected negative response codes are retained as protocol evidence while HTTP/OpenAPI remains
+the public control-plane transport. ISO-TP, CAN PDU framing, and DoIP are future adapters.
+
+Each ECU owns one current, optimistic-versioned diagnostic session. Mutating commands have
+ECU-scoped idempotency identities. Exact retry returns stored evidence; changed reuse is rejected.
+DTCs use ECU simulation time, retain bounded snapshots in protected persistence, and exclude those
+measurements from audit and outbox events. State, command/DTC mutation, audit, and outbox writes
+share one PostgreSQL transaction and independent `diagnostics:read`/`diagnostics:manage` RBAC.

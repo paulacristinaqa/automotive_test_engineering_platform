@@ -284,6 +284,28 @@ class MultiBusCampaignContractError(ApplicationError):
         )
 
 
+class DiagnosticCommandConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="diagnostic_command_conflict",
+            message="The diagnostic command identifier was already used differently.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class DiagnosticContractError(ApplicationError):
+    def __init__(self, *, reason: str, negative_response_code: int) -> None:
+        super().__init__(
+            code="diagnostic_contract_invalid",
+            message="The diagnostic operation violates the UDS contract.",
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            details={
+                "reason": reason,
+                "negative_response_code": negative_response_code,
+            },
+        )
+
+
 class CanDbcCatalogueAlreadyExistsError(ApplicationError):
     def __init__(self) -> None:
         super().__init__(
