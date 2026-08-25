@@ -7,6 +7,8 @@ from atep.db.session import get_session
 from atep.diagnostics.models import (
     DiagnosticCommand,
     DiagnosticDataIdentifier,
+    DiagnosticRoutine,
+    DiagnosticRoutineState,
     DiagnosticTroubleCode,
 )
 from atep.diagnostics.schemas import (
@@ -22,18 +24,26 @@ from atep.diagnostics.schemas import (
     DtcPage,
     DtcReportCommand,
     DtcResponse,
+    RoutineControlCommand,
+    RoutineCreate,
+    RoutinePage,
+    RoutineResponse,
 )
 from atep.diagnostics.service import (
     clear_dtcs,
+    control_routine,
     control_session,
     create_did,
+    create_routine,
     get_or_create_session,
     list_dids,
     list_dtcs,
+    list_routines,
     read_dids,
     report_dtc,
     require_did,
     require_dtc,
+    require_routine,
     write_did,
 )
 from atep.ecus.models import ElectronicControlUnit
@@ -113,6 +123,122 @@ def did_response(did: DiagnosticDataIdentifier, ecu: ElectronicControlUnit) -> D
         created_at=did.created_at,
         updated_at=did.updated_at,
     )
+
+
+def routine_response(
+    routine: DiagnosticRoutine,
+    state: DiagnosticRoutineState,
+    ecu: ElectronicControlUnit,
+) -> RoutineResponse:
+    return RoutineResponse(
+        id=routine.id,
+        ecu_id=ecu.identifier,
+        identifier=routine.identifier,
+        identifier_hex=f"0x{routine.identifier:04X}",
+        name=routine.name,
+        description=routine.description,
+        allowed_sessions=routine.allowed_sessions,
+        execution_time_ms=routine.execution_time_ms,
+        supports_stop=routine.supports_stop,
+        definition_version=routine.version,
+        status=state.status,
+        invocation_count=state.invocation_count,
+        started_at_ms=state.started_at_ms,
+        completes_at_ms=state.completes_at_ms,
+        stopped_at_ms=state.stopped_at_ms,
+        routine_version=state.version,
+        created_at=routine.created_at,
+        updated_at=state.updated_at,
+    )
+
+
+@router.post("/routines", response_model=RoutineResponse, status_code=status.HTTP_201_CREATED)
+async def create_routine_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    command: RoutineCreate,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(diagnostics_manage)],
+) -> RoutineResponse:
+    vehicle, ecu = await _context(session, vehicle_id=vehicle_id, ecu_id=ecu_id)
+    routine, routine_state = await create_routine(
+        session,
+        vehicle=vehicle,
+        ecu=ecu,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(routine, attribute_names=["created_at"])
+    await session.refresh(routine_state, attribute_names=["updated_at"])
+    return routine_response(routine, routine_state, ecu)
+
+
+@router.get("/routines", response_model=RoutinePage)
+async def list_routines_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(diagnostics_read)],
+    limit: Annotated[int, Query(ge=1, le=64)] = 64,
+    offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
+) -> RoutinePage:
+    _vehicle, ecu = await _context(session, vehicle_id=vehicle_id, ecu_id=ecu_id)
+    items, total = await list_routines(session, ecu=ecu, limit=limit, offset=offset)
+    return RoutinePage(
+        items=[routine_response(routine, state, ecu) for routine, state in items],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.post(
+    "/routines/{identifier}/control",
+    response_model=DiagnosticCommandResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def control_routine_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    identifier: Annotated[int, Path(ge=0, le=0xFFFF)],
+    command: RoutineControlCommand,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(diagnostics_manage)],
+) -> DiagnosticCommandResponse:
+    vehicle, ecu = await _context(session, vehicle_id=vehicle_id, ecu_id=ecu_id)
+    execution, duplicate = await control_routine(
+        session,
+        vehicle=vehicle,
+        ecu=ecu,
+        identifier=identifier,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(execution, attribute_names=["created_at"])
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+        response.headers["X-Idempotent-Replay"] = "true"
+    return command_response(execution, ecu, duplicate=duplicate)
+
+
+@router.get("/routines/{identifier}", response_model=RoutineResponse)
+async def get_routine_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    identifier: Annotated[int, Path(ge=0, le=0xFFFF)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(diagnostics_read)],
+) -> RoutineResponse:
+    _vehicle, ecu = await _context(session, vehicle_id=vehicle_id, ecu_id=ecu_id)
+    routine, routine_state = await require_routine(session, ecu=ecu, identifier=identifier)
+    return routine_response(routine, routine_state, ecu)
 
 
 @router.post("/dids", response_model=DidResponse, status_code=status.HTTP_201_CREATED)

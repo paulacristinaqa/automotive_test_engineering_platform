@@ -17,6 +17,7 @@ CommandId = Annotated[
 ]
 DtcCode = Annotated[str, StringConstraints(pattern=r"^[0-9A-F]{6}$")]
 DidValue = bool | int | float | str
+RoutineParameters = dict[str, DidValue]
 
 
 class UdsServiceId(IntEnum):
@@ -25,6 +26,7 @@ class UdsServiceId(IntEnum):
     READ_DTC_INFORMATION = 0x19
     READ_DATA_BY_IDENTIFIER = 0x22
     WRITE_DATA_BY_IDENTIFIER = 0x2E
+    ROUTINE_CONTROL = 0x31
 
 
 class UdsNegativeResponseCode(IntEnum):
@@ -50,6 +52,96 @@ class DidDataType(StrEnum):
     INTEGER = "integer"
     DECIMAL = "decimal"
     STRING = "string"
+
+
+class RoutineControlType(IntEnum):
+    START = 0x01
+    STOP = 0x02
+    REQUEST_RESULTS = 0x03
+
+
+class RoutineStatus(StrEnum):
+    IDLE = "idle"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    STOPPED = "stopped"
+
+
+class RoutineCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    identifier: int = Field(ge=0, le=0xFFFF)
+    name: str = Field(min_length=1, max_length=80)
+    description: str = Field(default="", max_length=240)
+    allowed_sessions: list[DiagnosticSessionType] = Field(min_length=1, max_length=3)
+    execution_time_ms: int = Field(default=0, ge=0, le=600_000)
+    supports_stop: bool = False
+    result_template: RoutineParameters = Field(default_factory=dict)
+
+    @field_validator("allowed_sessions")
+    @classmethod
+    def unique_sessions(cls, value: list[DiagnosticSessionType]) -> list[DiagnosticSessionType]:
+        if len(set(value)) != len(value):
+            raise ValueError("allowed_sessions must be unique")
+        return value
+
+    @field_validator("result_template")
+    @classmethod
+    def bounded_result_template(cls, value: RoutineParameters) -> RoutineParameters:
+        if len(value) > 16:
+            raise ValueError("result_template must contain at most 16 values")
+        return value
+
+
+class RoutineControlCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    command_id: CommandId
+    control_type: RoutineControlType
+    expected_session_version: int = Field(ge=1)
+    expected_routine_version: int = Field(ge=1)
+    parameters: RoutineParameters = Field(default_factory=dict)
+
+    @field_validator("parameters")
+    @classmethod
+    def bounded_parameters(cls, value: RoutineParameters) -> RoutineParameters:
+        if len(value) > 16:
+            raise ValueError("parameters must contain at most 16 values")
+        return value
+
+    @model_validator(mode="after")
+    def parameters_only_on_start(self) -> "RoutineControlCommand":
+        if self.control_type != RoutineControlType.START and self.parameters:
+            raise ValueError("only startRoutine may contain parameters")
+        return self
+
+
+class RoutineResponse(BaseModel):
+    id: UUID
+    ecu_id: str
+    identifier: int
+    identifier_hex: str
+    name: str
+    description: str
+    allowed_sessions: list[DiagnosticSessionType]
+    execution_time_ms: int
+    supports_stop: bool
+    definition_version: int
+    status: RoutineStatus
+    invocation_count: int
+    started_at_ms: int | None
+    completes_at_ms: int | None
+    stopped_at_ms: int | None
+    routine_version: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class RoutinePage(BaseModel):
+    items: list[RoutineResponse]
+    total: int
+    limit: int
+    offset: int
 
 
 class DidCreate(BaseModel):

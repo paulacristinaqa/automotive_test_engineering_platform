@@ -11,6 +11,8 @@ from atep.core.errors import DiagnosticCommandConflictError, DiagnosticContractE
 from atep.diagnostics.models import (
     DiagnosticCommand,
     DiagnosticDataIdentifier,
+    DiagnosticRoutine,
+    DiagnosticRoutineState,
     DiagnosticSessionState,
     DiagnosticTroubleCode,
 )
@@ -21,9 +23,19 @@ from atep.diagnostics.schemas import (
     DidReadCommand,
     DidWriteCommand,
     DtcReportCommand,
+    RoutineControlCommand,
+    RoutineCreate,
     UdsNegativeResponseCode,
 )
-from atep.diagnostics.service import control_session, create_did, read_dids, report_dtc, write_did
+from atep.diagnostics.service import (
+    control_routine,
+    control_session,
+    create_did,
+    create_routine,
+    read_dids,
+    report_dtc,
+    write_did,
+)
 from atep.ecus.models import ElectronicControlUnit
 from atep.events.models import OutboxEvent
 from atep.identity.dependencies import require_permissions
@@ -117,6 +129,281 @@ def writable_temperature_did(ecu: ElectronicControlUnit) -> DiagnosticDataIdenti
         version=1,
         created_by_user_id=uuid4(),
     )
+
+
+def battery_balance_routine(
+    ecu: ElectronicControlUnit,
+) -> tuple[DiagnosticRoutine, DiagnosticRoutineState]:
+    routine = DiagnosticRoutine(
+        id=uuid4(),
+        ecu_id=ecu.id,
+        identifier=0x0201,
+        name="Battery cell balancing",
+        description="",
+        allowed_sessions=["extended"],
+        execution_time_ms=500,
+        supports_stop=True,
+        result_template={"balanced": True, "delta_mv": 4.2},
+        version=1,
+        created_by_user_id=uuid4(),
+    )
+    state = DiagnosticRoutineState(
+        id=uuid4(),
+        routine_id=routine.id,
+        status="idle",
+        invocation_count=0,
+        started_at_ms=None,
+        completes_at_ms=None,
+        stopped_at_ms=None,
+        input_parameters={},
+        result={},
+        version=1,
+    )
+    return routine, state
+
+
+def test_routine_contracts_are_bounded_and_operation_specific() -> None:
+    with pytest.raises(ValidationError, match="less than or equal to 600000"):
+        RoutineCreate(
+            identifier=1,
+            name="Unbounded",
+            allowed_sessions=["extended"],
+            execution_time_ms=600_001,
+        )
+    with pytest.raises(ValidationError, match="only startRoutine"):
+        RoutineControlCommand(
+            command_id="routine-invalid-parameters",
+            control_type=3,
+            expected_session_version=1,
+            expected_routine_version=1,
+            parameters={"secret": 1},
+        )
+
+
+@pytest.mark.asyncio
+async def test_routine_catalogue_is_bounded_audited_and_minimized() -> None:
+    vehicle, ecu = vehicle_and_ecu()
+    session = FakeSession(None, 0)
+    routine, state = await create_routine(
+        cast(AsyncSession, session),
+        vehicle=vehicle,
+        ecu=ecu,
+        command=RoutineCreate(
+            identifier=0x0201,
+            name="Battery cell balancing",
+            allowed_sessions=["extended"],
+            execution_time_ms=500,
+            supports_stop=True,
+            result_template={"balanced": True, "delta_mv": 4.2},
+        ),
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert routine.identifier == 0x0201
+    assert state.status == "idle"
+    event = next(item for item in session.added if isinstance(item, OutboxEvent))
+    audit = next(item for item in session.added if isinstance(item, AuditRecord))
+    assert event.event_type == "atep.diagnostics.routine.created.v1"
+    assert "result_template" not in event.payload
+    assert "result_template" not in audit.details
+
+    with pytest.raises(DiagnosticContractError) as error:
+        await create_routine(
+            cast(AsyncSession, FakeSession(None, 64)),
+            vehicle=vehicle,
+            ecu=ecu,
+            command=RoutineCreate(
+                identifier=2,
+                name="Bounded",
+                allowed_sessions=["extended"],
+            ),
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+    assert error.value.details is not None
+    assert error.value.details["reason"] == "an ECU may define at most 64 routines in V-3"
+
+
+@pytest.mark.asyncio
+async def test_routine_start_is_versioned_idempotent_and_value_minimized() -> None:
+    vehicle, ecu = vehicle_and_ecu()
+    diagnostic_state = DiagnosticSessionState(
+        id=uuid4(), ecu_id=ecu.id, session_type="extended", version=3, simulation_time_ms=0
+    )
+    routine, routine_state = battery_balance_routine(ecu)
+    command = RoutineControlCommand(
+        command_id="routine-start-001",
+        control_type=1,
+        expected_session_version=3,
+        expected_routine_version=1,
+        parameters={"target_delta_mv": 5.0},
+    )
+    session = FakeSession(None, diagnostic_state, routine, routine_state)
+    execution, duplicate = await control_routine(
+        cast(AsyncSession, session),
+        vehicle=vehicle,
+        ecu=ecu,
+        identifier=0x0201,
+        command=command,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert duplicate is False
+    assert execution.service_id == 0x31
+    assert execution.result["status"] == "running"
+    assert routine_state.started_at_ms == 2_500
+    assert routine_state.completes_at_ms == 3_000
+    assert routine_state.version == 2
+    event = next(item for item in session.added if isinstance(item, OutboxEvent))
+    audit = next(item for item in session.added if isinstance(item, AuditRecord))
+    assert event.payload["control_type"] == 1
+    assert "parameters" not in event.payload
+    assert "result" not in event.payload
+    assert "parameters" not in audit.details
+
+    returned, duplicate = await control_routine(
+        cast(AsyncSession, FakeSession(execution)),
+        vehicle=vehicle,
+        ecu=ecu,
+        identifier=0x0201,
+        command=command,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert returned is execution
+    assert duplicate is True
+    assert routine_state.version == 2
+
+
+@pytest.mark.asyncio
+async def test_routine_results_complete_on_ecu_logical_time() -> None:
+    vehicle, ecu = vehicle_and_ecu()
+    ecu.simulation_time_ms = 3_000
+    diagnostic_state = DiagnosticSessionState(
+        id=uuid4(), ecu_id=ecu.id, session_type="extended", version=3, simulation_time_ms=0
+    )
+    routine, routine_state = battery_balance_routine(ecu)
+    routine_state.status = "running"
+    routine_state.invocation_count = 1
+    routine_state.started_at_ms = 2_500
+    routine_state.completes_at_ms = 3_000
+    routine_state.version = 2
+    execution, _ = await control_routine(
+        cast(AsyncSession, FakeSession(None, diagnostic_state, routine, routine_state)),
+        vehicle=vehicle,
+        ecu=ecu,
+        identifier=0x0201,
+        command=RoutineControlCommand(
+            command_id="routine-results-001",
+            control_type=3,
+            expected_session_version=3,
+            expected_routine_version=2,
+        ),
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert execution.result["status"] == "completed"
+    assert execution.result["result"] == {"balanced": True, "delta_mv": 4.2}
+    assert routine_state.version == 3
+
+
+@pytest.mark.asyncio
+async def test_routine_control_enforces_session_and_stop_capability() -> None:
+    vehicle, ecu = vehicle_and_ecu()
+    diagnostic_state = DiagnosticSessionState(
+        id=uuid4(), ecu_id=ecu.id, session_type="default", version=1, simulation_time_ms=0
+    )
+    routine, routine_state = battery_balance_routine(ecu)
+    with pytest.raises(DiagnosticContractError) as error:
+        await control_routine(
+            cast(AsyncSession, FakeSession(None, diagnostic_state, routine, routine_state)),
+            vehicle=vehicle,
+            ecu=ecu,
+            identifier=0x0201,
+            command=RoutineControlCommand(
+                command_id="routine-session-denied",
+                control_type=1,
+                expected_session_version=1,
+                expected_routine_version=1,
+            ),
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+    assert error.value.details is not None
+    assert error.value.details["negative_response_code"] == 0x7F
+
+    diagnostic_state.session_type = "extended"
+    routine.supports_stop = False
+    routine_state.status = "running"
+    with pytest.raises(DiagnosticContractError) as error:
+        await control_routine(
+            cast(AsyncSession, FakeSession(None, diagnostic_state, routine, routine_state)),
+            vehicle=vehicle,
+            ecu=ecu,
+            identifier=0x0201,
+            command=RoutineControlCommand(
+                command_id="routine-stop-unsupported",
+                control_type=2,
+                expected_session_version=1,
+                expected_routine_version=1,
+            ),
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+    assert error.value.details is not None
+    assert error.value.details["negative_response_code"] == 0x31
+
+
+@pytest.mark.asyncio
+async def test_routine_stop_uses_logical_time_and_rejects_stale_version() -> None:
+    vehicle, ecu = vehicle_and_ecu()
+    diagnostic_state = DiagnosticSessionState(
+        id=uuid4(), ecu_id=ecu.id, session_type="extended", version=3, simulation_time_ms=0
+    )
+    routine, routine_state = battery_balance_routine(ecu)
+    routine_state.status = "running"
+    routine_state.invocation_count = 1
+    routine_state.started_at_ms = 2_000
+    routine_state.completes_at_ms = 3_000
+    routine_state.version = 2
+
+    with pytest.raises(DiagnosticContractError) as error:
+        await control_routine(
+            cast(AsyncSession, FakeSession(None, diagnostic_state, routine, routine_state)),
+            vehicle=vehicle,
+            ecu=ecu,
+            identifier=0x0201,
+            command=RoutineControlCommand(
+                command_id="routine-stop-stale",
+                control_type=2,
+                expected_session_version=3,
+                expected_routine_version=1,
+            ),
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+    assert error.value.details is not None
+    assert error.value.details["negative_response_code"] == 0x22
+
+    execution, duplicate = await control_routine(
+        cast(AsyncSession, FakeSession(None, diagnostic_state, routine, routine_state)),
+        vehicle=vehicle,
+        ecu=ecu,
+        identifier=0x0201,
+        command=RoutineControlCommand(
+            command_id="routine-stop-001",
+            control_type=2,
+            expected_session_version=3,
+            expected_routine_version=2,
+        ),
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert duplicate is False
+    assert execution.result["status"] == "stopped"
+    assert routine_state.stopped_at_ms == 2_500
+    assert routine_state.completes_at_ms is None
+    assert routine_state.version == 3
 
 
 @pytest.mark.asyncio

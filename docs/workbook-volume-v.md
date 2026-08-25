@@ -1,6 +1,6 @@
 # ATEP Volume V - Diagnostics Engineering Workbook
 
-**Document status:** Increments V-1 and V-2 implemented
+**Document status:** Increments V-1 through V-3 implemented
 **Language:** English  
 **Last updated:** 2026-08-25  
 **Repository:** `paulacristinaqa/automotive_test_engineering_platform`
@@ -15,7 +15,7 @@ evidence, verification strategy, risks, and study exercises for the Diagnostics 
 | Field | Value |
 |---|---|
 | Volume | V - Diagnostics |
-| Baseline | Increments V-1 and V-2 |
+| Baseline | Increments V-1 through V-3 |
 | Architecture style | ECU-scoped diagnostic aggregate and transactional domain service |
 | Primary runtime | Python 3.12, FastAPI, SQLAlchemy, PostgreSQL |
 | Quality gates | pytest, Ruff, strict mypy, Alembic, integration CI, DOCX render and accessibility audit |
@@ -26,6 +26,7 @@ evidence, verification strategy, risks, and study exercises for the Diagnostics 
 |---|---|---|
 | 0.1.0 | 2026-08-25 | Added versioned UDS sessions, DTC storage, services `0x10`, `0x19`, and `0x14`, stable NRC evidence, RBAC, audit, outbox, migration, APIs, and deterministic tests. |
 | 0.2.0 | 2026-08-25 | Added a typed DID catalogue, UDS `0x22`/`0x2E`, session authorization, value/version constraints, minimized evidence, migration, APIs, and tests. |
+| 0.3.0 | 2026-08-25 | Added a bounded routine catalogue, UDS Routine Control `0x31`, deterministic logical-time execution, start/stop/result subfunctions, versioned replay, minimized evidence, migration, APIs, and tests. |
 
 ## 4. Scope and Boundaries
 
@@ -43,11 +44,15 @@ evidence, verification strategy, risks, and study exercises for the Diagnostics 
 - ECU-scoped typed DID catalogue with boolean, integer, decimal, and string values.
 - Session-authorized UDS Read/Write Data by Identifier (`0x22` and `0x2E`).
 - DID type, range, length, catalogue-size, request-size, and optimistic-version bounds.
+- ECU-scoped routine definitions and independent versioned execution state.
+- UDS Routine Control (`0x31`) start, stop, and request-results subfunctions.
+- Active-session authorization and deterministic completion from ECU logical time.
+- Bounded parameters, results, duration, catalogue size, and optimistic versions.
 
 ### 4.2 Deferred
 
 - ISO-TP segmentation, CAN transport binding, DoIP, and physical adapters.
-- Routine Control, Security Access, ECU Reset, and flash transfer services.
+- Security Access, ECU Reset, and flash transfer services.
 - OBD-II mode/PID compatibility and fleet-scale remote diagnostics.
 
 ## 5. Architecture
@@ -75,6 +80,12 @@ severity, description, occurrence count, first/last ECU logical time, bounded sn
 type, unit, readable/writable sessions, constrained scalar value, and optimistic version. The
 catalogue is capped at 128 entries per ECU; this is a semantic data surface, not raw memory access.
 
+`DiagnosticRoutine` stores an ECU-local 16-bit identifier, engineering metadata, allowed sessions,
+bounded execution duration, stop capability, bounded scalar result template, and definition
+version. `DiagnosticRoutineState` independently stores idle/running/completed/stopped status,
+invocation count, logical timestamps, protected input/result values, and an optimistic version.
+The catalogue is capped at 64 routines per ECU.
+
 ## 7. Public API and Security
 
 | Method | Path | Permission | Purpose |
@@ -90,6 +101,10 @@ catalogue is capped at 128 entries per ECU; this is a semantic data surface, not
 | GET | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/dids/{identifier}` | `diagnostics:read` | Retrieve one DID definition and value. |
 | POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/dids/read` | `diagnostics:read` | Execute UDS `0x22` for up to 16 DIDs. |
 | POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/dids/{identifier}/write` | `diagnostics:manage` | Execute session-authorized UDS `0x2E`. |
+| POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/routines` | `diagnostics:manage` | Define one bounded routine. |
+| GET | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/routines` | `diagnostics:read` | List the bounded routine catalogue. |
+| GET | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/routines/{identifier}` | `diagnostics:read` | Retrieve one routine and its state. |
+| POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/routines/{identifier}/control` | `diagnostics:manage` | Execute UDS `0x31` start, stop, or result request. |
 
 ## 8. UDS Semantics
 
@@ -125,6 +140,16 @@ and DID versions, and a value satisfying the declared type and constraints. It i
 DID version and returns `0x6E` identity. Exact retry returns the persisted result without a second
 mutation.
 
+### 8.6 Routine Control (`0x31`)
+
+Subfunctions `0x01`, `0x02`, and `0x03` represent startRoutine, stopRoutine, and
+requestRoutineResults. Every request requires an allowed active session plus matching session and
+routine-state versions. Start records the ECU logical start/completion timestamps and bounded
+parameters. Stop is accepted only for a running routine that declares stop support. A result
+request deterministically promotes a running routine to completed when ECU logical time reaches
+the target and returns the protected result template. Exact retries replay persisted command
+evidence without another transition; the positive response identity is `0x71`.
+
 ## 9. Error and Consistency Contract
 
 | Condition | Stable code | HTTP | UDS evidence |
@@ -135,6 +160,9 @@ mutation.
 | DID type/range violation | `diagnostic_contract_invalid` | 422 | NRC `0x31` request out of range |
 | Stale DID or session version | `diagnostic_contract_invalid` | 422 | NRC `0x22` conditions not correct |
 | DID forbidden in active session | `diagnostic_contract_invalid` | 422 | NRC `0x7F` service not supported in active session |
+| Routine forbidden in active session | `diagnostic_contract_invalid` | 422 | NRC `0x7F` service not supported in active session |
+| Stale routine or session version | `diagnostic_contract_invalid` | 422 | NRC `0x22` conditions not correct |
+| Unsupported stop or unknown routine identifier | `diagnostic_contract_invalid` | 422 | NRC `0x31` request out of range |
 | Unknown ECU or DTC | Platform resource-not-found code | 404 | Adapter maps transport response later |
 | Invalid body or pagination | `request_validation_error` | 422 | Rejected at the public contract boundary |
 
@@ -169,6 +197,23 @@ supports stable validation, session policy, OpenAPI contracts, and future VHAL/C
 
 Command results retain DID values so an exact retry is truthful. Audit and outbox records exclude
 those values and share only identifiers, counts, service identities, and versions.
+
+### ADR-DG-007 - Separate Routine Definition from Execution State
+
+Routine engineering metadata changes independently from each execution lifecycle. A one-to-one
+state record makes concurrency and lifecycle transitions explicit without rewriting definitions.
+
+### ADR-DG-008 - Complete Routines from ECU Logical Time
+
+Routine completion is evaluated against simulation time when the state is observed. No sleeping,
+host timer, worker loop, GPU, or cloud service is required, which keeps simulation and tests
+deterministic and inexpensive.
+
+### ADR-DG-009 - Protect Routine Values in Shared Evidence
+
+Parameters and results remain in protected state and command records for faithful replay. Audit
+and outbox payloads contain only identifiers, subfunctions, status, counters, timestamps, and
+versions to avoid distributing engineering measurements or sensitive routine inputs.
 
 ## 11. Verification Catalogue
 
@@ -207,32 +252,46 @@ those values and share only identifiers, counts, service identities, and version
 | DID value constraints | Reject type, numeric range, and string-length violations with NRC `0x31`. | Schema/service |
 | DID replay | Return persisted `0x22`/`0x2E` evidence without repeated mutation. | Service/integration |
 | DID evidence minimization | Prove audit and outbox never contain DID values. | Service |
+| Routine schema bounds | Reject identifiers, durations, parameters, and result templates outside fixed limits. | Schema/OpenAPI |
+| Routine catalogue bound | Reject a 65th routine and enforce page limit 64. | Service/OpenAPI |
+| Routine start | Move idle state to running with ECU logical timestamps and incremented version. | Service/integration |
+| Routine session policy | Return NRC `0x7F` when the active session is not allowed. | Service/API |
+| Routine stop capability | Return NRC `0x31` when stop is unsupported; otherwise stop at logical time. | Service/API |
+| Routine stale version | Return NRC `0x22` without mutation when the state version does not match. | Service/API |
+| Routine completion | Complete exactly at the declared ECU logical timestamp without sleeping. | Service/integration |
+| Routine result | Return the bounded protected result only through the authorized response. | Service/API |
+| Routine replay | Return persisted `0x31` evidence without repeated execution or version change. | Service/integration |
+| Routine evidence minimization | Prove audit and outbox contain neither parameters nor result values. | Service |
+| Routine atomicity | Commit definition/state/control, command, audit, and outbox evidence together. | Integration |
 
 ## 12. Implemented Evidence
 
 - `src/atep/diagnostics/` contains models, schemas, service, and router.
 - Migration `0031_diagnostics_foundation` owns session, command, and DTC persistence.
 - Migration `0032_diagnostic_data_identifiers` owns typed DID persistence and versioning.
+- Migration `0033_diagnostic_routines` owns routine definitions and execution states.
 - Events are `atep.diagnostics.session.changed.v1`, `atep.diagnostics.dtc.reported.v1`, and `atep.diagnostics.dtc.cleared.v1`.
 - Permissions are `diagnostics:read` and `diagnostics:manage`.
 - `tests/test_diagnostics.py` verifies contracts, logical time, versioning, replay, conflicts, evidence minimization, and permissions.
 - API contract tests verify routes and safe pagination in generated OpenAPI.
 - DID events are `atep.diagnostics.did.created.v1`, `atep.diagnostics.did.read.v1`, and `atep.diagnostics.did.written.v1`.
+- Routine events are `atep.diagnostics.routine.created.v1` and `atep.diagnostics.routine.controlled.v1`.
 
 ## 13. Risks and Technical Debt
 
-- V-1/V-2 expose semantic UDS operations but do not yet encode wire PDUs.
+- V-1 through V-3 expose semantic UDS operations but do not yet encode wire PDUs.
 - Status-mask meaning is retained as a byte; named bit helpers should be added with richer DTC queries.
 - DTC creation is a controlled simulator boundary; automatic fault-to-DTC mapping is future work.
 - The current clear operation loads at most 200 DTCs, matching the per-ECU V-1 storage bound.
 - Security level is reserved but remains zero until Security Access is implemented.
 - Exact replay stores DID values in protected command evidence; retention and field-level access controls should be revisited before production telemetry use.
+- Routine result templates are deterministic fixtures; future routines may require pluggable ECU behavior and explicit failure results.
 
 ## 14. Roadmap
 
-V-1 and V-2 are implemented. The recommended next development is V-3: Routine Control (`0x31`)
-with a typed routine catalogue, deterministic state transitions, bounded execution evidence, and
-session-aware authorization.
+V-1 through V-3 are implemented. The recommended next development is V-4: Security Access
+(`0x27`) with deterministic seeds, bounded key attempts, logical-time lockout, exact replay, and
+strict exclusion of secrets from logs, audit, events, and responses beyond the authorized exchange.
 
 ## 15. Study Exercises
 
@@ -256,3 +315,11 @@ session-aware authorization.
 18. Design a string DID with a maximum length and its negative tests.
 19. Compare NRC `0x31` for an invalid value with NRC `0x7F` for the active session.
 20. Trace an exact `0x2E` retry and prove the DID version increments only once.
+21. Calculate the positive response identity for Routine Control `0x31`.
+22. Trace startRoutine from RBAC through session authorization, version checks, state, audit, and outbox.
+23. Explain why routine completion uses ECU logical time instead of a background timer.
+24. Design tests for stopRoutine when stop is supported, unsupported, or the routine is not running.
+25. Prove that a repeated start command does not increment invocation count twice.
+26. Compare definition version and execution-state version for an ECU routine.
+27. Explain why parameters/results are protected while status/version evidence may be shared.
+28. Design a battery-balancing routine and its allowed diagnostic sessions.

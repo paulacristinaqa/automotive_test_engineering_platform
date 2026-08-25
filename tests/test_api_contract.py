@@ -410,6 +410,9 @@ def test_diagnostics_contracts_and_safe_pagination_are_published() -> None:
     assert "post" in paths[f"{root}/dids/read"]
     assert "get" in paths[f"{root}/dids/{{identifier}}"]
     assert "post" in paths[f"{root}/dids/{{identifier}}/write"]
+    assert {"get", "post"} <= set(paths[f"{root}/routines"])
+    assert "get" in paths[f"{root}/routines/{{identifier}}"]
+    assert "post" in paths[f"{root}/routines/{{identifier}}/control"]
     parameters = {
         item["name"]: item["schema"] for item in paths[f"{root}/dtcs"]["get"]["parameters"]
     }
@@ -421,6 +424,11 @@ def test_diagnostics_contracts_and_safe_pagination_are_published() -> None:
     }
     assert did_parameters["limit"]["maximum"] == 128
     assert did_parameters["offset"]["maximum"] == 1_000_000
+    routine_parameters = {
+        item["name"]: item["schema"] for item in paths[f"{root}/routines"]["get"]["parameters"]
+    }
+    assert routine_parameters["limit"]["maximum"] == 64
+    assert routine_parameters["offset"]["maximum"] == 1_000_000
     schemas = core_app.openapi()["components"]["schemas"]
     assert schemas["DtcReportCommand"]["properties"]["status_mask"]["maximum"] == 255
     assert (
@@ -428,11 +436,18 @@ def test_diagnostics_contracts_and_safe_pagination_are_published() -> None:
     )
     assert schemas["DidCreate"]["properties"]["identifier"]["maximum"] == 65535
     assert schemas["DidReadCommand"]["properties"]["identifiers"]["maxItems"] == 16
+    assert schemas["RoutineCreate"]["properties"]["identifier"]["maximum"] == 65535
+    assert schemas["RoutineCreate"]["properties"]["execution_time_ms"]["maximum"] == 600_000
     did_path_parameters = {
         item["name"]: item["schema"]
         for item in paths[f"{root}/dids/{{identifier}}"]["get"]["parameters"]
     }
     assert did_path_parameters["identifier"]["maximum"] == 65535
+    routine_path_parameters = {
+        item["name"]: item["schema"]
+        for item in paths[f"{root}/routines/{{identifier}}/control"]["post"]["parameters"]
+    }
+    assert routine_path_parameters["identifier"]["maximum"] == 65535
 
 
 def test_test_job_scheduler_contracts_and_safe_pagination_are_published() -> None:
