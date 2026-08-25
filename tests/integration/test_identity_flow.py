@@ -55,6 +55,16 @@ async def wait_for_stream_event(stream: Any, event_type: str) -> dict[str, Any]:
     pytest.fail(f"The WebSocket event {event_type} was not received.")
 
 
+async def wait_for_metric(client: httpx.AsyncClient, sample: str) -> httpx.Response:
+    for _ in range(20):
+        response = await client.get("/metrics")
+        assert response.status_code == 200, response.text
+        if sample in response.text:
+            return response
+        await asyncio.sleep(0.05)
+    pytest.fail(f"The metric sample {sample!r} was not observed within one second.")
+
+
 async def expected_error(
     client: httpx.AsyncClient,
     method: str,
@@ -96,10 +106,8 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             )
             assert live_response.status_code == 200, live_response.text
             assert live_response.headers["x-trace-id"] == propagated_trace_id
-            metrics_response = await client.get("/metrics")
-            assert metrics_response.status_code == 200, metrics_response.text
+            metrics_response = await wait_for_metric(client, 'route="/health/live"')
             assert "atep_http_requests_total" in metrics_response.text
-            assert 'route="/health/live"' in metrics_response.text
 
             token_response = await client.post(
                 "/api/v1/auth/token",
