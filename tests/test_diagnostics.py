@@ -165,6 +165,7 @@ async def test_did_catalogue_is_typed_bounded_audited_and_evented() -> None:
             actor_user_id=uuid4(),
             correlation_id=None,
         )
+    assert error.value.details is not None
     assert error.value.details["reason"] == "value does not match DID data type integer"
 
     with pytest.raises(DiagnosticContractError) as error:
@@ -182,6 +183,7 @@ async def test_did_catalogue_is_typed_bounded_audited_and_evented() -> None:
             actor_user_id=uuid4(),
             correlation_id=None,
         )
+    assert error.value.details is not None
     assert error.value.details["reason"] == "an ECU may define at most 128 DIDs in V-2"
 
 
@@ -232,6 +234,7 @@ async def test_read_dids_is_session_aware_idempotent_and_minimizes_evidence() ->
             actor_user_id=uuid4(),
             correlation_id=None,
         )
+    assert error.value.details is not None
     assert error.value.details["negative_response_code"] == 0x7F
 
 
@@ -295,6 +298,7 @@ async def test_write_did_requires_session_and_versions_and_validates_range() -> 
             actor_user_id=uuid4(),
             correlation_id=None,
         )
+    assert error.value.details is not None
     assert error.value.details["negative_response_code"] == 0x7F
 
     default_state.session_type = "extended"
@@ -313,6 +317,7 @@ async def test_write_did_requires_session_and_versions_and_validates_range() -> 
             actor_user_id=uuid4(),
             correlation_id=None,
         )
+    assert error.value.details is not None
     assert error.value.details["reason"] == "value exceeds maximum 100.0"
 
 
