@@ -315,6 +315,12 @@ def test_can_network_baseline_contracts_and_safe_pagination_are_published() -> N
     codec_detail = paths[
         "/api/v1/vehicles/{vehicle_id}/can-networks/dbc/executions/{command_id}"
     ]
+    faults = paths["/api/v1/vehicles/{vehicle_id}/can-networks/faults"]
+    inject_fault = paths["/api/v1/vehicles/{vehicle_id}/can-networks/faults/inject"]
+    recover_fault = paths["/api/v1/vehicles/{vehicle_id}/can-networks/faults/recover"]
+    fault_detail = paths[
+        "/api/v1/vehicles/{vehicle_id}/can-networks/faults/{command_id}"
+    ]
     assert {"get", "post"} <= set(collection)
     assert {"get", "post"} <= set(frames)
     assert "get" in arbitrations
@@ -325,6 +331,10 @@ def test_can_network_baseline_contracts_and_safe_pagination_are_published() -> N
     assert "post" in dbc_decode
     assert "get" in codec_executions
     assert "get" in codec_detail
+    assert "get" in faults
+    assert "post" in inject_fault
+    assert "post" in recover_fault
+    assert "get" in fault_detail
     create_schema = collection["post"]["requestBody"]["content"]["application/json"]["schema"]
     submit_schema = frames["post"]["requestBody"]["content"]["application/json"]["schema"]
     assert create_schema["$ref"].endswith("/CanNetworkCreate")
@@ -339,6 +349,10 @@ def test_can_network_baseline_contracts_and_safe_pagination_are_published() -> N
     assert catalogue_schema["$ref"].endswith("/CanDbcCatalogueCreate")
     assert encode_schema["$ref"].endswith("/CanSignalEncodeCommand")
     assert decode_schema["$ref"].endswith("/CanSignalDecodeCommand")
+    inject_schema = inject_fault["post"]["requestBody"]["content"]["application/json"]["schema"]
+    recover_schema = recover_fault["post"]["requestBody"]["content"]["application/json"]["schema"]
+    assert inject_schema["$ref"].endswith("/CanFaultInjectionCommand")
+    assert recover_schema["$ref"].endswith("/CanBusRecoveryCommand")
     schemas = core_app.openapi()["components"]["schemas"]
     network_properties = schemas["CanNetworkCreate"]["properties"]
     assert network_properties["can_fd_enabled"]["default"] is False
@@ -361,6 +375,9 @@ def test_can_network_baseline_contracts_and_safe_pagination_are_published() -> N
     }
     assert codec_parameters["limit"]["maximum"] == 200
     assert codec_parameters["offset"]["maximum"] == 1_000_000
+    fault_parameters = {item["name"]: item["schema"] for item in faults["get"]["parameters"]}
+    assert fault_parameters["limit"]["maximum"] == 200
+    assert fault_parameters["offset"]["maximum"] == 1_000_000
 
 
 def test_test_job_scheduler_contracts_and_safe_pagination_are_published() -> None:

@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atep.audit.service import record_audit
+from atep.can_network.error_state import is_bus_off
 from atep.can_network.models import (
     CanArbitrationExecution,
     CanFrameTransmission,
@@ -27,6 +28,7 @@ from atep.core.errors import (
     CanArbitrationCommandConflictError,
     CanNetworkContractError,
     CanNetworkVersionConflictError,
+    CanNodeBusOffError,
     ResourceNotFoundError,
 )
 from atep.events.outbox import enqueue_event
@@ -99,6 +101,8 @@ def _resolve_contenders(
             raise CanNetworkContractError(
                 reason="only the declared producer may contend for a frame"
             )
+        if is_bus_off(network, contender.producer_node_id):
+            raise CanNodeBusOffError()
         if len(contender.payload) != contract.dlc:
             raise CanNetworkContractError(reason="payload length must equal the frame contract DLC")
         resolved.append(
@@ -283,9 +287,7 @@ async def execute_arbitration(
         "occupied_us": utilization.occupied_us,
         "utilization_percent": utilization.utilization_percent,
         "maximum_latency_us": utilization.maximum_latency_us,
-        "fd_frame_count": sum(
-            frame.protocol is CanFrameProtocol.FD for frame in frames
-        ),
+        "fd_frame_count": sum(frame.protocol is CanFrameProtocol.FD for frame in frames),
         "bitrate_switched_frame_count": sum(frame.bitrate_switch for frame in frames),
         "previous_version": previous_version,
         "network_version": network.version,
