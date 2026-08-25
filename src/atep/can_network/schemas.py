@@ -145,6 +145,43 @@ class GatewayRouteCommand(BaseModel):
         return value
 
 
+class MultiBusCampaignFault(StrEnum):
+    NONE = "none"
+    FRAME_LOSS = "frame_loss"
+    GATEWAY_UNAVAILABLE = "gateway_unavailable"
+
+
+class MultiBusCampaignStep(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    identifier: str = Field(min_length=2, max_length=80, pattern=r"^[a-z][a-z0-9_-]+$")
+    route_id: str = Field(min_length=2, max_length=80, pattern=r"^[a-z][a-z0-9_-]+$")
+    payload: list[int] = Field(min_length=1, max_length=1500)
+    advance_time_us: int = Field(default=0, ge=0, le=10_000_000)
+    latency_budget_us: int | None = Field(default=None, ge=1, le=60_000_000)
+    fault: MultiBusCampaignFault = MultiBusCampaignFault.NONE
+
+    @field_validator("payload")
+    @classmethod
+    def validate_payload_bytes(cls, value: list[int]) -> list[int]:
+        if any(item < 0 or item > 255 for item in value):
+            raise ValueError("campaign payload bytes must be between 0 and 255")
+        return value
+
+
+class MultiBusCampaignCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    command_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]+$")
+    expected_version: int = Field(ge=1)
+    steps: list[MultiBusCampaignStep] = Field(min_length=1, max_length=64)
+
+    @model_validator(mode="after")
+    def validate_steps(self) -> "MultiBusCampaignCommand":
+        identifiers = [item.identifier for item in self.steps]
+        if len(set(identifiers)) != len(identifiers):
+            raise ValueError("campaign step identifiers must be unique")
+        return self
+
+
 class CanNode(BaseModel):
     model_config = ConfigDict(extra="forbid")
     ecu_id: UUID
@@ -337,6 +374,25 @@ class MultiBusGatewayExecutionResponse(BaseModel):
 
 class MultiBusGatewayExecutionPage(BaseModel):
     items: list[MultiBusGatewayExecutionResponse]
+    total: int
+    limit: int
+    offset: int
+
+
+class MultiBusCampaignExecutionResponse(BaseModel):
+    command_id: str
+    vehicle_id: str
+    network_id: str
+    status: str
+    result: dict[str, object]
+    previous_version: int
+    network_version: int
+    duplicate: bool
+    created_at: datetime
+
+
+class MultiBusCampaignExecutionPage(BaseModel):
+    items: list[MultiBusCampaignExecutionResponse]
     total: int
     limit: int
     offset: int

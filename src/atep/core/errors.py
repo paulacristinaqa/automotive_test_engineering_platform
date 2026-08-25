@@ -265,6 +265,25 @@ class MultiBusGatewayContractError(ApplicationError):
         )
 
 
+class MultiBusCampaignCommandConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="multibus_campaign_command_conflict",
+            message="The multi-bus campaign command identifier was already used differently.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class MultiBusCampaignContractError(ApplicationError):
+    def __init__(self, *, reason: str) -> None:
+        super().__init__(
+            code="multibus_campaign_contract_invalid",
+            message="The multi-bus campaign violates its contract.",
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            details={"reason": reason},
+        )
+
+
 class CanDbcCatalogueAlreadyExistsError(ApplicationError):
     def __init__(self) -> None:
         super().__init__(

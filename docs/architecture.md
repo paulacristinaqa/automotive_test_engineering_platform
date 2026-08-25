@@ -383,3 +383,10 @@ node with gateway role and preserves payload length; protocol-specific transform
 explicit future feature. The route executor locks the aggregate, derives destination duration from
 logical inputs, advances sequence and simulation time once, and atomically persists replay, audit,
 and outbox evidence without payload bytes.
+
+IV-7 adds an atomic campaign boundary above stored gateway routes. A campaign prevalidates every
+step before mutation, then derives ordered route traces, destination-protocol timing, logical idle
+and occupied time, utilization, maximum and nearest-rank p95 latency, protocol counts, outcomes,
+and latency-budget violations. Explicit frame-loss and gateway-unavailable modes create integrated
+failure evidence without host-time dependence. A SHA-256 fingerprint supports exact replay while
+the persisted request summary, trace, audit, and outbox omit payload byte values.

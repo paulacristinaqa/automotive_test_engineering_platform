@@ -97,6 +97,27 @@ class MultiBusGatewayExecution(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
 
+class MultiBusCampaignExecution(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "multibus_campaign_executions"
+    __table_args__ = (
+        UniqueConstraint("network_id", "command_id", name="uq_multibus_campaign_command"),
+    )
+
+    network_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("can_networks.id", ondelete="CASCADE"), index=True
+    )
+    command_id: Mapped[str] = mapped_column(String(64))
+    request_fingerprint: Mapped[str] = mapped_column(String(64))
+    request_summary: Mapped[dict[str, Any]] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String(24), index=True)
+    result: Mapped[dict[str, Any]] = mapped_column(JSON)
+    previous_version: Mapped[int] = mapped_column(Integer)
+    network_version: Mapped[int] = mapped_column(Integer)
+    requested_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+
+
 class CanArbitrationExecution(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "can_arbitration_executions"
     __table_args__ = (

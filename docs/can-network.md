@@ -5,7 +5,8 @@ arbitration and timing. Volume IV-3 added a structured DBC catalogue and exact s
 IV-4 adds CAN FD payloads, dual-rate timing, and mixed classic/FD operation. IV-5 adds deterministic
 error confinement, role-valid fault injection, frame loss, bus-off blocking, and explicit recovery.
 IV-6 adds bounded LIN and automotive Ethernet contracts plus deterministic transparent routing
-through gateway ECUs.
+through gateway ECUs. IV-7 adds atomic multi-bus campaigns, ordered traces, performance evidence,
+latency budgets, and integrated frame-loss and gateway-unavailable scenarios.
 
 ## Implemented Boundary
 
@@ -30,9 +31,14 @@ through gateway ECUs.
 - replay-safe encode/decode evidence with payload-free audit and events.
 - mixed classic/FD arbitration with separate nominal and data-phase timing evidence;
 - DBC signal placement and codec payloads through 512 contracted bits.
+- bounded LIN and automotive Ethernet contracts with transparent cross-protocol gateway routes;
+- campaigns of 1-64 route steps with deterministic traces and payload-free summaries;
+- occupied, idle, utilization, maximum latency, nearest-rank p95, protocol, and outcome metrics;
+- explicit frame-loss and gateway-unavailable scenarios with passed, degraded, or failed status.
 
-Bit stuffing, retransmission, acknowledgement failure, error counters, bus-off, textual `.dbc`
-parsing, multiplexed signals, LIN, and Ethernet are deliberately deferred.
+Bit stuffing, retransmission, acknowledgement failure, physical transceivers, textual `.dbc`
+parsing, multiplexed signals, SOME/IP, DoIP, payload transformation, and traffic shaping remain
+deferred.
 
 ## Public API
 
@@ -49,6 +55,13 @@ parsing, multiplexed signals, LIN, and Ethernet are deliberately deferred.
 - `POST /api/v1/vehicles/{vehicle_id}/can-networks/dbc/decode`
 - `GET /api/v1/vehicles/{vehicle_id}/can-networks/dbc/executions`
 - `GET /api/v1/vehicles/{vehicle_id}/can-networks/dbc/executions/{command_id}`
+- `POST /api/v1/vehicles/{vehicle_id}/can-networks/multibus/configure`
+- `POST /api/v1/vehicles/{vehicle_id}/can-networks/gateway/routes/execute`
+- `GET /api/v1/vehicles/{vehicle_id}/can-networks/gateway/executions`
+- `GET /api/v1/vehicles/{vehicle_id}/can-networks/gateway/executions/{command_id}`
+- `POST /api/v1/vehicles/{vehicle_id}/can-networks/multibus/campaigns/execute`
+- `GET /api/v1/vehicles/{vehicle_id}/can-networks/multibus/campaigns`
+- `GET /api/v1/vehicles/{vehicle_id}/can-networks/multibus/campaigns/{command_id}`
 
 Reads require `can_networks:read`; creation and submission require `can_networks:manage`.
 
@@ -114,3 +127,16 @@ the nominal bitrate. FD contracts accept payload lengths 0-8, 12, 16, 20, 24, 32
 Classic contracts remain bounded to eight bytes and cannot request BRS. Submission, persisted frame
 history, arbitration evidence, audit, and outbox metrics retain protocol identity while payload bytes
 remain confined to engineering evidence.
+
+## Multi-Bus Campaigns
+
+A campaign validates every referenced route and payload length before changing network state. Each
+step declares a logical advance, optional latency budget, and one of three outcomes: normal route,
+frame loss, or gateway unavailable. Normal and lost transmissions consume destination-protocol
+time and one sequence; an unavailable gateway consumes only requested idle time and no sequence.
+
+The persisted result contains ordered payload-free traces and deterministic window, occupied, idle,
+utilization, maximum latency, nearest-rank p95 latency, protocol, delivery, failure, and budget
+metrics. The network version increments once for the whole campaign. Exact retries are identified
+by a canonical SHA-256 request fingerprint and return prior evidence without repeating state or
+observability. Changed command reuse returns `multibus_campaign_command_conflict`.

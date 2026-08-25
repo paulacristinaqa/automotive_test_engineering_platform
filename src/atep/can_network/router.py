@@ -29,12 +29,16 @@ from atep.can_network.models import (
     CanFrameTransmission,
     CanNetwork,
     CanSignalCodecExecution,
+    MultiBusCampaignExecution,
     MultiBusGatewayExecution,
 )
 from atep.can_network.multibus_service import (
     configure_multibus,
     execute_gateway_route,
+    execute_multibus_campaign,
+    list_campaign_executions,
     list_gateway_executions,
+    require_campaign_execution,
     require_gateway_execution,
 )
 from atep.can_network.schemas import (
@@ -57,6 +61,9 @@ from atep.can_network.schemas import (
     CanSignalDecodeCommand,
     CanSignalEncodeCommand,
     GatewayRouteCommand,
+    MultiBusCampaignCommand,
+    MultiBusCampaignExecutionPage,
+    MultiBusCampaignExecutionResponse,
     MultiBusConfigurationCommand,
     MultiBusGatewayExecutionPage,
     MultiBusGatewayExecutionResponse,
@@ -162,6 +169,88 @@ def gateway_response(
         duplicate=duplicate,
         created_at=item.created_at,
     )
+
+
+def campaign_response(
+    item: MultiBusCampaignExecution,
+    network: CanNetwork,
+    vehicle: Vehicle,
+    *,
+    duplicate: bool = False,
+) -> MultiBusCampaignExecutionResponse:
+    return MultiBusCampaignExecutionResponse(
+        command_id=item.command_id,
+        vehicle_id=vehicle.identifier,
+        network_id=network.identifier,
+        status=item.status,
+        result=item.result,
+        previous_version=item.previous_version,
+        network_version=item.network_version,
+        duplicate=duplicate,
+        created_at=item.created_at,
+    )
+
+
+@router.post(
+    "/multibus/campaigns/execute",
+    response_model=MultiBusCampaignExecutionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def execute_multibus_campaign_endpoint(
+    vehicle_id: str,
+    command: MultiBusCampaignCommand,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(can_manage)],
+) -> MultiBusCampaignExecutionResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    item, network, duplicate = await execute_multibus_campaign(
+        session,
+        vehicle=vehicle,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(item, attribute_names=["created_at"])
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+    return campaign_response(item, network, vehicle, duplicate=duplicate)
+
+
+@router.get("/multibus/campaigns", response_model=MultiBusCampaignExecutionPage)
+async def list_multibus_campaigns_endpoint(
+    vehicle_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(can_read)],
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
+) -> MultiBusCampaignExecutionPage:
+    vehicle = await require_vehicle(session, vehicle_id)
+    network = await require_can_network(session, vehicle=vehicle)
+    items, total = await list_campaign_executions(
+        session, network=network, limit=limit, offset=offset
+    )
+    return MultiBusCampaignExecutionPage(
+        items=[campaign_response(item, network, vehicle) for item in items],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/multibus/campaigns/{command_id}", response_model=MultiBusCampaignExecutionResponse)
+async def get_multibus_campaign_endpoint(
+    vehicle_id: str,
+    command_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(can_read)],
+) -> MultiBusCampaignExecutionResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    network = await require_can_network(session, vehicle=vehicle)
+    item = await require_campaign_execution(session, network=network, command_id=command_id)
+    return campaign_response(item, network, vehicle)
 
 
 @router.post(

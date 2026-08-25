@@ -7,10 +7,24 @@ from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atep.audit.models import AuditRecord
-from atep.can_network.models import CanNetwork, MultiBusGatewayExecution
-from atep.can_network.multibus_service import configure_multibus, execute_gateway_route
-from atep.can_network.schemas import GatewayRouteCommand, MultiBusConfigurationCommand
+from atep.can_network.models import (
+    CanNetwork,
+    MultiBusGatewayExecution,
+)
+from atep.can_network.multibus_service import (
+    configure_multibus,
+    execute_gateway_route,
+    execute_multibus_campaign,
+)
+from atep.can_network.schemas import (
+    GatewayRouteCommand,
+    MultiBusCampaignCommand,
+    MultiBusCampaignFault,
+    MultiBusConfigurationCommand,
+)
 from atep.core.errors import (
+    MultiBusCampaignCommandConflictError,
+    MultiBusCampaignContractError,
     MultiBusGatewayCommandConflictError,
     MultiBusGatewayContractError,
 )
@@ -139,6 +153,38 @@ def configuration(gateway: UUID, producer: UUID, consumer: UUID) -> MultiBusConf
                 "source_contract_id": "lin-status",
                 "destination_protocol": "ethernet",
                 "destination_contract_id": "ethernet-status",
+            },
+        ],
+    )
+
+
+def configured_context() -> tuple[Vehicle, CanNetwork, UUID, UUID, UUID]:
+    vehicle, network, gateway, producer, consumer = context()
+    config = configuration(gateway, producer, consumer)
+    network.lin_channels = [item.model_dump(mode="json") for item in config.lin_channels]
+    network.ethernet_segments = [item.model_dump(mode="json") for item in config.ethernet_segments]
+    network.gateway_routes = [item.model_dump(mode="json") for item in config.gateway_routes]
+    return vehicle, network, gateway, producer, consumer
+
+
+def campaign(*, expected_version: int = 1) -> MultiBusCampaignCommand:
+    return MultiBusCampaignCommand(
+        command_id="campaign-command-001",
+        expected_version=expected_version,
+        steps=[
+            {
+                "identifier": "battery-to-lin",
+                "route_id": "can-to-lin",
+                "payload": [10, 20],
+                "advance_time_us": 50,
+                "latency_budget_us": 4_000,
+            },
+            {
+                "identifier": "lin-to-cloud",
+                "route_id": "lin-to-ethernet",
+                "payload": [10, 20],
+                "advance_time_us": 25,
+                "latency_budget_us": 3,
             },
         ],
     )
@@ -296,3 +342,138 @@ async def test_ethernet_route_rounds_duration_up_and_replay_is_exact() -> None:
             actor_user_id=uuid4(),
             correlation_id=None,
         )
+
+
+def test_campaign_contract_is_bounded_and_requires_unique_steps() -> None:
+    data = campaign().model_dump(mode="json")
+    data["steps"][1]["identifier"] = data["steps"][0]["identifier"]
+    with pytest.raises(ValidationError, match="unique"):
+        MultiBusCampaignCommand.model_validate(data)
+    data = campaign().model_dump(mode="json")
+    data["steps"] = data["steps"] * 33
+    with pytest.raises(ValidationError):
+        MultiBusCampaignCommand.model_validate(data)
+
+
+@pytest.mark.asyncio
+async def test_campaign_produces_deterministic_trace_and_performance_metrics() -> None:
+    vehicle, network, _, _, _ = configured_context()
+    session = FakeSession([network, None])
+    execution, updated, duplicate = await execute_multibus_campaign(
+        cast(AsyncSession, session),
+        vehicle=vehicle,
+        command=campaign(),
+        actor_user_id=uuid4(),
+        correlation_id=uuid4(),
+    )
+    assert not duplicate
+    assert execution.status == "performance_degraded"
+    assert execution.result["step_count"] == 2
+    assert execution.result["delivered_count"] == 2
+    assert execution.result["budget_violation_count"] == 1
+    assert execution.result["occupied_us"] == 3154
+    assert execution.result["idle_us"] == 75
+    assert execution.result["window_us"] == 3229
+    assert execution.result["maximum_latency_us"] == 3150
+    assert execution.result["p95_latency_us"] == 3150
+    assert execution.result["protocol_counts"] == {"can": 0, "lin": 1, "ethernet": 1}
+    assert [item["sequence"] for item in execution.result["traces"]] == [7, 8]
+    assert updated.simulation_time_us == 3329
+    assert updated.next_sequence == 9
+    assert updated.version == 2
+    assert all("payload" not in trace for trace in execution.result["traces"])
+    assert all("payload" not in step for step in execution.request_summary["steps"])
+    event = next(item for item in session.added if isinstance(item, OutboxEvent))
+    audit = next(item for item in session.added if isinstance(item, AuditRecord))
+    assert event.event_type == "atep.vehicle.multibus.campaign.completed.v1"
+    assert "traces" not in event.payload
+    assert audit.action == "vehicle.multibus_campaign_completed"
+
+
+@pytest.mark.asyncio
+async def test_campaign_integrates_loss_and_gateway_unavailable_scenarios() -> None:
+    vehicle, network, _, _, _ = configured_context()
+    command = campaign().model_copy(
+        update={
+            "steps": [
+                campaign().steps[0].model_copy(update={"fault": MultiBusCampaignFault.FRAME_LOSS}),
+                campaign()
+                .steps[1]
+                .model_copy(update={"fault": MultiBusCampaignFault.GATEWAY_UNAVAILABLE}),
+            ]
+        }
+    )
+    execution, updated, _ = await execute_multibus_campaign(
+        cast(AsyncSession, FakeSession([network, None])),
+        vehicle=vehicle,
+        command=command,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert execution.status == "failed"
+    assert execution.result["failed_count"] == 2
+    assert execution.result["delivered_count"] == 0
+    assert execution.result["occupied_us"] == 3150
+    assert execution.result["traces"][0]["failure_reason"] == "frame_loss"
+    assert execution.result["traces"][1]["sequence"] is None
+    assert execution.result["traces"][1]["duration_us"] == 0
+    assert updated.next_sequence == 8
+
+
+@pytest.mark.asyncio
+async def test_campaign_exact_replay_is_mutation_free_and_changed_reuse_conflicts() -> None:
+    vehicle, network, _, _, _ = configured_context()
+    command = campaign()
+    existing, _, _ = await execute_multibus_campaign(
+        cast(AsyncSession, FakeSession([network, None])),
+        vehicle=vehicle,
+        command=command,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    time_after_first = network.simulation_time_us
+    sequence_after_first = network.next_sequence
+    assert (
+        await execute_multibus_campaign(
+            cast(AsyncSession, FakeSession([network, existing])),
+            vehicle=vehicle,
+            command=command,
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+    )[2]
+    assert network.simulation_time_us == time_after_first
+    assert network.next_sequence == sequence_after_first
+    changed = command.model_copy(update={"steps": [command.steps[0]]})
+    with pytest.raises(MultiBusCampaignCommandConflictError):
+        await execute_multibus_campaign(
+            cast(AsyncSession, FakeSession([network, existing])),
+            vehicle=vehicle,
+            command=changed,
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+
+
+@pytest.mark.asyncio
+async def test_campaign_prevalidation_rejects_unknown_route_without_mutation() -> None:
+    vehicle, network, _, _, _ = configured_context()
+    command = campaign().model_copy(
+        update={
+            "steps": [campaign().steps[0].model_copy(update={"route_id": "unknown-route"})]
+        }
+    )
+    with pytest.raises(MultiBusCampaignContractError) as error:
+        await execute_multibus_campaign(
+            cast(AsyncSession, FakeSession([network, None])),
+            vehicle=vehicle,
+            command=command,
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+    assert error.value.details == {
+        "reason": "step battery-to-lin references an invalid gateway route"
+    }
+    assert network.version == 1
+    assert network.simulation_time_us == 100
+    assert network.next_sequence == 7
