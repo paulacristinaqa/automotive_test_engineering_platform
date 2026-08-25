@@ -14,11 +14,13 @@ analysis, and enterprise fleet capabilities.
 
 The repository contains the executable foundation of **Volume I — Core Platform**, the completed
 bounded baseline of **Volume II — Digital Vehicle**, the first seven implemented increments of
-**Volume III — ECU Simulator**, and **Volume IV — CAN Network** through deterministic LIN/Ethernet gateway routing.
+**Volume III — ECU Simulator**, **Volume IV — CAN Network**, and the V-1 diagnostic foundation
+with UDS sessions and DTC persistence.
 Implemented behavior is backed by requirements, architecture decisions, migrations, automated
 tests, a disposable integration environment, and an English engineering workbook.
 
-> **Project status:** active development. Volume III is baselined and Volume IV is implemented. The first
+> **Project status:** active development. Volumes III and IV are baselined; Volume V has started with
+> diagnostic sessions, DTC persistence, and foundational UDS services. The first
 > ATEP-to-Android-Automotive integration contract now provides a vehicle catalogue and
 > idempotent telemetry and command delivery for the Vehicle Gateway. Persistent test runs now
 > publish authenticated live WebSocket updates to CarSystemUI, which continues to isolate
@@ -71,6 +73,8 @@ An intended end-to-end scenario is:
 - vehicle-scoped classic CAN topology with bounded ECU nodes and standard/extended frame contracts;
 - deterministic CAN frame submission with logical microsecond time, replay safety, RBAC, audit,
   transactional events, and payload-minimized evidence;
+- ECU-scoped UDS default/programming/extended sessions, persistent DTCs, status-mask queries,
+  all-DTC clearing, stable NRC evidence, replay safety, RBAC, audit, and transactional events;
 - capability-protected Android Automotive telemetry ingestion with idempotent retry handling;
 - persistent vehicle-scoped test runs with controlled, optimistic lifecycle transitions;
 - authenticated Redis-backed WebSocket snapshots and live test-run updates for CarSystemUI;
@@ -255,6 +259,7 @@ source .venv/bin/activate
 | Test runs | `POST/GET /api/v1/test-runs`, status updates | `test_runs:read`, `test_runs:write` |
 | Live test run | `WS /api/v1/test-runs/{run_id}/stream` | active bearer token + `test_runs:read` |
 | Environment profiles | `/api/v1/environment-profiles` and lifecycle status | `environment_profiles:read`, `environment_profiles:manage` |
+| Diagnostics | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics` | `diagnostics:read`, `diagnostics:manage` |
 | Health | `/health/live`, `/health/ready` | Development probe policy |
 
 All API failures follow a stable correlation-aware error envelope. Passwords, password hashes,
@@ -335,6 +340,8 @@ companion project also passes 27 unit tests, Android lint, and debug APK assembl
 - [Volume I — Core Platform formatted workbook](docs/ATEP_Volume_I_Core_Platform_Engineering_Workbook.docx)
 - [Volume II — Digital Vehicle editable source](docs/workbook-volume-ii.md)
 - [Volume II — Digital Vehicle formatted workbook](docs/ATEP_Volume_II_Digital_Vehicle_Engineering_Workbook.docx)
+- [Volume V — Diagnostics editable source](docs/workbook-volume-v.md)
+- [Volume V — Diagnostics formatted workbook](docs/ATEP_Volume_V_Diagnostics_Engineering_Workbook.docx)
 
 The workbook is a living English-language engineering record containing requirements,
 architecture decisions, implementation evidence, test objectives, risks, technical debt,
@@ -348,7 +355,7 @@ operational guidance, and review worksheets.
 | II | Digital Vehicle | Baseline complete — increments II-1 through II-6 implemented |
 | III | ECU Simulator | Baseline complete — increments III-1 through III-7 implemented |
 | IV | CAN Network | Implemented — increments IV-1 through IV-7 |
-| V | Diagnostics | Planned |
+| V | Diagnostics | In progress — increment V-1 implemented |
 | VI | Electric Vehicle | Planned |
 | VII | ADAS | Planned |
 | VIII | Test Framework | Planned |

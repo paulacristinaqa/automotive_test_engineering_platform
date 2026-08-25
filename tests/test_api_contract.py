@@ -393,11 +393,30 @@ def test_can_network_baseline_contracts_and_safe_pagination_are_published() -> N
     }
     assert gateway_parameters["limit"]["maximum"] == 200
     assert gateway_parameters["offset"]["maximum"] == 1_000_000
-    campaign_parameters = {
-        item["name"]: item["schema"] for item in campaigns["get"]["parameters"]
-    }
+    campaign_parameters = {item["name"]: item["schema"] for item in campaigns["get"]["parameters"]}
     assert campaign_parameters["limit"]["maximum"] == 200
     assert campaign_parameters["offset"]["maximum"] == 1_000_000
+
+
+def test_diagnostics_contracts_and_safe_pagination_are_published() -> None:
+    paths = core_app.openapi()["paths"]
+    root = "/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics"
+    assert "get" in paths[f"{root}/session"]
+    assert "post" in paths[f"{root}/session-control"]
+    assert {"get", "post"} <= set(paths[f"{root}/dtcs"])
+    assert "get" in paths[f"{root}/dtcs/{{code}}"]
+    assert "post" in paths[f"{root}/dtcs/clear"]
+    parameters = {
+        item["name"]: item["schema"] for item in paths[f"{root}/dtcs"]["get"]["parameters"]
+    }
+    assert parameters["limit"]["maximum"] == 200
+    assert parameters["offset"]["maximum"] == 1_000_000
+    assert parameters["status_mask"]["anyOf"][0]["maximum"] == 255
+    schemas = core_app.openapi()["components"]["schemas"]
+    assert schemas["DtcReportCommand"]["properties"]["status_mask"]["maximum"] == 255
+    assert (
+        schemas["DiagnosticSessionControlCommand"]["properties"]["expected_version"]["minimum"] == 1
+    )
 
 
 def test_test_job_scheduler_contracts_and_safe_pagination_are_published() -> None:

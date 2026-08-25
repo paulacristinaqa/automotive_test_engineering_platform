@@ -22,6 +22,7 @@ from atep.core.observability import (
 )
 from atep.core.rate_limit import api_rate_limit
 from atep.db.session import session_factory
+from atep.diagnostics.router import router as diagnostics_router
 from atep.ecus.router import profiles_router as ecu_profiles_router
 from atep.ecus.router import router as ecus_router
 from atep.ecus.router import scenarios_router as ecu_scenarios_router
@@ -113,6 +114,7 @@ app.include_router(ecus_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(ecu_profiles_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(ecu_scenarios_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(can_network_router, prefix="/api/v1", dependencies=rate_limited)
+app.include_router(diagnostics_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(vehicle_gateway_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(simulation_sessions_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(test_runs_router, prefix="/api/v1", dependencies=rate_limited)
