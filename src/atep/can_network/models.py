@@ -22,6 +22,9 @@ class CanNetwork(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     nodes: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
     frame_contracts: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
     error_states: Mapped[dict[str, dict[str, Any]]] = mapped_column(JSON, default=dict)
+    lin_channels: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    ethernet_segments: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    gateway_routes: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     version: Mapped[int] = mapped_column(Integer, default=1)
     simulation_time_us: Mapped[int] = mapped_column(BigInteger, default=0)
     next_sequence: Mapped[int] = mapped_column(BigInteger, default=1)
@@ -64,6 +67,27 @@ class CanFaultExecution(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     command_id: Mapped[str] = mapped_column(String(64))
     operation: Mapped[str] = mapped_column(String(16))
     target_node_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), index=True)
+    request: Mapped[dict[str, Any]] = mapped_column(JSON)
+    result: Mapped[dict[str, Any]] = mapped_column(JSON)
+    previous_version: Mapped[int] = mapped_column(Integer)
+    network_version: Mapped[int] = mapped_column(Integer)
+    requested_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+
+
+class MultiBusGatewayExecution(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "multibus_gateway_executions"
+    __table_args__ = (
+        UniqueConstraint("network_id", "command_id", name="uq_multibus_gateway_command"),
+    )
+
+    network_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("can_networks.id", ondelete="CASCADE"), index=True
+    )
+    command_id: Mapped[str] = mapped_column(String(64))
+    operation: Mapped[str] = mapped_column(String(16))
+    route_id: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
     request: Mapped[dict[str, Any]] = mapped_column(JSON)
     result: Mapped[dict[str, Any]] = mapped_column(JSON)
     previous_version: Mapped[int] = mapped_column(Integer)

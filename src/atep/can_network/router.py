@@ -29,6 +29,13 @@ from atep.can_network.models import (
     CanFrameTransmission,
     CanNetwork,
     CanSignalCodecExecution,
+    MultiBusGatewayExecution,
+)
+from atep.can_network.multibus_service import (
+    configure_multibus,
+    execute_gateway_route,
+    list_gateway_executions,
+    require_gateway_execution,
 )
 from atep.can_network.schemas import (
     CanArbitrationCommand,
@@ -49,6 +56,10 @@ from atep.can_network.schemas import (
     CanSignalCodecResponse,
     CanSignalDecodeCommand,
     CanSignalEncodeCommand,
+    GatewayRouteCommand,
+    MultiBusConfigurationCommand,
+    MultiBusGatewayExecutionPage,
+    MultiBusGatewayExecutionResponse,
 )
 from atep.can_network.service import (
     create_can_network,
@@ -81,6 +92,9 @@ def network_response(network: CanNetwork, vehicle: Vehicle) -> CanNetworkRespons
         nodes=network.nodes,
         frame_contracts=network.frame_contracts,
         error_states=network.error_states or {},
+        lin_channels=network.lin_channels or [],
+        ethernet_segments=network.ethernet_segments or [],
+        gateway_routes=network.gateway_routes or [],
         version=network.version,
         simulation_time_us=network.simulation_time_us,
         next_sequence=network.next_sequence,
@@ -127,6 +141,117 @@ def fault_response(
         duplicate=duplicate,
         created_at=item.created_at,
     )
+
+
+def gateway_response(
+    item: MultiBusGatewayExecution,
+    network: CanNetwork,
+    vehicle: Vehicle,
+    *,
+    duplicate: bool = False,
+) -> MultiBusGatewayExecutionResponse:
+    return MultiBusGatewayExecutionResponse(
+        command_id=item.command_id,
+        vehicle_id=vehicle.identifier,
+        network_id=network.identifier,
+        operation=item.operation,
+        route_id=item.route_id,
+        result=item.result,
+        previous_version=item.previous_version,
+        network_version=item.network_version,
+        duplicate=duplicate,
+        created_at=item.created_at,
+    )
+
+
+@router.post(
+    "/multibus/configure",
+    response_model=MultiBusGatewayExecutionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def configure_multibus_endpoint(
+    vehicle_id: str,
+    command: MultiBusConfigurationCommand,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(can_manage)],
+) -> MultiBusGatewayExecutionResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    item, network, duplicate = await configure_multibus(
+        session,
+        vehicle=vehicle,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(item, attribute_names=["created_at"])
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+    return gateway_response(item, network, vehicle, duplicate=duplicate)
+
+
+@router.post(
+    "/gateway/routes/execute",
+    response_model=MultiBusGatewayExecutionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def execute_gateway_route_endpoint(
+    vehicle_id: str,
+    command: GatewayRouteCommand,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(can_manage)],
+) -> MultiBusGatewayExecutionResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    item, network, duplicate = await execute_gateway_route(
+        session,
+        vehicle=vehicle,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(item, attribute_names=["created_at"])
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+    return gateway_response(item, network, vehicle, duplicate=duplicate)
+
+
+@router.get("/gateway/executions", response_model=MultiBusGatewayExecutionPage)
+async def list_gateway_executions_endpoint(
+    vehicle_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(can_read)],
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
+) -> MultiBusGatewayExecutionPage:
+    vehicle = await require_vehicle(session, vehicle_id)
+    network = await require_can_network(session, vehicle=vehicle)
+    items, total = await list_gateway_executions(
+        session, network=network, limit=limit, offset=offset
+    )
+    return MultiBusGatewayExecutionPage(
+        items=[gateway_response(item, network, vehicle) for item in items],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/gateway/executions/{command_id}", response_model=MultiBusGatewayExecutionResponse)
+async def get_gateway_execution_endpoint(
+    vehicle_id: str,
+    command_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(can_read)],
+) -> MultiBusGatewayExecutionResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    network = await require_can_network(session, vehicle=vehicle)
+    item = await require_gateway_execution(session, network=network, command_id=command_id)
+    return gateway_response(item, network, vehicle)
 
 
 @router.post(

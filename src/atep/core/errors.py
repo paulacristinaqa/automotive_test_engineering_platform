@@ -246,6 +246,25 @@ class CanFaultStateError(ApplicationError):
         )
 
 
+class MultiBusGatewayCommandConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="multibus_gateway_command_conflict",
+            message="The multi-bus gateway command identifier was already used differently.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class MultiBusGatewayContractError(ApplicationError):
+    def __init__(self, *, reason: str) -> None:
+        super().__init__(
+            code="multibus_gateway_contract_invalid",
+            message="The multi-bus gateway operation violates its contract.",
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            details={"reason": reason},
+        )
+
+
 class CanDbcCatalogueAlreadyExistsError(ApplicationError):
     def __init__(self) -> None:
         super().__init__(

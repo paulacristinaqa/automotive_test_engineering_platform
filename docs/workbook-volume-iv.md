@@ -1,6 +1,6 @@
 # ATEP Volume IV - CAN Network Engineering Workbook
 
-**Document status:** Increments IV-1 through IV-5 implemented
+**Document status:** Increments IV-1 through IV-6 implemented
 **Language:** English
 **Last updated:** 2026-08-24
 **Repository:** `paulacristinaqa/automotive_test_engineering_platform`
@@ -15,7 +15,7 @@ evidence, verification strategy, risks, and study exercises for the CAN Network 
 | Field | Value |
 |---|---|
 | Volume | IV - CAN Network |
-| Baseline | Increments IV-1 through IV-5 |
+| Baseline | Increments IV-1 through IV-6 |
 | Architecture style | Vehicle-scoped aggregate with transactional domain service |
 | Primary runtime | Python 3.12, FastAPI, SQLAlchemy, PostgreSQL |
 | Quality gates | pytest, Ruff, strict mypy, Alembic and integration CI |
@@ -29,6 +29,7 @@ evidence, verification strategy, risks, and study exercises for the CAN Network 
 | 0.3.0 | 2026-08-24 | Added structured DBC catalogues, Intel/Motorola signal placement, exact decimal scaling, signed codec evidence, APIs, migration, and tests. |
 | 0.4.0 | 2026-08-24 | Added CAN FD network configuration, ISO payload lengths through 64 bytes, BRS, dual-rate phase timing, mixed classic/FD arbitration, extended DBC payloads, migration, and tests. |
 | 0.5.0 | 2026-08-25 | Added TEC/REC error confinement, deterministic transmission/reception faults and loss, bus-off enforcement and recovery, replay-safe evidence, APIs, migration, and tests. |
+| 0.6.0 | 2026-08-25 | Added bounded LIN and automotive Ethernet contracts, cross-protocol gateway routing, deterministic protocol timing, replay-safe evidence, APIs, migration, and tests. |
 
 ## 4. Scope and Boundaries
 
@@ -53,13 +54,14 @@ evidence, verification strategy, risks, and study exercises for the CAN Network 
 - Deterministic mixed classic/FD arbitration with phase-specific timing evidence.
 - DBC signal placement and codec payloads through 512 contracted bits.
 - TEC/REC error confinement, bounded fault injection, frame loss, bus-off enforcement, and recovery.
+- Bounded LIN channels, automotive Ethernet segments, and transparent gateway routes.
 
 ### 4.2 Deferred
 
 - Bit stuffing, acknowledgement, retransmission, and oscillator/physical-layer effects.
 - Textual `.dbc` parsing, attributes, value tables, comments, and multiplexing.
 - Payload corruption, overload frames, acknowledgement errors, and automatic retransmission.
-- LIN, automotive Ethernet, physical transceivers, and SocketCAN adapters.
+- Physical transceivers, SocketCAN adapters, SOME/IP, DoIP, and payload transformation.
 
 ## 5. Architecture
 
@@ -93,6 +95,11 @@ and BRS identity; arbitration results also preserve per-phase bit counts and dur
 semantics. `CanFaultExecution` stores canonical injection/recovery requests, before/after state,
 logical timing, versions, target, and actor for exact replay.
 
+The aggregate also stores bounded LIN channels, Ethernet segments, and gateway route contracts.
+`MultiBusGatewayExecution` persists canonical configuration or route commands, deterministic timing,
+sequence, versions, and actor. Routed payloads remain in command evidence but are excluded from
+audit and outbox records.
+
 Bounds are architectural controls: 64 nodes, 256 contracts, 8 classic or 64 FD payload bytes, a 10-second maximum
 logical advance per submission, safe history pagination, and one network aggregate per vehicle.
 
@@ -117,6 +124,10 @@ logical advance per submission, safe history pagination, and one network aggrega
 | POST | `/api/v1/vehicles/{vehicle_id}/can-networks/faults/recover` | `can_networks:manage` | Recover a bus-off node. |
 | GET | `/api/v1/vehicles/{vehicle_id}/can-networks/faults` | `can_networks:read` | List fault and recovery evidence. |
 | GET | `/api/v1/vehicles/{vehicle_id}/can-networks/faults/{command_id}` | `can_networks:read` | Retrieve one fault execution. |
+| POST | `/api/v1/vehicles/{vehicle_id}/can-networks/multibus/configure` | `can_networks:manage` | Configure LIN, Ethernet, and routes. |
+| POST | `/api/v1/vehicles/{vehicle_id}/can-networks/gateway/routes/execute` | `can_networks:manage` | Execute a transparent route. |
+| GET | `/api/v1/vehicles/{vehicle_id}/can-networks/gateway/executions` | `can_networks:read` | List multi-bus evidence. |
+| GET | `/api/v1/vehicles/{vehicle_id}/can-networks/gateway/executions/{command_id}` | `can_networks:read` | Retrieve multi-bus evidence. |
 
 The Android Automotive application and future gateways continue to use the public ATEP API. They
 never connect directly to PostgreSQL or RabbitMQ.
@@ -200,10 +211,25 @@ Recovery is explicit and allowed only from bus-off. It requires at least 128 seq
 recessive bits, advances logical time at the nominal bitrate, and resets both counters. Atomic audit
 and outbox evidence records state, counts, timing, and versions without CAN payload bytes.
 
+### 8.5 LIN, Ethernet, and Gateway Semantics
+
+LIN channels use 1-20 kbit/s, six-bit identifiers, one publisher, bounded subscribers, one to eight
+payload bytes, and explicit classic or enhanced checksum semantics. Destination duration uses a
+transparent model of 43 header/checksum bits plus ten transmitted bits per payload byte.
+
+Automotive Ethernet segments operate at 100 or 1000 Mbit/s. Messages define EtherType, source,
+destinations, optional VLAN, and one to 1500 payload bytes. Timing includes preamble, Ethernet
+header, payload, frame check sequence, and inter-frame gap: `(38 + payload_length) * 8` bits.
+
+Gateway routes must connect different protocols through an ECU declared with gateway role.
+Transparent routing requires equal source and destination payload lengths. Execution locks the
+aggregate, validates optimistic version, assigns one sequence, advances logical time using the
+destination protocol, and persists exact replay evidence atomically with audit and outbox records.
+
 ## 9. Functional Requirements
 
-The authoritative catalogue is `docs/requirements-volume-iv.md`. IV-1 through IV-5 implement
-CAN-F-001 through CAN-F-050 and CAN-NF-001 through CAN-NF-017.
+The authoritative catalogue is `docs/requirements-volume-iv.md`. IV-1 through IV-6 implement
+CAN-F-001 through CAN-F-060 and CAN-NF-001 through CAN-NF-020.
 
 ## 10. Architecture Decisions
 
@@ -283,6 +309,16 @@ The public `dlc` field continues to represent payload bytes for compatibility. V
 FD values to ISO-defined payload sizes, while a future wire adapter can map larger lengths to their
 four-bit encoded DLC values.
 
+### ADR-CAN-016 - Keep Multi-Bus Contracts in One Versioned Aggregate
+
+LIN, Ethernet, and gateway routes share the CAN network aggregate so cross-protocol configuration,
+logical time, sequence, replay, and audit remain atomic during the bounded baseline.
+
+### ADR-CAN-017 - Route Transparently Before Adding Signal Transformation
+
+IV-6 requires equal payload lengths and preserves bytes unchanged. This separates deterministic
+transport timing and gateway control from future DBC-to-SOME/IP or application-level conversion.
+
 ## 11. Verification Catalogue
 
 | Test | Objective | Level |
@@ -355,16 +391,30 @@ four-bit encoded DLC values.
 | Fault RBAC | Require manage for mutation and read for history/detail. | API/integration |
 | Fault minimization | Exclude payload and full request bodies from audit and outbox. | Service |
 | Fault migration | Upgrade and downgrade error-state and execution persistence. | Integration |
+| LIN bounds | Reject bitrate above 20 kbit/s, IDs above 63, and payloads above eight bytes. | Schema |
+| Ethernet bounds | Accept only 100/1000 Mbit/s and payloads through 1500 bytes. | Schema |
+| Gateway role | Reject a route through a node without gateway role. | Service |
+| Cross-protocol route | Reject routes whose source and destination protocols are equal. | Schema |
+| Transparent length | Reject source and destination contracts with different payload lengths. | Service |
+| LIN timing | Verify 43 fixed bits plus ten bits per payload byte at channel bitrate. | Unit/service |
+| Ethernet timing | Verify preamble, header, FCS, and inter-frame gap duration with ceiling. | Unit/service |
+| Gateway sequence | Advance logical time, sequence, and version exactly once per route. | Service |
+| Gateway replay | Return exact persisted evidence without repeating routing state. | Service/API |
+| Gateway conflict | Reject changed command-ID reuse with a stable error. | Service/API |
+| Gateway RBAC | Require manage for configuration/routing and read for evidence. | API/integration |
+| Gateway minimization | Exclude routed payload and full configuration from audit/outbox. | Service |
+| Multi-bus migration | Upgrade and downgrade contracts and execution evidence. | Integration |
 
 ## 12. Implemented Evidence
 
 - `src/atep/can_network/` contains models, schemas, service, and router.
-- Migrations `0024_can_network_baseline` through `0028_can_faults` own the database schema.
+- Migrations `0024_can_network_baseline` through `0029_multibus_gateway` own the database schema.
 - Events include `atep.can.network.created.v1`, `atep.can.frame.submitted.v1`, and `atep.can.arbitration.completed.v1`.
 - DBC events are `atep.can.dbc.catalogue.created.v1` and `atep.can.signal.codec.completed.v1`.
 - Fault events are `atep.can.fault.injected.v1` and `atep.can.bus.recovered.v1`.
+- Multi-bus events are `atep.vehicle.multibus.configured.v1` and `atep.vehicle.gateway.routed.v1`.
 - Permissions are `can_networks:read` and `can_networks:manage`.
-- Automated tests cover validation, priority, classic and FD timing mathematics, mixed arbitration, readiness, delivery, utilization, versioning, replay, errors, DBC bit placement through 512 bits, signed scaling, exact conversion, TEC/REC thresholds, loss, bus-off enforcement, recovery timing, evidence minimization, persistence, and OpenAPI.
+- Automated tests cover validation, priority, classic and FD timing mathematics, mixed arbitration, readiness, delivery, utilization, versioning, replay, errors, DBC bit placement through 512 bits, signed scaling, exact conversion, TEC/REC thresholds, loss, bus-off enforcement, recovery timing, LIN/Ethernet bounds and timing, gateway routing, evidence minimization, persistence, and OpenAPI.
 
 ## 13. Risks and Technical Debt
 
@@ -379,11 +429,13 @@ four-bit encoded DLC values.
 - CAN FD timing is a deterministic transparent model, not a bit-accurate physical trace; stuffing, synchronization, acknowledgement, and transceiver delay remain deferred.
 - The public DLC value represents payload length rather than the encoded four-bit wire DLC.
 - Error-frame timing intentionally excludes bit stuffing, intermission, overload frames, acknowledgement errors, and automatic retransmission.
+- LIN and Ethernet timing are transparent deterministic models, not physical transceiver simulations.
+- Gateway payload transformation, SOME/IP, DoIP, VLAN scheduling, and traffic shaping remain deferred.
 
 ## 14. Roadmap
 
-The recommended next increment is IV-6: LIN and automotive Ethernet adapters plus deterministic
-gateway routing. See `docs/roadmap-volume-iv.md`.
+The recommended next increment is IV-7: multi-bus campaigns, traces, performance evidence, and
+integrated failure scenarios. See `docs/roadmap-volume-iv.md`.
 
 ## 15. Study Exercises
 

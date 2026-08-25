@@ -4,6 +4,8 @@ Volume IV-1 introduced a vehicle-scoped classic CAN aggregate. Volume IV-2 added
 arbitration and timing. Volume IV-3 added a structured DBC catalogue and exact signal codec. Volume
 IV-4 adds CAN FD payloads, dual-rate timing, and mixed classic/FD operation. IV-5 adds deterministic
 error confinement, role-valid fault injection, frame loss, bus-off blocking, and explicit recovery.
+IV-6 adds bounded LIN and automotive Ethernet contracts plus deterministic transparent routing
+through gateway ECUs.
 
 ## Implemented Boundary
 
