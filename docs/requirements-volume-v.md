@@ -12,7 +12,12 @@
 | DG-F-006 | The platform shall expose safely paginated DTC retrieval compatible with the UDS `0x19` service boundary. | Implemented in V-1 |
 | DG-F-007 | The platform shall support the all-DTC group `FFFFFF` through service `0x14`. | Implemented in V-1 |
 | DG-F-008 | Unsupported diagnostic requests shall expose stable error details including a UDS negative response code. | Implemented in V-1 |
-| DG-F-009 | Security Access, Read/Write Data by Identifier, Routine Control, ECU reset, and flashing shall be implemented incrementally. | Planned |
+| DG-F-009 | The platform shall maintain an ECU-scoped typed DID catalogue with boolean, integer, decimal, and string values. | Implemented in V-2 |
+| DG-F-010 | UDS `0x22` shall read one to sixteen unique DIDs authorized for the active session. | Implemented in V-2 |
+| DG-F-011 | UDS `0x2E` shall write only writable DIDs authorized for the active session. | Implemented in V-2 |
+| DG-F-012 | DID writes shall validate declared type, numeric bounds, string length, session version, and DID version. | Implemented in V-2 |
+| DG-F-013 | DID read and write commands shall provide exact replay and stable changed-reuse conflicts. | Implemented in V-2 |
+| DG-F-014 | Routine Control, Security Access, ECU reset, and flashing shall be implemented incrementally. | Planned |
 
 ## Non-Functional Requirements
 
@@ -25,9 +30,12 @@
 | DG-NF-005 | DTC listing shall be limited to 200 records per request and one million offset. | Implemented in V-1 |
 | DG-NF-006 | Public diagnostic contracts shall be represented in OpenAPI and use the platform-wide error envelope. | Implemented in V-1 |
 | DG-NF-007 | PostgreSQL schema changes shall be reversible through Alembic. | Implemented in V-1 |
+| DG-NF-008 | An ECU shall define at most 128 DIDs; catalogue pages shall return at most 128 entries. | Implemented in V-2 |
+| DG-NF-009 | DID values shall remain in command/catalogue storage and responses but shall not be copied into audit or outbox evidence. | Implemented in V-2 |
+| DG-NF-010 | DID catalogue changes, reads, and writes shall commit atomically with audit and outbox evidence. | Implemented in V-2 |
 
 ## Traceability
 
-V-1 evidence is provided by `src/atep/diagnostics`, migration
-`0031_diagnostics_foundation`, `tests/test_diagnostics.py`, API contract tests, and the separate
-Volume V engineering workbook.
+V-1 and V-2 evidence is provided by `src/atep/diagnostics`, migrations
+`0031_diagnostics_foundation` and `0032_diagnostic_data_identifiers`,
+`tests/test_diagnostics.py`, API contract tests, and the separate Volume V engineering workbook.

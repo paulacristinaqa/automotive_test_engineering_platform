@@ -11,11 +11,17 @@ from atep.core.errors import (
 )
 from atep.diagnostics.models import (
     DiagnosticCommand,
+    DiagnosticDataIdentifier,
     DiagnosticSessionState,
     DiagnosticTroubleCode,
 )
 from atep.diagnostics.schemas import (
     DiagnosticSessionControlCommand,
+    DidCreate,
+    DidDataType,
+    DidReadCommand,
+    DidValue,
+    DidWriteCommand,
     DtcClearCommand,
     DtcReportCommand,
     UdsNegativeResponseCode,
@@ -44,6 +50,254 @@ async def get_or_create_session(
         session.add(state)
         await session.flush()
     return state
+
+
+async def create_did(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    ecu: ElectronicControlUnit,
+    command: DidCreate,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> DiagnosticDataIdentifier:
+    existing = await session.scalar(
+        select(DiagnosticDataIdentifier).where(
+            DiagnosticDataIdentifier.ecu_id == ecu.id,
+            DiagnosticDataIdentifier.identifier == command.identifier,
+        )
+    )
+    if existing is not None:
+        raise DiagnosticContractError(
+            reason=f"DID 0x{command.identifier:04X} already exists",
+            negative_response_code=UdsNegativeResponseCode.REQUEST_OUT_OF_RANGE,
+        )
+    total = await session.scalar(
+        select(func.count()).where(DiagnosticDataIdentifier.ecu_id == ecu.id)
+    )
+    if int(total or 0) >= 128:
+        raise DiagnosticContractError(
+            reason="an ECU may define at most 128 DIDs in V-2",
+            negative_response_code=UdsNegativeResponseCode.REQUEST_OUT_OF_RANGE,
+        )
+    _validate_did_value(command.data_type, command.value, command)
+    did = DiagnosticDataIdentifier(
+        ecu_id=ecu.id,
+        identifier=command.identifier,
+        name=command.name,
+        description=command.description,
+        data_type=command.data_type.value,
+        unit=command.unit,
+        writable=command.writable,
+        readable_sessions=[item.value for item in command.readable_sessions],
+        writable_sessions=[item.value for item in command.writable_sessions],
+        value=command.value,
+        minimum=command.minimum,
+        maximum=command.maximum,
+        max_length=command.max_length,
+        version=1,
+        created_by_user_id=actor_user_id,
+    )
+    session.add(did)
+    await session.flush()
+    evidence = {
+        **_base_evidence(vehicle, ecu),
+        "did_id": str(did.id),
+        "identifier": did.identifier,
+        "identifier_hex": f"0x{did.identifier:04X}",
+        "data_type": did.data_type,
+        "writable": did.writable,
+        "version": did.version,
+    }
+    _record_did_catalogue_evidence(
+        session,
+        did=did,
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id,
+        evidence=evidence,
+    )
+    return did
+
+
+async def list_dids(
+    session: AsyncSession, *, ecu: ElectronicControlUnit, limit: int, offset: int
+) -> tuple[list[DiagnosticDataIdentifier], int]:
+    query = select(DiagnosticDataIdentifier).where(DiagnosticDataIdentifier.ecu_id == ecu.id)
+    total = await session.scalar(select(func.count()).select_from(query.subquery()))
+    result = await session.execute(
+        query.order_by(DiagnosticDataIdentifier.identifier).limit(limit).offset(offset)
+    )
+    return list(result.scalars().all()), int(total or 0)
+
+
+async def require_did(
+    session: AsyncSession,
+    *,
+    ecu: ElectronicControlUnit,
+    identifier: int,
+    lock: bool = False,
+    uds_request: bool = False,
+) -> DiagnosticDataIdentifier:
+    query = select(DiagnosticDataIdentifier).where(
+        DiagnosticDataIdentifier.ecu_id == ecu.id,
+        DiagnosticDataIdentifier.identifier == identifier,
+    )
+    if lock:
+        query = query.with_for_update()
+    did = await session.scalar(query)
+    if did is None:
+        if uds_request:
+            raise DiagnosticContractError(
+                reason=f"DID 0x{identifier:04X} is not supported",
+                negative_response_code=UdsNegativeResponseCode.REQUEST_OUT_OF_RANGE,
+            )
+        raise ResourceNotFoundError("diagnostic data identifier")
+    return did
+
+
+async def read_dids(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    ecu: ElectronicControlUnit,
+    command: DidReadCommand,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> tuple[DiagnosticCommand, bool]:
+    request = command.model_dump(mode="json")
+    existing = await _existing_command(session, ecu=ecu, command_id=command.command_id)
+    if existing is not None:
+        if (
+            existing.service_id == UdsServiceId.READ_DATA_BY_IDENTIFIER
+            and existing.request == request
+        ):
+            return existing, True
+        raise DiagnosticCommandConflictError()
+    state = await get_or_create_session(session, ecu=ecu, lock=True)
+    dids = [
+        await require_did(session, ecu=ecu, identifier=item, uds_request=True)
+        for item in command.identifiers
+    ]
+    for did in dids:
+        if state.session_type not in did.readable_sessions:
+            raise DiagnosticContractError(
+                reason=(
+                    f"DID 0x{did.identifier:04X} is not readable in {state.session_type} session"
+                ),
+                negative_response_code=UdsNegativeResponseCode.SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION,
+            )
+    result = {
+        "session_type": state.session_type,
+        "items": [
+            {
+                "identifier": did.identifier,
+                "identifier_hex": f"0x{did.identifier:04X}",
+                "data_type": did.data_type,
+                "unit": did.unit,
+                "value": did.value,
+                "did_version": did.version,
+            }
+            for did in dids
+        ],
+    }
+    execution = DiagnosticCommand(
+        ecu_id=ecu.id,
+        command_id=command.command_id,
+        service_id=UdsServiceId.READ_DATA_BY_IDENTIFIER,
+        request=request,
+        result=result,
+        previous_version=state.version,
+        session_version=state.version,
+        requested_by_user_id=actor_user_id,
+    )
+    session.add(execution)
+    await session.flush()
+    _record_did_command_evidence(
+        session,
+        vehicle=vehicle,
+        ecu=ecu,
+        execution=execution,
+        dids=dids,
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id,
+        event_type="atep.diagnostics.did.read.v1",
+        action="diagnostics.did_read",
+    )
+    return execution, False
+
+
+async def write_did(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    ecu: ElectronicControlUnit,
+    identifier: int,
+    command: DidWriteCommand,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> tuple[DiagnosticCommand, bool]:
+    request = {"identifier": identifier, **command.model_dump(mode="json")}
+    existing = await _existing_command(session, ecu=ecu, command_id=command.command_id)
+    if existing is not None:
+        if (
+            existing.service_id == UdsServiceId.WRITE_DATA_BY_IDENTIFIER
+            and existing.request == request
+        ):
+            return existing, True
+        raise DiagnosticCommandConflictError()
+    state = await get_or_create_session(session, ecu=ecu, lock=True)
+    did = await require_did(session, ecu=ecu, identifier=identifier, lock=True, uds_request=True)
+    if command.expected_session_version != state.version:
+        raise DiagnosticContractError(
+            reason=f"session version is {state.version}",
+            negative_response_code=UdsNegativeResponseCode.CONDITIONS_NOT_CORRECT,
+        )
+    if command.expected_did_version != did.version:
+        raise DiagnosticContractError(
+            reason=f"DID version is {did.version}",
+            negative_response_code=UdsNegativeResponseCode.CONDITIONS_NOT_CORRECT,
+        )
+    if not did.writable or state.session_type not in did.writable_sessions:
+        raise DiagnosticContractError(
+            reason=f"DID 0x{did.identifier:04X} is not writable in {state.session_type} session",
+            negative_response_code=UdsNegativeResponseCode.SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION,
+        )
+    _validate_did_value(DidDataType(did.data_type), command.value, did)
+    previous_did_version = did.version
+    did.value = command.value
+    did.version += 1
+    result = {
+        "identifier": did.identifier,
+        "identifier_hex": f"0x{did.identifier:04X}",
+        "value": did.value,
+        "previous_did_version": previous_did_version,
+        "did_version": did.version,
+        "session_type": state.session_type,
+    }
+    execution = DiagnosticCommand(
+        ecu_id=ecu.id,
+        command_id=command.command_id,
+        service_id=UdsServiceId.WRITE_DATA_BY_IDENTIFIER,
+        request=request,
+        result=result,
+        previous_version=state.version,
+        session_version=state.version,
+        requested_by_user_id=actor_user_id,
+    )
+    session.add(execution)
+    await session.flush()
+    _record_did_command_evidence(
+        session,
+        vehicle=vehicle,
+        ecu=ecu,
+        execution=execution,
+        dids=[did],
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id,
+        event_type="atep.diagnostics.did.written.v1",
+        action="diagnostics.did_written",
+    )
+    return execution, False
 
 
 async def control_session(
@@ -320,6 +574,120 @@ def _record_evidence(
         correlation_id=correlation_id,
         details=evidence,
     )
+
+
+def _record_did_catalogue_evidence(
+    session: AsyncSession,
+    *,
+    did: DiagnosticDataIdentifier,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+    evidence: dict[str, object],
+) -> None:
+    enqueue_event(
+        session,
+        event_type="atep.diagnostics.did.created.v1",
+        aggregate_type="diagnostic_data_identifier",
+        aggregate_id=did.id,
+        payload=evidence,
+        correlation_id=correlation_id,
+    )
+    record_audit(
+        session,
+        actor_user_id=actor_user_id,
+        action="diagnostics.did_created",
+        resource_type="diagnostic_data_identifier",
+        resource_id=did.id,
+        correlation_id=correlation_id,
+        details=evidence,
+    )
+
+
+def _record_did_command_evidence(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    ecu: ElectronicControlUnit,
+    execution: DiagnosticCommand,
+    dids: list[DiagnosticDataIdentifier],
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+    event_type: str,
+    action: str,
+) -> None:
+    evidence = {
+        **_base_evidence(vehicle, ecu),
+        "command_id": execution.command_id,
+        "service_id": execution.service_id,
+        "positive_response_service_id": execution.service_id + 0x40,
+        "session_version": execution.session_version,
+        "did_count": len(dids),
+        "identifiers": [item.identifier for item in dids],
+        "did_versions": {str(item.identifier): item.version for item in dids},
+    }
+    enqueue_event(
+        session,
+        event_type=event_type,
+        aggregate_type="ecu",
+        aggregate_id=ecu.id,
+        payload=evidence,
+        correlation_id=correlation_id,
+    )
+    record_audit(
+        session,
+        actor_user_id=actor_user_id,
+        action=action,
+        resource_type="ecu",
+        resource_id=ecu.id,
+        correlation_id=correlation_id,
+        details=evidence,
+    )
+
+
+def _validate_did_value(
+    data_type: DidDataType,
+    value: DidValue,
+    definition: DidCreate | DiagnosticDataIdentifier,
+) -> None:
+    valid = (
+        (data_type == DidDataType.BOOLEAN and isinstance(value, bool))
+        or (
+            data_type == DidDataType.INTEGER
+            and isinstance(value, int)
+            and not isinstance(value, bool)
+        )
+        or (
+            data_type == DidDataType.DECIMAL
+            and isinstance(value, (int, float))
+            and not isinstance(value, bool)
+        )
+        or (data_type == DidDataType.STRING and isinstance(value, str))
+    )
+    if not valid:
+        raise DiagnosticContractError(
+            reason=f"value does not match DID data type {data_type.value}",
+            negative_response_code=UdsNegativeResponseCode.REQUEST_OUT_OF_RANGE,
+        )
+    minimum = definition.minimum
+    maximum = definition.maximum
+    if data_type in {DidDataType.INTEGER, DidDataType.DECIMAL}:
+        numeric_value = float(value)
+        if minimum is not None and numeric_value < minimum:
+            raise DiagnosticContractError(
+                reason=f"value is below minimum {minimum}",
+                negative_response_code=UdsNegativeResponseCode.REQUEST_OUT_OF_RANGE,
+            )
+        if maximum is not None and numeric_value > maximum:
+            raise DiagnosticContractError(
+                reason=f"value exceeds maximum {maximum}",
+                negative_response_code=UdsNegativeResponseCode.REQUEST_OUT_OF_RANGE,
+            )
+    if data_type == DidDataType.STRING and definition.max_length is not None:
+        if len(str(value)) > definition.max_length:
+            raise DiagnosticContractError(
+                reason=f"value exceeds maximum length {definition.max_length}",
+                negative_response_code=UdsNegativeResponseCode.REQUEST_OUT_OF_RANGE,
+            )
 
 
 def _base_evidence(vehicle: Vehicle, ecu: ElectronicControlUnit) -> dict[str, object]:

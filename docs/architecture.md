@@ -403,6 +403,12 @@ boundary, and Clear Diagnostic Information (`0x14`) for the all-DTC group. Posit
 and selected negative response codes are retained as protocol evidence while HTTP/OpenAPI remains
 the public control-plane transport. ISO-TP, CAN PDU framing, and DoIP are future adapters.
 
+V-2 adds an ECU-scoped typed DID catalogue plus Read Data by Identifier (`0x22`) and Write Data by
+Identifier (`0x2E`). Reads are bounded to sixteen unique identifiers; writes require an explicitly
+writable DID, an authorized active session, matching session/DID versions, and a valid typed value.
+Exact results retain values for replay, while shared audit and outbox evidence contains only DID
+identifiers, counts, service identities, and versions.
+
 Each ECU owns one current, optimistic-versioned diagnostic session. Mutating commands have
 ECU-scoped idempotency identities. Exact retry returns stored evidence; changed reuse is rejected.
 DTCs use ECU simulation time, retain bounded snapshots in protected persistence, and exclude those
