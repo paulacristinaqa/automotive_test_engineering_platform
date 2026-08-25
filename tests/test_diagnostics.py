@@ -10,16 +10,20 @@ from atep.audit.models import AuditRecord
 from atep.core.errors import DiagnosticCommandConflictError, DiagnosticContractError
 from atep.diagnostics.models import (
     DiagnosticCommand,
+    DiagnosticDataIdentifier,
     DiagnosticSessionState,
     DiagnosticTroubleCode,
 )
 from atep.diagnostics.schemas import (
     DiagnosticSessionControlCommand,
     DiagnosticSessionType,
+    DidCreate,
+    DidReadCommand,
+    DidWriteCommand,
     DtcReportCommand,
     UdsNegativeResponseCode,
 )
-from atep.diagnostics.service import control_session, report_dtc
+from atep.diagnostics.service import control_session, create_did, read_dids, report_dtc, write_did
 from atep.ecus.models import ElectronicControlUnit
 from atep.events.models import OutboxEvent
 from atep.identity.dependencies import require_permissions
@@ -92,6 +96,224 @@ def test_diagnostic_contracts_are_bounded_and_hex_normalized() -> None:
             status_mask=1,
             snapshot={f"signal-{index}": index for index in range(33)},
         )
+
+
+def writable_temperature_did(ecu: ElectronicControlUnit) -> DiagnosticDataIdentifier:
+    return DiagnosticDataIdentifier(
+        id=uuid4(),
+        ecu_id=ecu.id,
+        identifier=0xF190,
+        name="Battery temperature",
+        description="",
+        data_type="decimal",
+        unit="celsius",
+        writable=True,
+        readable_sessions=["default", "extended"],
+        writable_sessions=["extended"],
+        value=24.5,
+        minimum=-40.0,
+        maximum=100.0,
+        max_length=None,
+        version=1,
+        created_by_user_id=uuid4(),
+    )
+
+
+@pytest.mark.asyncio
+async def test_did_catalogue_is_typed_bounded_audited_and_evented() -> None:
+    vehicle, ecu = vehicle_and_ecu()
+    session = FakeSession(None, 0)
+    did = await create_did(
+        cast(AsyncSession, session),
+        vehicle=vehicle,
+        ecu=ecu,
+        command=DidCreate(
+            identifier=0xF190,
+            name="Battery temperature",
+            data_type="decimal",
+            unit="celsius",
+            writable=True,
+            readable_sessions=["default", "extended"],
+            writable_sessions=["extended"],
+            value=24.5,
+            minimum=-40,
+            maximum=100,
+        ),
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert did.identifier == 0xF190
+    event = next(item for item in session.added if isinstance(item, OutboxEvent))
+    audit = next(item for item in session.added if isinstance(item, AuditRecord))
+    assert event.event_type == "atep.diagnostics.did.created.v1"
+    assert event.payload["identifier_hex"] == "0xF190"
+    assert "value" not in event.payload
+    assert "value" not in audit.details
+
+    with pytest.raises(DiagnosticContractError) as error:
+        await create_did(
+            cast(AsyncSession, FakeSession(None, 0)),
+            vehicle=vehicle,
+            ecu=ecu,
+            command=DidCreate(
+                identifier=1,
+                name="Invalid",
+                data_type="integer",
+                readable_sessions=["default"],
+                value="not-an-integer",
+            ),
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+    assert error.value.details["reason"] == "value does not match DID data type integer"
+
+    with pytest.raises(DiagnosticContractError) as error:
+        await create_did(
+            cast(AsyncSession, FakeSession(None, 128)),
+            vehicle=vehicle,
+            ecu=ecu,
+            command=DidCreate(
+                identifier=2,
+                name="Bounded",
+                data_type="boolean",
+                readable_sessions=["default"],
+                value=True,
+            ),
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+    assert error.value.details["reason"] == "an ECU may define at most 128 DIDs in V-2"
+
+
+@pytest.mark.asyncio
+async def test_read_dids_is_session_aware_idempotent_and_minimizes_evidence() -> None:
+    vehicle, ecu = vehicle_and_ecu()
+    state = DiagnosticSessionState(
+        id=uuid4(), ecu_id=ecu.id, session_type="default", version=2, simulation_time_ms=0
+    )
+    did = writable_temperature_did(ecu)
+    command = DidReadCommand(command_id="uds-read-did-001", identifiers=[0xF190])
+    session = FakeSession(None, state, did)
+    execution, duplicate = await read_dids(
+        cast(AsyncSession, session),
+        vehicle=vehicle,
+        ecu=ecu,
+        command=command,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert duplicate is False
+    assert execution.service_id == 0x22
+    assert execution.result["items"][0]["value"] == 24.5
+    event = next(item for item in session.added if isinstance(item, OutboxEvent))
+    audit = next(item for item in session.added if isinstance(item, AuditRecord))
+    assert event.payload["identifiers"] == [0xF190]
+    assert "value" not in event.payload
+    assert "value" not in audit.details
+
+    returned, duplicate = await read_dids(
+        cast(AsyncSession, FakeSession(execution)),
+        vehicle=vehicle,
+        ecu=ecu,
+        command=command,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert returned is execution
+    assert duplicate is True
+
+    did.readable_sessions = ["extended"]
+    with pytest.raises(DiagnosticContractError) as error:
+        await read_dids(
+            cast(AsyncSession, FakeSession(None, state, did)),
+            vehicle=vehicle,
+            ecu=ecu,
+            command=DidReadCommand(command_id="uds-read-did-session", identifiers=[0xF190]),
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+    assert error.value.details["negative_response_code"] == 0x7F
+
+
+@pytest.mark.asyncio
+async def test_write_did_requires_session_and_versions_and_validates_range() -> None:
+    vehicle, ecu = vehicle_and_ecu()
+    state = DiagnosticSessionState(
+        id=uuid4(), ecu_id=ecu.id, session_type="extended", version=3, simulation_time_ms=0
+    )
+    did = writable_temperature_did(ecu)
+    session = FakeSession(None, state, did)
+    command = DidWriteCommand(
+        command_id="uds-write-did-001",
+        expected_session_version=3,
+        expected_did_version=1,
+        value=47.8,
+    )
+    execution, duplicate = await write_did(
+        cast(AsyncSession, session),
+        vehicle=vehicle,
+        ecu=ecu,
+        identifier=0xF190,
+        command=command,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert duplicate is False
+    assert execution.service_id == 0x2E
+    assert did.value == 47.8
+    assert did.version == 2
+    event = next(item for item in session.added if isinstance(item, OutboxEvent))
+    assert "value" not in event.payload
+
+    returned, duplicate = await write_did(
+        cast(AsyncSession, FakeSession(execution)),
+        vehicle=vehicle,
+        ecu=ecu,
+        identifier=0xF190,
+        command=command,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert returned is execution
+    assert duplicate is True
+    assert did.version == 2
+
+    default_state = state
+    default_state.session_type = "default"
+    with pytest.raises(DiagnosticContractError) as error:
+        await write_did(
+            cast(AsyncSession, FakeSession(None, default_state, did)),
+            vehicle=vehicle,
+            ecu=ecu,
+            identifier=0xF190,
+            command=DidWriteCommand(
+                command_id="uds-write-did-default",
+                expected_session_version=3,
+                expected_did_version=2,
+                value=48.0,
+            ),
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+    assert error.value.details["negative_response_code"] == 0x7F
+
+    default_state.session_type = "extended"
+    with pytest.raises(DiagnosticContractError) as error:
+        await write_did(
+            cast(AsyncSession, FakeSession(None, default_state, did)),
+            vehicle=vehicle,
+            ecu=ecu,
+            identifier=0xF190,
+            command=DidWriteCommand(
+                command_id="uds-write-did-range",
+                expected_session_version=3,
+                expected_did_version=2,
+                value=101.0,
+            ),
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+    assert error.value.details["reason"] == "value exceeds maximum 100.0"
 
 
 @pytest.mark.asyncio

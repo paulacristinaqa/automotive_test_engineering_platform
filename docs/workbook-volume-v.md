@@ -1,6 +1,6 @@
 # ATEP Volume V - Diagnostics Engineering Workbook
 
-**Document status:** Increment V-1 implemented  
+**Document status:** Increments V-1 and V-2 implemented
 **Language:** English  
 **Last updated:** 2026-08-25  
 **Repository:** `paulacristinaqa/automotive_test_engineering_platform`
@@ -15,7 +15,7 @@ evidence, verification strategy, risks, and study exercises for the Diagnostics 
 | Field | Value |
 |---|---|
 | Volume | V - Diagnostics |
-| Baseline | Increment V-1 |
+| Baseline | Increments V-1 and V-2 |
 | Architecture style | ECU-scoped diagnostic aggregate and transactional domain service |
 | Primary runtime | Python 3.12, FastAPI, SQLAlchemy, PostgreSQL |
 | Quality gates | pytest, Ruff, strict mypy, Alembic, integration CI, DOCX render and accessibility audit |
@@ -25,6 +25,7 @@ evidence, verification strategy, risks, and study exercises for the Diagnostics 
 | Release | Date | Change |
 |---|---|---|
 | 0.1.0 | 2026-08-25 | Added versioned UDS sessions, DTC storage, services `0x10`, `0x19`, and `0x14`, stable NRC evidence, RBAC, audit, outbox, migration, APIs, and deterministic tests. |
+| 0.2.0 | 2026-08-25 | Added a typed DID catalogue, UDS `0x22`/`0x2E`, session authorization, value/version constraints, minimized evidence, migration, APIs, and tests. |
 
 ## 4. Scope and Boundaries
 
@@ -39,11 +40,13 @@ evidence, verification strategy, risks, and study exercises for the Diagnostics 
 - Exact command replay and stable changed-reuse conflict behavior.
 - Independent diagnostic read/manage permissions.
 - Atomic state, evidence, audit, and transactional outbox writes.
+- ECU-scoped typed DID catalogue with boolean, integer, decimal, and string values.
+- Session-authorized UDS Read/Write Data by Identifier (`0x22` and `0x2E`).
+- DID type, range, length, catalogue-size, request-size, and optimistic-version bounds.
 
 ### 4.2 Deferred
 
 - ISO-TP segmentation, CAN transport binding, DoIP, and physical adapters.
-- DID catalogue and services `0x22` and `0x2E`.
 - Routine Control, Security Access, ECU Reset, and flash transfer services.
 - OBD-II mode/PID compatibility and fleet-scale remote diagnostics.
 
@@ -68,6 +71,10 @@ session versions, actor, and timestamps. It supports exact replay for mutating s
 `DiagnosticTroubleCode` stores ECU ownership, six-digit hexadecimal code, ISO-style status mask,
 severity, description, occurrence count, first/last ECU logical time, bounded snapshot, and version.
 
+`DiagnosticDataIdentifier` stores an ECU-local 16-bit identifier, engineering metadata, declared
+type, unit, readable/writable sessions, constrained scalar value, and optimistic version. The
+catalogue is capped at 128 entries per ECU; this is a semantic data surface, not raw memory access.
+
 ## 7. Public API and Security
 
 | Method | Path | Permission | Purpose |
@@ -78,6 +85,11 @@ severity, description, occurrence count, first/last ECU logical time, bounded sn
 | GET | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/dtcs` | `diagnostics:read` | Execute the `0x19` query boundary with safe pagination. |
 | GET | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/dtcs/{code}` | `diagnostics:read` | Retrieve one DTC. |
 | POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/dtcs/clear` | `diagnostics:manage` | Execute `0x14` for group `FFFFFF`. |
+| POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/dids` | `diagnostics:manage` | Define one typed DID. |
+| GET | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/dids` | `diagnostics:read` | List the bounded ECU DID catalogue. |
+| GET | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/dids/{identifier}` | `diagnostics:read` | Retrieve one DID definition and value. |
+| POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/dids/read` | `diagnostics:read` | Execute UDS `0x22` for up to 16 DIDs. |
+| POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/dids/{identifier}/write` | `diagnostics:manage` | Execute session-authorized UDS `0x2E`. |
 
 ## 8. UDS Semantics
 
@@ -99,6 +111,20 @@ V-1 supports only the all-DTC group `FFFFFF`. The service removes matching ECU D
 the same transaction as versioned command, audit, and outbox evidence. The positive response
 service ID is `0x54`; unsupported groups return NRC `0x31`.
 
+### 8.4 Read Data by Identifier (`0x22`)
+
+One command reads one to sixteen unique 16-bit identifiers. Every DID must exist and authorize the
+active diagnostic session. The result preserves typed values for the client and exact replay; the
+positive response identity is `0x62`. Audit and outbox records contain identifiers and versions,
+not values.
+
+### 8.5 Write Data by Identifier (`0x2E`)
+
+A write requires `diagnostics:manage`, a writable DID, an allowed active session, matching session
+and DID versions, and a value satisfying the declared type and constraints. It increments only the
+DID version and returns `0x6E` identity. Exact retry returns the persisted result without a second
+mutation.
+
 ## 9. Error and Consistency Contract
 
 | Condition | Stable code | HTTP | UDS evidence |
@@ -106,6 +132,9 @@ service ID is `0x54`; unsupported groups return NRC `0x31`.
 | Changed reuse of a diagnostic command ID | `diagnostic_command_conflict` | 409 | Command identity conflict before PDU execution |
 | Stale session version | `diagnostic_contract_invalid` | 422 | NRC `0x22` conditions not correct |
 | Unsupported DTC group | `diagnostic_contract_invalid` | 422 | NRC `0x31` request out of range |
+| DID type/range violation | `diagnostic_contract_invalid` | 422 | NRC `0x31` request out of range |
+| Stale DID or session version | `diagnostic_contract_invalid` | 422 | NRC `0x22` conditions not correct |
+| DID forbidden in active session | `diagnostic_contract_invalid` | 422 | NRC `0x7F` service not supported in active session |
 | Unknown ECU or DTC | Platform resource-not-found code | 404 | Adapter maps transport response later |
 | Invalid body or pagination | `request_validation_error` | 422 | Rejected at the public contract boundary |
 
@@ -130,6 +159,16 @@ and do not sleep or depend on host clock speed.
 
 Snapshots may contain engineering measurements. They remain in protected DTC storage and are not
 copied into audit or outbox messages; those contain identifiers, status, counters, and versions.
+
+### ADR-DG-005 - Model DIDs as Typed Semantic Data
+
+DIDs describe automotive information explicitly instead of exposing arbitrary ECU memory. This
+supports stable validation, session policy, OpenAPI contracts, and future VHAL/CAN mappings.
+
+### ADR-DG-006 - Preserve Values for Replay but Minimize Shared Evidence
+
+Command results retain DID values so an exact retry is truthful. Audit and outbox records exclude
+those values and share only identifiers, counts, service identities, and versions.
 
 ## 11. Verification Catalogue
 
@@ -157,30 +196,43 @@ copied into audit or outbox messages; those contain identifiers, status, counter
 | RBAC read denial | Return 403 without `diagnostics:read`. | API/integration |
 | RBAC write denial | Return 403 without `diagnostics:manage`. | API/integration |
 | OpenAPI contract | Publish typed commands, results, bounds, and paths. | Contract |
-| Migration lifecycle | Upgrade and downgrade all three diagnostic tables. | Integration |
+| Migration lifecycle | Upgrade and downgrade all diagnostic tables. | Integration |
 | Regression | Preserve ECU, CAN, identity, audit, and platform behavior. | Full suite |
+| DID definition | Accept valid scalar types and reject mismatched initial values. | Schema/service |
+| DID catalogue bound | Reject a 129th DID and enforce page limit 128. | Service/OpenAPI |
+| Multi-DID read | Read one to sixteen unique DIDs in request order. | Service/API |
+| Read session denial | Return NRC `0x7F` when any DID disallows the active session. | Service/API |
+| DID write authorization | Require writable metadata, permitted session, and manage RBAC. | Service/API |
+| DID version concurrency | Reject stale session or DID versions with NRC `0x22`. | Service/integration |
+| DID value constraints | Reject type, numeric range, and string-length violations with NRC `0x31`. | Schema/service |
+| DID replay | Return persisted `0x22`/`0x2E` evidence without repeated mutation. | Service/integration |
+| DID evidence minimization | Prove audit and outbox never contain DID values. | Service |
 
 ## 12. Implemented Evidence
 
 - `src/atep/diagnostics/` contains models, schemas, service, and router.
 - Migration `0031_diagnostics_foundation` owns session, command, and DTC persistence.
+- Migration `0032_diagnostic_data_identifiers` owns typed DID persistence and versioning.
 - Events are `atep.diagnostics.session.changed.v1`, `atep.diagnostics.dtc.reported.v1`, and `atep.diagnostics.dtc.cleared.v1`.
 - Permissions are `diagnostics:read` and `diagnostics:manage`.
 - `tests/test_diagnostics.py` verifies contracts, logical time, versioning, replay, conflicts, evidence minimization, and permissions.
 - API contract tests verify routes and safe pagination in generated OpenAPI.
+- DID events are `atep.diagnostics.did.created.v1`, `atep.diagnostics.did.read.v1`, and `atep.diagnostics.did.written.v1`.
 
 ## 13. Risks and Technical Debt
 
-- V-1 exposes semantic UDS operations but does not yet encode wire PDUs.
+- V-1/V-2 expose semantic UDS operations but do not yet encode wire PDUs.
 - Status-mask meaning is retained as a byte; named bit helpers should be added with richer DTC queries.
 - DTC creation is a controlled simulator boundary; automatic fault-to-DTC mapping is future work.
 - The current clear operation loads at most 200 DTCs, matching the per-ECU V-1 storage bound.
 - Security level is reserved but remains zero until Security Access is implemented.
+- Exact replay stores DID values in protected command evidence; retention and field-level access controls should be revisited before production telemetry use.
 
 ## 14. Roadmap
 
-V-1 is implemented. The recommended next development is V-2: a typed Data Identifier catalogue
-with Read Data by Identifier (`0x22`) and session-authorized Write Data by Identifier (`0x2E`).
+V-1 and V-2 are implemented. The recommended next development is V-3: Routine Control (`0x31`)
+with a typed routine catalogue, deterministic state transitions, bounded execution evidence, and
+session-aware authorization.
 
 ## 15. Study Exercises
 
@@ -199,3 +251,8 @@ with Read Data by Identifier (`0x22`) and session-authorized Write Data by Ident
 13. Compare CAN/ISO-TP and Ethernet/DoIP as transport adapters for the same UDS domain.
 14. Design a negative test that proves an unsupported DTC group deletes nothing.
 15. Explain why simulation time produces more reproducible diagnostic tests than host time.
+16. Calculate the positive response identities for `0x22` and `0x2E`.
+17. Explain why a DID version changes without changing the diagnostic-session version.
+18. Design a string DID with a maximum length and its negative tests.
+19. Compare NRC `0x31` for an invalid value with NRC `0x7F` for the active session.
+20. Trace an exact `0x2E` retry and prove the DID version increments only once.

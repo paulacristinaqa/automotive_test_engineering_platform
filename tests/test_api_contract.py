@@ -406,17 +406,33 @@ def test_diagnostics_contracts_and_safe_pagination_are_published() -> None:
     assert {"get", "post"} <= set(paths[f"{root}/dtcs"])
     assert "get" in paths[f"{root}/dtcs/{{code}}"]
     assert "post" in paths[f"{root}/dtcs/clear"]
+    assert {"get", "post"} <= set(paths[f"{root}/dids"])
+    assert "post" in paths[f"{root}/dids/read"]
+    assert "get" in paths[f"{root}/dids/{{identifier}}"]
+    assert "post" in paths[f"{root}/dids/{{identifier}}/write"]
     parameters = {
         item["name"]: item["schema"] for item in paths[f"{root}/dtcs"]["get"]["parameters"]
     }
     assert parameters["limit"]["maximum"] == 200
     assert parameters["offset"]["maximum"] == 1_000_000
     assert parameters["status_mask"]["anyOf"][0]["maximum"] == 255
+    did_parameters = {
+        item["name"]: item["schema"] for item in paths[f"{root}/dids"]["get"]["parameters"]
+    }
+    assert did_parameters["limit"]["maximum"] == 128
+    assert did_parameters["offset"]["maximum"] == 1_000_000
     schemas = core_app.openapi()["components"]["schemas"]
     assert schemas["DtcReportCommand"]["properties"]["status_mask"]["maximum"] == 255
     assert (
         schemas["DiagnosticSessionControlCommand"]["properties"]["expected_version"]["minimum"] == 1
     )
+    assert schemas["DidCreate"]["properties"]["identifier"]["maximum"] == 65535
+    assert schemas["DidReadCommand"]["properties"]["identifiers"]["maxItems"] == 16
+    did_path_parameters = {
+        item["name"]: item["schema"]
+        for item in paths[f"{root}/dids/{{identifier}}"]["get"]["parameters"]
+    }
+    assert did_path_parameters["identifier"]["maximum"] == 65535
 
 
 def test_test_job_scheduler_contracts_and_safe_pagination_are_published() -> None:

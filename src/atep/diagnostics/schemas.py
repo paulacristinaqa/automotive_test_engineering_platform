@@ -3,23 +3,34 @@ from enum import IntEnum, StrEnum
 from typing import Annotated, Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 
 CommandId = Annotated[
     str, StringConstraints(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._:-]+$")
 ]
 DtcCode = Annotated[str, StringConstraints(pattern=r"^[0-9A-F]{6}$")]
+DidValue = bool | int | float | str
 
 
 class UdsServiceId(IntEnum):
     DIAGNOSTIC_SESSION_CONTROL = 0x10
     CLEAR_DIAGNOSTIC_INFORMATION = 0x14
     READ_DTC_INFORMATION = 0x19
+    READ_DATA_BY_IDENTIFIER = 0x22
+    WRITE_DATA_BY_IDENTIFIER = 0x2E
 
 
 class UdsNegativeResponseCode(IntEnum):
     CONDITIONS_NOT_CORRECT = 0x22
     REQUEST_OUT_OF_RANGE = 0x31
+    SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION = 0x7F
 
 
 class DiagnosticSessionType(StrEnum):
@@ -32,6 +43,103 @@ class DtcSeverity(StrEnum):
     INFORMATION = "information"
     WARNING = "warning"
     CRITICAL = "critical"
+
+
+class DidDataType(StrEnum):
+    BOOLEAN = "boolean"
+    INTEGER = "integer"
+    DECIMAL = "decimal"
+    STRING = "string"
+
+
+class DidCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    identifier: int = Field(ge=0, le=0xFFFF)
+    name: str = Field(min_length=1, max_length=80)
+    description: str = Field(default="", max_length=240)
+    data_type: DidDataType
+    unit: str = Field(default="", max_length=32)
+    writable: bool = False
+    readable_sessions: list[DiagnosticSessionType] = Field(min_length=1, max_length=3)
+    writable_sessions: list[DiagnosticSessionType] = Field(default_factory=list, max_length=3)
+    value: DidValue
+    minimum: float | None = None
+    maximum: float | None = None
+    max_length: int | None = Field(default=None, ge=1, le=4096)
+
+    @model_validator(mode="after")
+    def validate_definition(self) -> "DidCreate":
+        if len(set(self.readable_sessions)) != len(self.readable_sessions):
+            raise ValueError("readable_sessions must be unique")
+        if len(set(self.writable_sessions)) != len(self.writable_sessions):
+            raise ValueError("writable_sessions must be unique")
+        if not self.writable and self.writable_sessions:
+            raise ValueError("read-only DIDs cannot declare writable_sessions")
+        if self.writable and not self.writable_sessions:
+            raise ValueError("writable DIDs require at least one writable session")
+        if self.minimum is not None and self.maximum is not None and self.minimum > self.maximum:
+            raise ValueError("minimum cannot exceed maximum")
+        if self.data_type not in {DidDataType.INTEGER, DidDataType.DECIMAL} and (
+            self.minimum is not None or self.maximum is not None
+        ):
+            raise ValueError("only numeric DIDs may declare minimum or maximum")
+        if self.data_type != DidDataType.STRING and self.max_length is not None:
+            raise ValueError("only string DIDs may declare max_length")
+        return self
+
+
+class DidResponse(BaseModel):
+    id: UUID
+    ecu_id: str
+    identifier: int
+    identifier_hex: str
+    name: str
+    description: str
+    data_type: DidDataType
+    unit: str
+    writable: bool
+    readable_sessions: list[DiagnosticSessionType]
+    writable_sessions: list[DiagnosticSessionType]
+    value: DidValue
+    minimum: float | None
+    maximum: float | None
+    max_length: int | None
+    version: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class DidPage(BaseModel):
+    items: list[DidResponse]
+    total: int
+    limit: int
+    offset: int
+
+
+class DidReadCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    command_id: CommandId
+    identifiers: list[int] = Field(min_length=1, max_length=16)
+
+    @field_validator("identifiers")
+    @classmethod
+    def valid_identifiers(cls, value: list[int]) -> list[int]:
+        if any(identifier < 0 or identifier > 0xFFFF for identifier in value):
+            raise ValueError("identifiers must be between 0 and 65535")
+        if len(set(value)) != len(value):
+            raise ValueError("identifiers must be unique")
+        return value
+
+
+class DidWriteCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    command_id: CommandId
+    expected_session_version: int = Field(ge=1)
+    expected_did_version: int = Field(ge=1)
+    value: DidValue
 
 
 class DiagnosticSessionControlCommand(BaseModel):

@@ -1,14 +1,23 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request, Response, status
+from fastapi import APIRouter, Depends, Path, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atep.db.session import get_session
-from atep.diagnostics.models import DiagnosticCommand, DiagnosticTroubleCode
+from atep.diagnostics.models import (
+    DiagnosticCommand,
+    DiagnosticDataIdentifier,
+    DiagnosticTroubleCode,
+)
 from atep.diagnostics.schemas import (
     DiagnosticCommandResponse,
     DiagnosticSessionControlCommand,
     DiagnosticSessionResponse,
+    DidCreate,
+    DidPage,
+    DidReadCommand,
+    DidResponse,
+    DidWriteCommand,
     DtcClearCommand,
     DtcPage,
     DtcReportCommand,
@@ -17,10 +26,15 @@ from atep.diagnostics.schemas import (
 from atep.diagnostics.service import (
     clear_dtcs,
     control_session,
+    create_did,
     get_or_create_session,
+    list_dids,
     list_dtcs,
+    read_dids,
     report_dtc,
+    require_did,
     require_dtc,
+    write_did,
 )
 from atep.ecus.models import ElectronicControlUnit
 from atep.ecus.service import require_ecu
@@ -31,9 +45,7 @@ from atep.identity.users_router import request_correlation_id
 from atep.vehicles.models import Vehicle
 from atep.vehicles.service import require_vehicle
 
-router = APIRouter(
-    prefix="/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics", tags=["diagnostics"]
-)
+router = APIRouter(prefix="/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics", tags=["diagnostics"])
 diagnostics_read = require_permissions(PermissionName.DIAGNOSTICS_READ.value)
 diagnostics_manage = require_permissions(PermissionName.DIAGNOSTICS_MANAGE.value)
 
@@ -78,6 +90,147 @@ def dtc_response(dtc: DiagnosticTroubleCode, ecu: ElectronicControlUnit) -> DtcR
         created_at=dtc.created_at,
         updated_at=dtc.updated_at,
     )
+
+
+def did_response(did: DiagnosticDataIdentifier, ecu: ElectronicControlUnit) -> DidResponse:
+    return DidResponse(
+        id=did.id,
+        ecu_id=ecu.identifier,
+        identifier=did.identifier,
+        identifier_hex=f"0x{did.identifier:04X}",
+        name=did.name,
+        description=did.description,
+        data_type=did.data_type,
+        unit=did.unit,
+        writable=did.writable,
+        readable_sessions=did.readable_sessions,
+        writable_sessions=did.writable_sessions,
+        value=did.value,
+        minimum=did.minimum,
+        maximum=did.maximum,
+        max_length=did.max_length,
+        version=did.version,
+        created_at=did.created_at,
+        updated_at=did.updated_at,
+    )
+
+
+@router.post("/dids", response_model=DidResponse, status_code=status.HTTP_201_CREATED)
+async def create_did_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    command: DidCreate,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(diagnostics_manage)],
+) -> DidResponse:
+    vehicle, ecu = await _context(session, vehicle_id=vehicle_id, ecu_id=ecu_id)
+    did = await create_did(
+        session,
+        vehicle=vehicle,
+        ecu=ecu,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(did, attribute_names=["created_at", "updated_at"])
+    return did_response(did, ecu)
+
+
+@router.get("/dids", response_model=DidPage)
+async def list_dids_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(diagnostics_read)],
+    limit: Annotated[int, Query(ge=1, le=128)] = 100,
+    offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
+) -> DidPage:
+    _vehicle, ecu = await _context(session, vehicle_id=vehicle_id, ecu_id=ecu_id)
+    items, total = await list_dids(session, ecu=ecu, limit=limit, offset=offset)
+    return DidPage(
+        items=[did_response(item, ecu) for item in items],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.post(
+    "/dids/read",
+    response_model=DiagnosticCommandResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def read_dids_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    command: DidReadCommand,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(diagnostics_read)],
+) -> DiagnosticCommandResponse:
+    vehicle, ecu = await _context(session, vehicle_id=vehicle_id, ecu_id=ecu_id)
+    execution, duplicate = await read_dids(
+        session,
+        vehicle=vehicle,
+        ecu=ecu,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(execution, attribute_names=["created_at"])
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+        response.headers["X-Idempotent-Replay"] = "true"
+    return command_response(execution, ecu, duplicate=duplicate)
+
+
+@router.post(
+    "/dids/{identifier}/write",
+    response_model=DiagnosticCommandResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def write_did_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    identifier: Annotated[int, Path(ge=0, le=0xFFFF)],
+    command: DidWriteCommand,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(diagnostics_manage)],
+) -> DiagnosticCommandResponse:
+    vehicle, ecu = await _context(session, vehicle_id=vehicle_id, ecu_id=ecu_id)
+    execution, duplicate = await write_did(
+        session,
+        vehicle=vehicle,
+        ecu=ecu,
+        identifier=identifier,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(execution, attribute_names=["created_at"])
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+        response.headers["X-Idempotent-Replay"] = "true"
+    return command_response(execution, ecu, duplicate=duplicate)
+
+
+@router.get("/dids/{identifier}", response_model=DidResponse)
+async def get_did_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    identifier: Annotated[int, Path(ge=0, le=0xFFFF)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(diagnostics_read)],
+) -> DidResponse:
+    _vehicle, ecu = await _context(session, vehicle_id=vehicle_id, ecu_id=ecu_id)
+    return did_response(await require_did(session, ecu=ecu, identifier=identifier), ecu)
 
 
 @router.get("/session", response_model=DiagnosticSessionResponse)
