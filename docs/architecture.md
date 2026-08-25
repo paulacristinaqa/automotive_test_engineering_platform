@@ -370,5 +370,8 @@ catalogues map structured signals to existing frame contracts. The codec applies
 scaling, offsets, signed raw ranges, Intel LSB-first placement, and Motorola DBC sawtooth placement;
 it persists replay-safe encode/decode evidence without exposing values in audit or events. The CAN
 FD extension adds 64-byte payload contracts, dual-rate phase timing, BRS evidence, and deterministic
-mixed classic/FD arbitration. Textual DBC parsing, multiplexing, bit stuffing, acknowledgement,
-retransmission, and network faults remain explicit later increments.
+mixed classic/FD arbitration. Error confinement is aggregate-owned JSON state; replay-safe fault
+executions apply TEC/REC transitions, frame loss, bus-off exclusion, and explicit recovery under the
+same network row lock used by frame commands. Audit/outbox evidence is committed in the same
+transaction and excludes payload bytes. Textual DBC parsing, multiplexing, bit stuffing,
+acknowledgement, retransmission, LIN, and automotive Ethernet remain later increments.

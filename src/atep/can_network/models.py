@@ -21,6 +21,7 @@ class CanNetwork(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     data_bitrate_kbps: Mapped[int | None] = mapped_column(Integer, nullable=True)
     nodes: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
     frame_contracts: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    error_states: Mapped[dict[str, dict[str, Any]]] = mapped_column(JSON, default=dict)
     version: Mapped[int] = mapped_column(Integer, default=1)
     simulation_time_us: Mapped[int] = mapped_column(BigInteger, default=0)
     next_sequence: Mapped[int] = mapped_column(BigInteger, default=1)
@@ -46,6 +47,25 @@ class CanFrameTransmission(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     payload: Mapped[list[int]] = mapped_column(JSON)
     sequence: Mapped[int] = mapped_column(BigInteger)
     transmission_time_us: Mapped[int] = mapped_column(BigInteger)
+    previous_version: Mapped[int] = mapped_column(Integer)
+    network_version: Mapped[int] = mapped_column(Integer)
+    requested_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+
+
+class CanFaultExecution(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "can_fault_executions"
+    __table_args__ = (UniqueConstraint("network_id", "command_id", name="uq_can_fault_command"),)
+
+    network_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("can_networks.id", ondelete="CASCADE"), index=True
+    )
+    command_id: Mapped[str] = mapped_column(String(64))
+    operation: Mapped[str] = mapped_column(String(16))
+    target_node_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), index=True)
+    request: Mapped[dict[str, Any]] = mapped_column(JSON)
+    result: Mapped[dict[str, Any]] = mapped_column(JSON)
     previous_version: Mapped[int] = mapped_column(Integer)
     network_version: Mapped[int] = mapped_column(Integer)
     requested_by_user_id: Mapped[UUID] = mapped_column(

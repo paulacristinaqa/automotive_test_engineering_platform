@@ -1,6 +1,6 @@
 # ATEP Volume IV - CAN Network Engineering Workbook
 
-**Document status:** Increments IV-1 through IV-4 implemented
+**Document status:** Increments IV-1 through IV-5 implemented
 **Language:** English
 **Last updated:** 2026-08-24
 **Repository:** `paulacristinaqa/automotive_test_engineering_platform`
@@ -15,7 +15,7 @@ evidence, verification strategy, risks, and study exercises for the CAN Network 
 | Field | Value |
 |---|---|
 | Volume | IV - CAN Network |
-| Baseline | Increments IV-1 through IV-4 |
+| Baseline | Increments IV-1 through IV-5 |
 | Architecture style | Vehicle-scoped aggregate with transactional domain service |
 | Primary runtime | Python 3.12, FastAPI, SQLAlchemy, PostgreSQL |
 | Quality gates | pytest, Ruff, strict mypy, Alembic and integration CI |
@@ -28,6 +28,7 @@ evidence, verification strategy, risks, and study exercises for the CAN Network 
 | 0.2.0 | 2026-08-24 | Added deterministic arbitration, nominal transmission duration, delivery evidence, utilization metrics, replay-safe persistence, APIs, migration, and tests. |
 | 0.3.0 | 2026-08-24 | Added structured DBC catalogues, Intel/Motorola signal placement, exact decimal scaling, signed codec evidence, APIs, migration, and tests. |
 | 0.4.0 | 2026-08-24 | Added CAN FD network configuration, ISO payload lengths through 64 bytes, BRS, dual-rate phase timing, mixed classic/FD arbitration, extended DBC payloads, migration, and tests. |
+| 0.5.0 | 2026-08-25 | Added TEC/REC error confinement, deterministic transmission/reception faults and loss, bus-off enforcement and recovery, replay-safe evidence, APIs, migration, and tests. |
 
 ## 4. Scope and Boundaries
 
@@ -51,12 +52,13 @@ evidence, verification strategy, risks, and study exercises for the CAN Network 
 - Replay-safe codec evidence with payload-free audit and outbox metrics.
 - Deterministic mixed classic/FD arbitration with phase-specific timing evidence.
 - DBC signal placement and codec payloads through 512 contracted bits.
+- TEC/REC error confinement, bounded fault injection, frame loss, bus-off enforcement, and recovery.
 
 ### 4.2 Deferred
 
 - Bit stuffing, acknowledgement, retransmission, and oscillator/physical-layer effects.
 - Textual `.dbc` parsing, attributes, value tables, comments, and multiplexing.
-- Error frames, error counters, bus-off, recovery, loss, latency, and corruption.
+- Payload corruption, overload frames, acknowledgement errors, and automatic retransmission.
 - LIN, automotive Ethernet, physical transceivers, and SocketCAN adapters.
 
 ## 5. Architecture
@@ -87,6 +89,10 @@ references a frame contract rather than duplicating ID, DLC, producer, or consum
 and physical result for exact replay. Frame contracts and transmissions preserve classic/FD protocol
 and BRS identity; arbitration results also preserve per-phase bit counts and durations.
 
+`CanNetwork.error_states` stores affected node TEC, REC, and derived state without duplicating ECU
+semantics. `CanFaultExecution` stores canonical injection/recovery requests, before/after state,
+logical timing, versions, target, and actor for exact replay.
+
 Bounds are architectural controls: 64 nodes, 256 contracts, 8 classic or 64 FD payload bytes, a 10-second maximum
 logical advance per submission, safe history pagination, and one network aggregate per vehicle.
 
@@ -107,6 +113,10 @@ logical advance per submission, safe history pagination, and one network aggrega
 | POST | `/api/v1/vehicles/{vehicle_id}/can-networks/dbc/decode` | `can_networks:manage` | Decode payload bytes into signal values. |
 | GET | `/api/v1/vehicles/{vehicle_id}/can-networks/dbc/executions` | `can_networks:read` | List safely paginated codec evidence. |
 | GET | `/api/v1/vehicles/{vehicle_id}/can-networks/dbc/executions/{command_id}` | `can_networks:read` | Retrieve one codec result. |
+| POST | `/api/v1/vehicles/{vehicle_id}/can-networks/faults/inject` | `can_networks:manage` | Inject a bounded deterministic fault. |
+| POST | `/api/v1/vehicles/{vehicle_id}/can-networks/faults/recover` | `can_networks:manage` | Recover a bus-off node. |
+| GET | `/api/v1/vehicles/{vehicle_id}/can-networks/faults` | `can_networks:read` | List fault and recovery evidence. |
+| GET | `/api/v1/vehicles/{vehicle_id}/can-networks/faults/{command_id}` | `can_networks:read` | Retrieve one fault execution. |
 
 The Android Automotive application and future gateways continue to use the public ATEP API. They
 never connect directly to PostgreSQL or RabbitMQ.
@@ -174,10 +184,26 @@ protocol does not alter priority. Persisted arbitration evidence reports protoco
 counts, phase durations, total duration, deliveries, and utilization. Audit and outbox metrics report
 FD and BRS frame counts without payload bytes.
 
+### 8.4 Error Confinement and Fault Injection
+
+Each affected node has deterministic transmit and receive error counters (TEC and REC). A
+transmission error adds eight to TEC; a reception error adds one to REC. A node is error-active
+below 128, error-passive when either counter reaches 128, and bus-off when TEC reaches 256. A
+bus-off producer cannot submit a frame or enter arbitration.
+
+Fault commands are scoped to a frame contract. Transmission faults must target its producer;
+reception faults and frame loss must target a declared consumer. Frame loss records delivery loss
+without changing TEC or REC. Each error frame consumes 14 nominal-rate bits in logical time, while
+loss itself consumes no error-frame time. Exact command replay is mutation-free.
+
+Recovery is explicit and allowed only from bus-off. It requires at least 128 sequences of 11
+recessive bits, advances logical time at the nominal bitrate, and resets both counters. Atomic audit
+and outbox evidence records state, counts, timing, and versions without CAN payload bytes.
+
 ## 9. Functional Requirements
 
-The authoritative catalogue is `docs/requirements-volume-iv.md`. IV-1 through IV-4 implement
-CAN-F-001 through CAN-F-040 and CAN-NF-001 through CAN-NF-014.
+The authoritative catalogue is `docs/requirements-volume-iv.md`. IV-1 through IV-5 implement
+CAN-F-001 through CAN-F-050 and CAN-NF-001 through CAN-NF-017.
 
 ## 10. Architecture Decisions
 
@@ -318,15 +344,27 @@ four-bit encoded DLC values.
 | FD DBC boundary | Encode and decode signals through bit 511 of a 64-byte payload. | Unit/service |
 | FD minimization | Exclude 64-byte payloads from audit and outbox evidence. | Service |
 | FD migration | Upgrade and downgrade CAN FD columns with safe classic defaults. | Integration |
+| TEC threshold | Verify 16 transmission errors produce error-passive and 32 produce bus-off. | Unit/service |
+| REC threshold | Verify reception errors produce error-passive at 128. | Unit |
+| Fault role | Reject producer/consumer targets that violate the frame contract. | Service |
+| Frame loss | Record loss without modifying TEC, REC, sequence, or payload evidence. | Service |
+| Bus-off enforcement | Reject direct submission and arbitration by a bus-off producer. | Service/API |
+| Recovery timing | Verify 128 × 11 recessive bits at the nominal bitrate and counter reset. | Unit/service |
+| Fault replay | Return exact persisted evidence without repeating counters or time. | Service/API |
+| Fault conflict | Reject changed command-ID reuse with a stable error. | Service/API |
+| Fault RBAC | Require manage for mutation and read for history/detail. | API/integration |
+| Fault minimization | Exclude payload and full request bodies from audit and outbox. | Service |
+| Fault migration | Upgrade and downgrade error-state and execution persistence. | Integration |
 
 ## 12. Implemented Evidence
 
 - `src/atep/can_network/` contains models, schemas, service, and router.
-- Migrations `0024_can_network_baseline` through `0027_can_fd` own the database schema.
+- Migrations `0024_can_network_baseline` through `0028_can_faults` own the database schema.
 - Events include `atep.can.network.created.v1`, `atep.can.frame.submitted.v1`, and `atep.can.arbitration.completed.v1`.
 - DBC events are `atep.can.dbc.catalogue.created.v1` and `atep.can.signal.codec.completed.v1`.
+- Fault events are `atep.can.fault.injected.v1` and `atep.can.bus.recovered.v1`.
 - Permissions are `can_networks:read` and `can_networks:manage`.
-- Automated tests cover validation, priority, classic and FD timing mathematics, mixed arbitration, readiness, delivery, utilization, versioning, replay, errors, DBC bit placement through 512 bits, signed scaling, exact conversion, evidence minimization, persistence, and OpenAPI.
+- Automated tests cover validation, priority, classic and FD timing mathematics, mixed arbitration, readiness, delivery, utilization, versioning, replay, errors, DBC bit placement through 512 bits, signed scaling, exact conversion, TEC/REC thresholds, loss, bus-off enforcement, recovery timing, evidence minimization, persistence, and OpenAPI.
 
 ## 13. Risks and Technical Debt
 
@@ -340,11 +378,12 @@ four-bit encoded DLC values.
 - Encoding produces evidence but does not automatically submit the frame to the simulated bus.
 - CAN FD timing is a deterministic transparent model, not a bit-accurate physical trace; stuffing, synchronization, acknowledgement, and transceiver delay remain deferred.
 - The public DLC value represents payload length rather than the encoded four-bit wire DLC.
+- Error-frame timing intentionally excludes bit stuffing, intermission, overload frames, acknowledgement errors, and automatic retransmission.
 
 ## 14. Roadmap
 
-The recommended next increment is IV-5: deterministic error frames, transmit/receive error counters,
-bus-off and recovery, plus bounded fault injection. See `docs/roadmap-volume-iv.md`.
+The recommended next increment is IV-6: LIN and automotive Ethernet adapters plus deterministic
+gateway routing. See `docs/roadmap-volume-iv.md`.
 
 ## 15. Study Exercises
 

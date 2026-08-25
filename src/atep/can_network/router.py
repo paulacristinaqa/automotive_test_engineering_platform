@@ -17,8 +17,15 @@ from atep.can_network.dbc_service import (
     require_codec_execution,
     require_dbc_catalogue,
 )
+from atep.can_network.fault_service import (
+    inject_fault,
+    list_fault_executions,
+    recover_node,
+    require_fault_execution,
+)
 from atep.can_network.models import (
     CanDbcCatalogue,
+    CanFaultExecution,
     CanFrameTransmission,
     CanNetwork,
     CanSignalCodecExecution,
@@ -27,8 +34,12 @@ from atep.can_network.schemas import (
     CanArbitrationCommand,
     CanArbitrationPage,
     CanArbitrationResponse,
+    CanBusRecoveryCommand,
     CanDbcCatalogueCreate,
     CanDbcCatalogueResponse,
+    CanFaultExecutionPage,
+    CanFaultExecutionResponse,
+    CanFaultInjectionCommand,
     CanFrameSubmitCommand,
     CanFrameTransmissionPage,
     CanFrameTransmissionResponse,
@@ -69,6 +80,7 @@ def network_response(network: CanNetwork, vehicle: Vehicle) -> CanNetworkRespons
         data_bitrate_kbps=network.data_bitrate_kbps,
         nodes=network.nodes,
         frame_contracts=network.frame_contracts,
+        error_states=network.error_states or {},
         version=network.version,
         simulation_time_us=network.simulation_time_us,
         next_sequence=network.next_sequence,
@@ -98,6 +110,107 @@ def transmission_response(
         duplicate=duplicate,
         created_at=item.created_at,
     )
+
+
+def fault_response(
+    item: CanFaultExecution, network: CanNetwork, vehicle: Vehicle, *, duplicate: bool = False
+) -> CanFaultExecutionResponse:
+    return CanFaultExecutionResponse(
+        command_id=item.command_id,
+        vehicle_id=vehicle.identifier,
+        network_id=network.identifier,
+        operation=item.operation,
+        target_node_id=item.target_node_id,
+        result=item.result,
+        previous_version=item.previous_version,
+        network_version=item.network_version,
+        duplicate=duplicate,
+        created_at=item.created_at,
+    )
+
+
+@router.post(
+    "/faults/inject", response_model=CanFaultExecutionResponse, status_code=status.HTTP_201_CREATED
+)
+async def inject_fault_endpoint(
+    vehicle_id: str,
+    command: CanFaultInjectionCommand,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(can_manage)],
+) -> CanFaultExecutionResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    item, network, duplicate = await inject_fault(
+        session,
+        vehicle=vehicle,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(item, attribute_names=["created_at"])
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+    return fault_response(item, network, vehicle, duplicate=duplicate)
+
+
+@router.post(
+    "/faults/recover", response_model=CanFaultExecutionResponse, status_code=status.HTTP_201_CREATED
+)
+async def recover_fault_endpoint(
+    vehicle_id: str,
+    command: CanBusRecoveryCommand,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(can_manage)],
+) -> CanFaultExecutionResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    item, network, duplicate = await recover_node(
+        session,
+        vehicle=vehicle,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(item, attribute_names=["created_at"])
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+    return fault_response(item, network, vehicle, duplicate=duplicate)
+
+
+@router.get("/faults", response_model=CanFaultExecutionPage)
+async def list_faults_endpoint(
+    vehicle_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(can_read)],
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
+) -> CanFaultExecutionPage:
+    vehicle = await require_vehicle(session, vehicle_id)
+    network = await require_can_network(session, vehicle=vehicle)
+    items, total = await list_fault_executions(session, network=network, limit=limit, offset=offset)
+    return CanFaultExecutionPage(
+        items=[fault_response(item, network, vehicle) for item in items],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/faults/{command_id}", response_model=CanFaultExecutionResponse)
+async def get_fault_endpoint(
+    vehicle_id: str,
+    command_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(can_read)],
+) -> CanFaultExecutionResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    network = await require_can_network(session, vehicle=vehicle)
+    item = await require_fault_execution(session, network=network, command_id=command_id)
+    return fault_response(item, network, vehicle)
 
 
 def dbc_catalogue_response(
@@ -237,9 +350,7 @@ async def list_codec_executions_endpoint(
 ) -> CanSignalCodecPage:
     vehicle = await require_vehicle(session, vehicle_id)
     network = await require_can_network(session, vehicle=vehicle)
-    items, total = await list_codec_executions(
-        session, network=network, limit=limit, offset=offset
-    )
+    items, total = await list_codec_executions(session, network=network, limit=limit, offset=offset)
     return CanSignalCodecPage(
         items=[codec_response(item, network, vehicle) for item in items],
         total=total,

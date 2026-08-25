@@ -25,6 +25,24 @@ class CanNodeRole(StrEnum):
     MONITOR = "monitor"
 
 
+class CanNodeErrorMode(StrEnum):
+    ERROR_ACTIVE = "error_active"
+    ERROR_PASSIVE = "error_passive"
+    BUS_OFF = "bus_off"
+
+
+class CanFaultType(StrEnum):
+    TRANSMISSION_ERROR = "transmission_error"
+    RECEPTION_ERROR = "reception_error"
+    FRAME_LOSS = "frame_loss"
+
+
+class CanNodeErrorState(BaseModel):
+    transmit_error_count: int = Field(ge=0, le=256)
+    receive_error_count: int = Field(ge=0, le=255)
+    state: CanNodeErrorMode
+
+
 class CanNode(BaseModel):
     model_config = ConfigDict(extra="forbid")
     ecu_id: UUID
@@ -126,6 +144,7 @@ class CanNetworkResponse(BaseModel):
     data_bitrate_kbps: int | None
     nodes: list[CanNode]
     frame_contracts: list[CanFrameContract]
+    error_states: dict[str, CanNodeErrorState]
     version: int
     simulation_time_us: int
     next_sequence: int
@@ -154,6 +173,45 @@ class CanFrameTransmissionResponse(BaseModel):
 
 class CanFrameTransmissionPage(BaseModel):
     items: list[CanFrameTransmissionResponse]
+    total: int
+    limit: int
+    offset: int
+
+
+class CanFaultInjectionCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    command_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]+$")
+    expected_version: int = Field(ge=1)
+    contract_id: str = Field(min_length=2, max_length=80, pattern=r"^[a-z][a-z0-9_-]+$")
+    target_node_id: UUID
+    fault_type: CanFaultType
+    occurrences: int = Field(default=1, ge=1, le=32)
+    advance_time_us: int = Field(default=0, ge=0, le=10_000_000)
+
+
+class CanBusRecoveryCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    command_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]+$")
+    expected_version: int = Field(ge=1)
+    target_node_id: UUID
+    recessive_sequences: int = Field(default=128, ge=128, le=1024)
+
+
+class CanFaultExecutionResponse(BaseModel):
+    command_id: str
+    vehicle_id: str
+    network_id: str
+    operation: str
+    target_node_id: UUID
+    result: dict[str, object]
+    previous_version: int
+    network_version: int
+    duplicate: bool
+    created_at: datetime
+
+
+class CanFaultExecutionPage(BaseModel):
+    items: list[CanFaultExecutionResponse]
     total: int
     limit: int
     offset: int

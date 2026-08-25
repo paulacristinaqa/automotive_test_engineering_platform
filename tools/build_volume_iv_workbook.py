@@ -6,9 +6,9 @@ SOURCE = workbook.ROOT / "docs" / "workbook-volume-iv.md"
 OUTPUT = workbook.ROOT / "docs" / "ATEP_Volume_IV_CAN_Network_Engineering_Workbook.docx"
 VOLUME_NUMBER = "IV"
 VOLUME_NAME = "CAN Network"
-DOCUMENT_VERSION = "0.4.0"
-DOCUMENT_STATUS = "Implemented increments: IV-1 to IV-4"
-BASELINE_DATE = "24 August 2026"
+DOCUMENT_VERSION = "0.5.0"
+DOCUMENT_STATUS = "Implemented increments: IV-1 to IV-5"
+BASELINE_DATE = "25 August 2026"
 
 
 def build() -> Path:

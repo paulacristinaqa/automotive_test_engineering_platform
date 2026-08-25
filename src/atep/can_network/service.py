@@ -5,6 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atep.audit.service import record_audit
+from atep.can_network.error_state import is_bus_off
 from atep.can_network.models import CanFrameTransmission, CanNetwork
 from atep.can_network.schemas import CanFrameContract, CanFrameSubmitCommand, CanNetworkCreate
 from atep.core.errors import (
@@ -12,6 +13,7 @@ from atep.core.errors import (
     CanNetworkAlreadyExistsError,
     CanNetworkContractError,
     CanNetworkVersionConflictError,
+    CanNodeBusOffError,
     ResourceNotFoundError,
 )
 from atep.ecus.models import ElectronicControlUnit
@@ -47,6 +49,7 @@ async def create_can_network(
         data_bitrate_kbps=command.data_bitrate_kbps,
         nodes=[item.model_dump(mode="json") for item in command.nodes],
         frame_contracts=[item.model_dump(mode="json") for item in command.frame_contracts],
+        error_states={},
         version=1,
         simulation_time_us=0,
         next_sequence=1,
@@ -132,6 +135,8 @@ async def submit_can_frame(
     contract = _contract(network, command.contract_id)
     if command.producer_node_id != contract.producer_node_id:
         raise CanNetworkContractError(reason="only the declared producer may submit this frame")
+    if is_bus_off(network, command.producer_node_id):
+        raise CanNodeBusOffError()
     if len(command.payload) != contract.dlc:
         raise CanNetworkContractError(reason="payload length must equal the frame contract DLC")
     previous_version = network.version

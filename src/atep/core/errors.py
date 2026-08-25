@@ -218,6 +218,34 @@ class CanArbitrationCommandConflictError(ApplicationError):
         )
 
 
+class CanFaultCommandConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="can_fault_command_conflict",
+            message="The CAN fault command identifier was already used differently.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class CanNodeBusOffError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="can_node_bus_off",
+            message="The CAN node cannot transmit while it is bus-off.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class CanFaultStateError(ApplicationError):
+    def __init__(self, *, reason: str) -> None:
+        super().__init__(
+            code="can_fault_state_invalid",
+            message="The CAN fault operation is invalid for the current state.",
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            details={"reason": reason},
+        )
+
+
 class CanDbcCatalogueAlreadyExistsError(ApplicationError):
     def __init__(self) -> None:
         super().__init__(

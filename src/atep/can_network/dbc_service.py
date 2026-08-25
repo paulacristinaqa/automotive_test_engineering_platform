@@ -87,9 +87,7 @@ def _write_raw(payload: bytearray, signal: CanDbcSignal, raw: int) -> None:
     positions = dbc_bit_positions(signal)
     for index, position in enumerate(positions):
         raw_index = (
-            index
-            if signal.byte_order is CanDbcByteOrder.INTEL
-            else signal.bit_length - 1 - index
+            index if signal.byte_order is CanDbcByteOrder.INTEL else signal.bit_length - 1 - index
         )
         if encoded & (1 << raw_index):
             payload[position // 8] |= 1 << (position % 8)
@@ -99,9 +97,7 @@ def _read_raw(payload: list[int], signal: CanDbcSignal) -> int:
     encoded = 0
     for index, position in enumerate(dbc_bit_positions(signal)):
         raw_index = (
-            index
-            if signal.byte_order is CanDbcByteOrder.INTEL
-            else signal.bit_length - 1 - index
+            index if signal.byte_order is CanDbcByteOrder.INTEL else signal.bit_length - 1 - index
         )
         if payload[position // 8] & (1 << (position % 8)):
             encoded |= 1 << raw_index
@@ -203,9 +199,7 @@ async def create_dbc_catalogue(
     return catalogue, network
 
 
-async def require_dbc_catalogue(
-    session: AsyncSession, *, network: CanNetwork
-) -> CanDbcCatalogue:
+async def require_dbc_catalogue(session: AsyncSession, *, network: CanNetwork) -> CanDbcCatalogue:
     catalogue = await session.scalar(
         select(CanDbcCatalogue).where(CanDbcCatalogue.network_id == network.id)
     )
@@ -371,9 +365,7 @@ async def decode_signals(
 async def list_codec_executions(
     session: AsyncSession, *, network: CanNetwork, limit: int, offset: int
 ) -> tuple[list[CanSignalCodecExecution], int]:
-    query = select(CanSignalCodecExecution).where(
-        CanSignalCodecExecution.network_id == network.id
-    )
+    query = select(CanSignalCodecExecution).where(CanSignalCodecExecution.network_id == network.id)
     total = await session.scalar(select(func.count()).select_from(query.subquery()))
     result = await session.execute(
         query.order_by(CanSignalCodecExecution.created_at.desc()).limit(limit).offset(offset)

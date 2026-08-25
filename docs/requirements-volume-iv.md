@@ -44,6 +44,16 @@
 | CAN-F-038 | Classic and FD contenders shall share the same deterministic CAN identifier priority rules. | Implemented |
 | CAN-F-039 | DBC signals and codec payloads shall support contracted CAN FD payloads through 512 bits. | Implemented |
 | CAN-F-040 | CAN FD aggregate events shall report frame counts and timing metadata without payload bytes. | Implemented |
+| CAN-F-041 | Transmission faults shall increment TEC by eight per occurrence and reception faults shall increment REC by one. | Implemented |
+| CAN-F-042 | Nodes shall transition to error-passive at TEC or REC 128 and bus-off at TEC 256. | Implemented |
+| CAN-F-043 | A bus-off producer shall be excluded from direct submission and arbitration. | Implemented |
+| CAN-F-044 | Frame-loss injection shall preserve TEC and REC while recording deterministic loss evidence. | Implemented |
+| CAN-F-045 | Fault targets shall conform to the producer or consumer role declared by the frame contract. | Implemented |
+| CAN-F-046 | Bus-off recovery shall require at least 128 sequences of 11 recessive bits and reset TEC/REC. | Implemented |
+| CAN-F-047 | Fault and recovery commands shall support exact idempotent replay and stable changed-reuse conflicts. | Implemented |
+| CAN-F-048 | Fault executions shall be queryable by bounded history and command identifier. | Implemented |
+| CAN-F-049 | Fault and recovery operations shall produce atomic audit and outbox evidence. | Implemented |
+| CAN-F-050 | Network reads shall expose the current error state of affected nodes. | Implemented |
 
 ## Non-Functional Requirements
 
@@ -63,3 +73,6 @@
 | CAN-NF-012 | Existing classic CAN contracts and timing results shall remain backward compatible. | Implemented |
 | CAN-NF-013 | CAN FD timing shall be deterministic and independent of host performance. | Implemented |
 | CAN-NF-014 | CAN FD persistence changes shall be reversible through Alembic. | Implemented |
+| CAN-NF-015 | Fault timing and counter transitions shall be independent of host CPU, GPU, and wall clock. | Implemented |
+| CAN-NF-016 | Fault audit and outbox records shall exclude CAN payload bytes and full request bodies. | Implemented |
+| CAN-NF-017 | Error-state and execution persistence shall be reversible through Alembic. | Implemented |
