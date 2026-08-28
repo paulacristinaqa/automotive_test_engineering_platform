@@ -53,6 +53,33 @@ class DiagnosticCommand(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
 
+class DiagnosticSecurityState(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "diagnostic_security_states"
+    __table_args__ = (
+        UniqueConstraint("ecu_id", name="uq_diagnostic_security_ecu"),
+        CheckConstraint("challenge_counter >= 0", name="ck_diagnostic_security_counter"),
+        CheckConstraint(
+            "failed_attempts >= 0 AND failed_attempts <= 3",
+            name="ck_diagnostic_security_attempts",
+        ),
+        CheckConstraint("target_level IN (0, 1)", name="ck_diagnostic_security_target_level"),
+        CheckConstraint("version >= 1", name="ck_diagnostic_security_version"),
+    )
+
+    ecu_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("electronic_control_units.id", ondelete="CASCADE"),
+        index=True,
+    )
+    challenge_counter: Mapped[int] = mapped_column(Integer, default=0)
+    expected_key_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    seed_expires_at_ms: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    failed_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    locked_until_ms: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    target_level: Mapped[int] = mapped_column(Integer, default=0)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+
 class DiagnosticDataIdentifier(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "diagnostic_data_identifiers"
     __table_args__ = (

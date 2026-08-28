@@ -1,3 +1,4 @@
+import hashlib
 from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import uuid4
@@ -13,6 +14,7 @@ from atep.diagnostics.models import (
     DiagnosticDataIdentifier,
     DiagnosticRoutine,
     DiagnosticRoutineState,
+    DiagnosticSecurityState,
     DiagnosticSessionState,
     DiagnosticTroubleCode,
 )
@@ -25,6 +27,7 @@ from atep.diagnostics.schemas import (
     DtcReportCommand,
     RoutineControlCommand,
     RoutineCreate,
+    SecurityAccessCommand,
     UdsNegativeResponseCode,
 )
 from atep.diagnostics.service import (
@@ -32,8 +35,10 @@ from atep.diagnostics.service import (
     control_session,
     create_did,
     create_routine,
+    derive_simulated_security_key,
     read_dids,
     report_dtc,
+    security_access,
     write_did,
 )
 from atep.ecus.models import ElectronicControlUnit
@@ -160,6 +165,270 @@ def battery_balance_routine(
         version=1,
     )
     return routine, state
+
+
+def security_state(ecu: ElectronicControlUnit, *, version: int = 1) -> DiagnosticSecurityState:
+    return DiagnosticSecurityState(
+        id=uuid4(),
+        ecu_id=ecu.id,
+        challenge_counter=0,
+        expected_key_digest=None,
+        seed_expires_at_ms=None,
+        failed_attempts=0,
+        locked_until_ms=None,
+        target_level=0,
+        version=version,
+    )
+
+
+def test_security_access_contract_masks_and_requires_key_by_subfunction() -> None:
+    command = SecurityAccessCommand(
+        command_id="security-key-masked",
+        access_type=2,
+        expected_session_version=1,
+        expected_security_version=1,
+        key="0011223344556677",
+    )
+    assert "0011223344556677" not in repr(command)
+    with pytest.raises(ValidationError, match="sendKey requires a key"):
+        SecurityAccessCommand(
+            command_id="security-missing-key",
+            access_type=2,
+            expected_session_version=1,
+            expected_security_version=1,
+        )
+    with pytest.raises(ValidationError, match="requestSeed must not contain a key"):
+        SecurityAccessCommand(
+            command_id="security-seed-with-key",
+            access_type=1,
+            expected_session_version=1,
+            expected_security_version=1,
+            key="0011223344556677",
+        )
+    with pytest.raises(ValidationError, match="16 hexadecimal") as error:
+        SecurityAccessCommand(
+            command_id="security-nonhex-key",
+            access_type=2,
+            expected_session_version=1,
+            expected_security_version=1,
+            key="NOT-A-VALID-KEY!",
+        )
+    assert "NOT-A-VALID-KEY!" not in str(error.value)
+
+
+@pytest.mark.asyncio
+async def test_security_seed_is_deterministic_replayable_and_not_shared() -> None:
+    vehicle, ecu = vehicle_and_ecu()
+    diagnostic_state = DiagnosticSessionState(
+        id=uuid4(), ecu_id=ecu.id, session_type="extended", version=3, simulation_time_ms=2_500
+    )
+    access_state = security_state(ecu)
+    command = SecurityAccessCommand(
+        command_id="security-seed-001",
+        access_type=1,
+        expected_session_version=3,
+        expected_security_version=1,
+    )
+    session = FakeSession(None, diagnostic_state, access_state)
+    execution, duplicate = await security_access(
+        cast(AsyncSession, session),
+        vehicle=vehicle,
+        ecu=ecu,
+        command=command,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert duplicate is False
+    assert execution.service_id == 0x27
+    assert execution.result["seed"]
+    assert execution.result["seed_expires_at_ms"] == 32_500
+    assert access_state.expected_key_digest is not None
+    assert access_state.version == 2
+    event = next(item for item in session.added if isinstance(item, OutboxEvent))
+    audit = next(item for item in session.added if isinstance(item, AuditRecord))
+    for forbidden in ("seed", "key", "key_sha256", "expected_key_digest"):
+        assert forbidden not in event.payload
+        assert forbidden not in audit.details
+
+    returned, duplicate = await security_access(
+        cast(AsyncSession, FakeSession(execution)),
+        vehicle=vehicle,
+        ecu=ecu,
+        command=command,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert returned is execution
+    assert duplicate is True
+    assert access_state.version == 2
+
+
+@pytest.mark.asyncio
+async def test_security_valid_key_unlocks_level_one_without_storing_raw_key() -> None:
+    vehicle, ecu = vehicle_and_ecu()
+    diagnostic_state = DiagnosticSessionState(
+        id=uuid4(), ecu_id=ecu.id, session_type="extended", version=3, simulation_time_ms=2_500
+    )
+    access_state = security_state(ecu, version=2)
+    seed = "0123456789ABCDEF"
+    key = derive_simulated_security_key(seed)
+    access_state.challenge_counter = 1
+    access_state.expected_key_digest = hashlib.sha256(key.encode()).hexdigest()
+    access_state.seed_expires_at_ms = 32_500
+    access_state.target_level = 1
+    command = SecurityAccessCommand(
+        command_id="security-key-001",
+        access_type=2,
+        expected_session_version=3,
+        expected_security_version=2,
+        key=key,
+    )
+    session = FakeSession(None, diagnostic_state, access_state)
+    execution, duplicate = await security_access(
+        cast(AsyncSession, session),
+        vehicle=vehicle,
+        ecu=ecu,
+        command=command,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert duplicate is False
+    assert execution.result["security_level"] == 1
+    assert diagnostic_state.security_level == 1
+    assert diagnostic_state.version == 4
+    assert access_state.expected_key_digest is None
+    assert key not in str(execution.request)
+    assert key not in str(execution.result)
+
+
+@pytest.mark.asyncio
+async def test_security_invalid_keys_are_idempotent_and_lock_after_three_attempts() -> None:
+    vehicle, ecu = vehicle_and_ecu()
+    diagnostic_state = DiagnosticSessionState(
+        id=uuid4(), ecu_id=ecu.id, session_type="extended", version=3, simulation_time_ms=2_500
+    )
+    access_state = security_state(ecu, version=2)
+    access_state.expected_key_digest = "0" * 64
+    access_state.seed_expires_at_ms = 32_500
+    access_state.target_level = 1
+    last_execution: DiagnosticCommand | None = None
+    for attempt in range(1, 4):
+        command = SecurityAccessCommand(
+            command_id=f"security-invalid-{attempt}",
+            access_type=2,
+            expected_session_version=3,
+            expected_security_version=attempt + 1,
+            key="FFFFFFFFFFFFFFFF",
+        )
+        session = FakeSession(None, diagnostic_state, access_state)
+        with pytest.raises(DiagnosticContractError) as error:
+            await security_access(
+                cast(AsyncSession, session),
+                vehicle=vehicle,
+                ecu=ecu,
+                command=command,
+                actor_user_id=uuid4(),
+                correlation_id=None,
+            )
+        assert error.value.details is not None
+        expected_nrc = 0x36 if attempt == 3 else 0x35
+        assert error.value.details["negative_response_code"] == expected_nrc
+        assert error.value.details["failed_attempts"] == attempt
+        last_execution = next(item for item in session.added if isinstance(item, DiagnosticCommand))
+        assert "FFFFFFFFFFFFFFFF" not in str(last_execution.request)
+    assert access_state.locked_until_ms == 12_500
+    assert last_execution is not None
+
+    repeated = SecurityAccessCommand(
+        command_id="security-invalid-3",
+        access_type=2,
+        expected_session_version=3,
+        expected_security_version=4,
+        key="FFFFFFFFFFFFFFFF",
+    )
+    with pytest.raises(DiagnosticContractError) as repeated_error:
+        await security_access(
+            cast(AsyncSession, FakeSession(last_execution)),
+            vehicle=vehicle,
+            ecu=ecu,
+            command=repeated,
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+    assert repeated_error.value.details is not None
+    assert repeated_error.value.details["failed_attempts"] == 3
+    assert access_state.version == 5
+
+
+@pytest.mark.asyncio
+async def test_security_access_enforces_session_sequence_and_logical_lockout() -> None:
+    vehicle, ecu = vehicle_and_ecu()
+    diagnostic_state = DiagnosticSessionState(
+        id=uuid4(), ecu_id=ecu.id, session_type="default", version=1, simulation_time_ms=2_500
+    )
+    access_state = security_state(ecu)
+    seed_command = SecurityAccessCommand(
+        command_id="security-default-denied",
+        access_type=1,
+        expected_session_version=1,
+        expected_security_version=1,
+    )
+    with pytest.raises(DiagnosticContractError) as error:
+        await security_access(
+            cast(AsyncSession, FakeSession(None, diagnostic_state, access_state)),
+            vehicle=vehicle,
+            ecu=ecu,
+            command=seed_command,
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+    assert error.value.details is not None
+    assert error.value.details["negative_response_code"] == 0x7F
+
+    diagnostic_state.session_type = "extended"
+    send_without_seed = SecurityAccessCommand(
+        command_id="security-sequence-denied",
+        access_type=2,
+        expected_session_version=1,
+        expected_security_version=1,
+        key="0011223344556677",
+    )
+    with pytest.raises(DiagnosticContractError) as error:
+        await security_access(
+            cast(AsyncSession, FakeSession(None, diagnostic_state, access_state)),
+            vehicle=vehicle,
+            ecu=ecu,
+            command=send_without_seed,
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+    assert error.value.details is not None
+    assert error.value.details["negative_response_code"] == 0x24
+
+    access_state.locked_until_ms = 10_000
+    with pytest.raises(DiagnosticContractError) as error:
+        await security_access(
+            cast(AsyncSession, FakeSession(None, diagnostic_state, access_state)),
+            vehicle=vehicle,
+            ecu=ecu,
+            command=seed_command,
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+    assert error.value.details is not None
+    assert error.value.details["negative_response_code"] == 0x37
+
+    ecu.simulation_time_ms = 10_000
+    execution, _ = await security_access(
+        cast(AsyncSession, FakeSession(None, diagnostic_state, access_state)),
+        vehicle=vehicle,
+        ecu=ecu,
+        command=seed_command,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert execution.result["accepted"] is True
+    assert access_state.failed_attempts == 0
 
 
 def test_routine_contracts_are_bounded_and_operation_specific() -> None:
@@ -619,10 +888,21 @@ async def test_session_control_is_versioned_idempotent_audited_and_evented() -> 
         version=1,
         simulation_time_ms=0,
     )
+    security_state = DiagnosticSecurityState(
+        id=uuid4(),
+        ecu_id=ecu.id,
+        challenge_counter=4,
+        expected_key_digest="a" * 64,
+        seed_expires_at_ms=30_000,
+        failed_attempts=2,
+        locked_until_ms=10_000,
+        target_level=1,
+        version=7,
+    )
     command = DiagnosticSessionControlCommand(
         command_id="uds-session-001", expected_version=1, session_type="extended"
     )
-    session = FakeSession(None, state)
+    session = FakeSession(None, state, security_state)
     execution, duplicate = await control_session(
         cast(AsyncSession, session),
         vehicle=vehicle,
@@ -636,6 +916,13 @@ async def test_session_control_is_versioned_idempotent_audited_and_evented() -> 
     assert execution.result["session_type"] == "extended"
     assert state.version == 2
     assert state.simulation_time_ms == 2_500
+    assert security_state.expected_key_digest is None
+    assert security_state.seed_expires_at_ms is None
+    assert security_state.failed_attempts == 0
+    assert security_state.locked_until_ms is None
+    assert security_state.target_level == 0
+    assert security_state.version == 8
+    assert execution.result["security_version"] == 8
     events = [item for item in session.added if isinstance(item, OutboxEvent)]
     audits = [item for item in session.added if isinstance(item, AuditRecord)]
     assert [item.event_type for item in events] == ["atep.diagnostics.session.changed.v1"]

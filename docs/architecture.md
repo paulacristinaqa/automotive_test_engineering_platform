@@ -415,6 +415,13 @@ optimistic-versioned. Completion derives exclusively from ECU simulation time. R
 and results remain in protected state/command evidence for truthful replay and are excluded from
 shared audit and outbox payloads.
 
+V-4 adds Security Access (`0x27`) as a separate one-to-one ECU security state while the current
+unlocked level remains visible on the diagnostic session. Seed expiry, invalid-attempt counting,
+and lockout use ECU logical time. Successful and denied commands are idempotent evidence; invalid
+attempts commit before the stable negative response. Raw keys are masked and never persisted, and
+shared audit/outbox evidence excludes seeds, keys, and key digests. The deterministic derivation is
+explicitly a test simulator boundary rather than production cryptography.
+
 Each ECU owns one current, optimistic-versioned diagnostic session. Mutating commands have
 ECU-scoped idempotency identities. Exact retry returns stored evidence; changed reuse is rejected.
 DTCs use ECU simulation time, retain bounded snapshots in protected persistence, and exclude those

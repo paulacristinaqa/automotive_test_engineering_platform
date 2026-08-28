@@ -9,6 +9,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:$PATH"
 
+RUN apk upgrade --no-cache
 RUN python -m venv /opt/venv
 WORKDIR /app
 

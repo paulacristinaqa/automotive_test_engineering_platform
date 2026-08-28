@@ -21,7 +21,11 @@
 | DG-F-015 | UDS `0x31` shall support startRoutine, stopRoutine, and requestRoutineResults with active-session authorization. | Implemented in V-3 |
 | DG-F-016 | Routine completion shall be deterministic from ECU logical time and return the configured bounded result. | Implemented in V-3 |
 | DG-F-017 | Routine control shall reject stale versions and provide exact replay for repeated command identities. | Implemented in V-3 |
-| DG-F-018 | Security Access, ECU reset, and flashing shall be implemented incrementally. | Planned |
+| DG-F-018 | UDS `0x27` shall support level-1 requestSeed and sendKey in programming and extended sessions. | Implemented in V-4 |
+| DG-F-019 | A seed shall expire after 30,000 ECU logical milliseconds and an accepted key shall unlock diagnostic security level 1. | Implemented in V-4 |
+| DG-F-020 | Three invalid keys shall activate a 10,000 logical-millisecond delay and reject access until it expires. | Implemented in V-4 |
+| DG-F-021 | Positive and negative Security Access command identities shall replay exactly without repeating state changes or attempt increments. | Implemented in V-4 |
+| DG-F-022 | ECU reset and flashing shall be implemented incrementally. | Planned |
 
 ## Non-Functional Requirements
 
@@ -41,10 +45,14 @@
 | DG-NF-012 | Routine execution time shall be bounded from zero through 600,000 logical milliseconds. | Implemented in V-3 |
 | DG-NF-013 | Routine input parameters and result values shall not be copied into audit or outbox evidence. | Implemented in V-3 |
 | DG-NF-014 | Routine definitions, state transitions, command evidence, audit, and outbox writes shall be atomic. | Implemented in V-3 |
+| DG-NF-015 | Raw Security Access keys shall be accepted through a masked secret field and never stored, logged, audited, evented, or returned. | Implemented in V-4 |
+| DG-NF-016 | Seeds and key digests shall remain protected command/state evidence and shall never be copied into audit or outbox payloads. | Implemented in V-4 |
+| DG-NF-017 | Failed-attempt state, negative command evidence, audit, and outbox records shall commit atomically before the stable error response. | Implemented in V-4 |
+| DG-NF-018 | Security Access shall depend only on ECU logical time and local deterministic computation, without timers, GPU, cloud, or paid APIs. | Implemented in V-4 |
 
 ## Traceability
 
-V-1 through V-3 evidence is provided by `src/atep/diagnostics`, migrations
+V-1 through V-4 evidence is provided by `src/atep/diagnostics`, migrations
 `0031_diagnostics_foundation`, `0032_diagnostic_data_identifiers`, and
-`0033_diagnostic_routines`,
+`0033_diagnostic_routines`, `0034_diagnostic_security_access`,
 `tests/test_diagnostics.py`, API contract tests, and the separate Volume V engineering workbook.
