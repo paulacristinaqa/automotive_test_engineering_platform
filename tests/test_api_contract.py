@@ -410,6 +410,8 @@ def test_diagnostics_contracts_and_safe_pagination_are_published() -> None:
     assert "post" in paths[f"{root}/dids/read"]
     assert "get" in paths[f"{root}/dids/{{identifier}}"]
     assert "post" in paths[f"{root}/dids/{{identifier}}/write"]
+    assert "post" in paths[f"{root}/security-access"]
+    assert "get" in paths[f"{root}/security-access/state"]
     assert {"get", "post"} <= set(paths[f"{root}/routines"])
     assert "get" in paths[f"{root}/routines/{{identifier}}"]
     assert "post" in paths[f"{root}/routines/{{identifier}}/control"]
@@ -438,6 +440,9 @@ def test_diagnostics_contracts_and_safe_pagination_are_published() -> None:
     assert schemas["DidReadCommand"]["properties"]["identifiers"]["maxItems"] == 16
     assert schemas["RoutineCreate"]["properties"]["identifier"]["maximum"] == 65535
     assert schemas["RoutineCreate"]["properties"]["execution_time_ms"]["maximum"] == 600_000
+    security_schema = schemas["SecurityAccessCommand"]
+    assert security_schema["properties"]["expected_session_version"]["minimum"] == 1
+    assert security_schema["properties"]["expected_security_version"]["minimum"] == 1
     did_path_parameters = {
         item["name"]: item["schema"]
         for item in paths[f"{root}/dids/{{identifier}}"]["get"]["parameters"]

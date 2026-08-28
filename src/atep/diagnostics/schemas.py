@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from enum import IntEnum, StrEnum
 from typing import Annotated, Any
@@ -7,6 +8,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    SecretStr,
     StringConstraints,
     field_validator,
     model_validator,
@@ -26,12 +28,17 @@ class UdsServiceId(IntEnum):
     READ_DTC_INFORMATION = 0x19
     READ_DATA_BY_IDENTIFIER = 0x22
     WRITE_DATA_BY_IDENTIFIER = 0x2E
+    SECURITY_ACCESS = 0x27
     ROUTINE_CONTROL = 0x31
 
 
 class UdsNegativeResponseCode(IntEnum):
+    REQUEST_SEQUENCE_ERROR = 0x24
     CONDITIONS_NOT_CORRECT = 0x22
     REQUEST_OUT_OF_RANGE = 0x31
+    INVALID_KEY = 0x35
+    EXCEED_NUMBER_OF_ATTEMPTS = 0x36
+    REQUIRED_TIME_DELAY_NOT_EXPIRED = 0x37
     SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION = 0x7F
 
 
@@ -65,6 +72,51 @@ class RoutineStatus(StrEnum):
     RUNNING = "running"
     COMPLETED = "completed"
     STOPPED = "stopped"
+
+
+class SecurityAccessType(IntEnum):
+    REQUEST_SEED_LEVEL_1 = 0x01
+    SEND_KEY_LEVEL_1 = 0x02
+
+
+class SecurityAccessCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+
+    command_id: CommandId
+    access_type: SecurityAccessType
+    expected_session_version: int = Field(ge=1)
+    expected_security_version: int = Field(ge=1)
+    key: SecretStr | None = Field(default=None, min_length=16, max_length=16)
+
+    @field_validator("key")
+    @classmethod
+    def hexadecimal_key(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is None:
+            return None
+        raw = value.get_secret_value()
+        if re.fullmatch(r"[0-9A-Fa-f]{16}", raw) is None:
+            raise ValueError("key must contain exactly 16 hexadecimal characters")
+        return SecretStr(raw.upper())
+
+    @model_validator(mode="after")
+    def key_matches_operation(self) -> "SecurityAccessCommand":
+        if self.access_type == SecurityAccessType.REQUEST_SEED_LEVEL_1 and self.key is not None:
+            raise ValueError("requestSeed must not contain a key")
+        if self.access_type == SecurityAccessType.SEND_KEY_LEVEL_1 and self.key is None:
+            raise ValueError("sendKey requires a key")
+        return self
+
+
+class SecurityAccessStateResponse(BaseModel):
+    ecu_id: str
+    security_level: int
+    failed_attempts: int
+    locked_until_ms: int | None
+    challenge_active: bool
+    seed_expires_at_ms: int | None
+    security_version: int
+    session_version: int
+    simulation_time_ms: int
 
 
 class RoutineCreate(BaseModel):

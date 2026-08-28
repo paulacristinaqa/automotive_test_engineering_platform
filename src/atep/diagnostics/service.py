@@ -1,3 +1,6 @@
+import hashlib
+import secrets
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -14,6 +17,7 @@ from atep.diagnostics.models import (
     DiagnosticDataIdentifier,
     DiagnosticRoutine,
     DiagnosticRoutineState,
+    DiagnosticSecurityState,
     DiagnosticSessionState,
     DiagnosticTroubleCode,
 )
@@ -29,6 +33,8 @@ from atep.diagnostics.schemas import (
     RoutineControlCommand,
     RoutineControlType,
     RoutineCreate,
+    SecurityAccessCommand,
+    SecurityAccessType,
     UdsNegativeResponseCode,
     UdsServiceId,
 )
@@ -55,6 +61,201 @@ async def get_or_create_session(
         session.add(state)
         await session.flush()
     return state
+
+
+async def get_or_create_security_state(
+    session: AsyncSession, *, ecu: ElectronicControlUnit, lock: bool = False
+) -> DiagnosticSecurityState:
+    query = select(DiagnosticSecurityState).where(DiagnosticSecurityState.ecu_id == ecu.id)
+    if lock:
+        query = query.with_for_update()
+    state = await session.scalar(query)
+    if state is None:
+        state = DiagnosticSecurityState(
+            ecu_id=ecu.id,
+            challenge_counter=0,
+            expected_key_digest=None,
+            seed_expires_at_ms=None,
+            failed_attempts=0,
+            locked_until_ms=None,
+            target_level=0,
+            version=1,
+        )
+        session.add(state)
+        await session.flush()
+    return state
+
+
+def derive_simulated_security_key(seed: str, level: int = 1) -> str:
+    """Return the deterministic V-4 simulator key; this is not production cryptography."""
+    return hashlib.sha256(f"ATEP-V4:{level}:{seed}".encode()).hexdigest()[:16].upper()
+
+
+async def security_access(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    ecu: ElectronicControlUnit,
+    command: SecurityAccessCommand,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> tuple[DiagnosticCommand, bool]:
+    key_value = command.key.get_secret_value().upper() if command.key is not None else None
+    key_digest = hashlib.sha256(key_value.encode()).hexdigest() if key_value is not None else None
+    request = {
+        "command_id": command.command_id,
+        "access_type": int(command.access_type),
+        "expected_session_version": command.expected_session_version,
+        "expected_security_version": command.expected_security_version,
+        **({"key_sha256": key_digest} if key_digest is not None else {}),
+    }
+    existing = await _existing_command(session, ecu=ecu, command_id=command.command_id)
+    if existing is not None:
+        if existing.service_id != UdsServiceId.SECURITY_ACCESS or existing.request != request:
+            raise DiagnosticCommandConflictError()
+        if existing.result.get("accepted") is False:
+            raise _security_denial_from_result(existing.result)
+        return existing, True
+
+    diagnostic_session = await get_or_create_session(session, ecu=ecu, lock=True)
+    security_state = await get_or_create_security_state(session, ecu=ecu, lock=True)
+    if command.expected_session_version != diagnostic_session.version:
+        raise DiagnosticContractError(
+            reason=f"session version is {diagnostic_session.version}",
+            negative_response_code=UdsNegativeResponseCode.CONDITIONS_NOT_CORRECT,
+        )
+    if command.expected_security_version != security_state.version:
+        raise DiagnosticContractError(
+            reason=f"security version is {security_state.version}",
+            negative_response_code=UdsNegativeResponseCode.CONDITIONS_NOT_CORRECT,
+        )
+    if diagnostic_session.session_type == "default":
+        raise DiagnosticContractError(
+            reason="Security Access is not available in default session",
+            negative_response_code=UdsNegativeResponseCode.SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION,
+        )
+    now_ms = ecu.simulation_time_ms
+    if security_state.locked_until_ms is not None and now_ms < security_state.locked_until_ms:
+        raise DiagnosticContractError(
+            reason=f"security delay is active until logical time {security_state.locked_until_ms}",
+            negative_response_code=UdsNegativeResponseCode.REQUIRED_TIME_DELAY_NOT_EXPIRED,
+        )
+    if security_state.locked_until_ms is not None:
+        security_state.locked_until_ms = None
+        security_state.failed_attempts = 0
+
+    previous_version = diagnostic_session.version
+    if command.access_type == SecurityAccessType.REQUEST_SEED_LEVEL_1:
+        security_state.challenge_counter += 1
+        seed = hashlib.sha256(
+            f"{ecu.id}:{security_state.challenge_counter}:{now_ms}:{security_state.version}".encode()
+        ).hexdigest()[:16].upper()
+        expected_key = derive_simulated_security_key(seed)
+        security_state.expected_key_digest = hashlib.sha256(expected_key.encode()).hexdigest()
+        security_state.seed_expires_at_ms = now_ms + 30_000
+        security_state.target_level = 1
+        security_state.version += 1
+        result: dict[str, Any] = {
+            "accepted": True,
+            "access_type": int(command.access_type),
+            "seed": seed,
+            "seed_expires_at_ms": security_state.seed_expires_at_ms,
+            "security_level": diagnostic_session.security_level,
+            "security_version": security_state.version,
+        }
+    else:
+        if (
+            security_state.expected_key_digest is None
+            or security_state.target_level != 1
+            or security_state.seed_expires_at_ms is None
+            or now_ms > security_state.seed_expires_at_ms
+        ):
+            raise DiagnosticContractError(
+                reason="a valid level-1 seed must be requested before sendKey",
+                negative_response_code=UdsNegativeResponseCode.REQUEST_SEQUENCE_ERROR,
+            )
+        if key_digest is None or not secrets.compare_digest(
+            key_digest, security_state.expected_key_digest
+        ):
+            security_state.failed_attempts += 1
+            security_state.version += 1
+            locked = security_state.failed_attempts >= 3
+            if locked:
+                security_state.locked_until_ms = now_ms + 10_000
+                security_state.expected_key_digest = None
+                security_state.seed_expires_at_ms = None
+                security_state.target_level = 0
+            negative_code = (
+                UdsNegativeResponseCode.EXCEED_NUMBER_OF_ATTEMPTS
+                if locked
+                else UdsNegativeResponseCode.INVALID_KEY
+            )
+            result = {
+                "accepted": False,
+                "access_type": int(command.access_type),
+                "failed_attempts": security_state.failed_attempts,
+                "locked_until_ms": security_state.locked_until_ms,
+                "security_level": diagnostic_session.security_level,
+                "security_version": security_state.version,
+                "negative_response_code": int(negative_code),
+            }
+            execution = _new_security_execution(
+                ecu=ecu,
+                command=command,
+                request=request,
+                result=result,
+                previous_version=previous_version,
+                session_version=diagnostic_session.version,
+                actor_user_id=actor_user_id,
+            )
+            session.add(execution)
+            await session.flush()
+            _record_security_evidence(
+                session,
+                vehicle=vehicle,
+                ecu=ecu,
+                execution=execution,
+                security_state=security_state,
+                actor_user_id=actor_user_id,
+                correlation_id=correlation_id,
+            )
+            raise _security_denial_from_result(result)
+        diagnostic_session.security_level = 1
+        diagnostic_session.simulation_time_ms = now_ms
+        diagnostic_session.version += 1
+        security_state.failed_attempts = 0
+        security_state.expected_key_digest = None
+        security_state.seed_expires_at_ms = None
+        security_state.target_level = 0
+        security_state.version += 1
+        result = {
+            "accepted": True,
+            "access_type": int(command.access_type),
+            "security_level": diagnostic_session.security_level,
+            "security_version": security_state.version,
+        }
+
+    execution = _new_security_execution(
+        ecu=ecu,
+        command=command,
+        request=request,
+        result=result,
+        previous_version=previous_version,
+        session_version=diagnostic_session.version,
+        actor_user_id=actor_user_id,
+    )
+    session.add(execution)
+    await session.flush()
+    _record_security_evidence(
+        session,
+        vehicle=vehicle,
+        ecu=ecu,
+        execution=execution,
+        security_state=security_state,
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id,
+    )
+    return execution, False
 
 
 async def create_routine(
@@ -571,6 +772,7 @@ async def control_session(
             return existing, True
         raise DiagnosticCommandConflictError()
     state = await get_or_create_session(session, ecu=ecu, lock=True)
+    security_state = await get_or_create_security_state(session, ecu=ecu, lock=True)
     if command.expected_version != state.version:
         raise DiagnosticContractError(
             reason=f"session version is {state.version}",
@@ -581,10 +783,17 @@ async def control_session(
     state.security_level = 0
     state.simulation_time_ms = ecu.simulation_time_ms
     state.version += 1
+    security_state.expected_key_digest = None
+    security_state.seed_expires_at_ms = None
+    security_state.failed_attempts = 0
+    security_state.locked_until_ms = None
+    security_state.target_level = 0
+    security_state.version += 1
     result = {
         "session_type": state.session_type,
         "security_level": state.security_level,
         "simulation_time_ms": state.simulation_time_ms,
+        "security_version": security_state.version,
     }
     execution = DiagnosticCommand(
         ecu_id=ecu.id,
@@ -953,6 +1162,91 @@ def _record_routine_evidence(
         action="diagnostics.routine_controlled",
         resource_type="diagnostic_routine",
         resource_id=routine.id,
+        correlation_id=correlation_id,
+        details=evidence,
+    )
+
+
+def _new_security_execution(
+    *,
+    ecu: ElectronicControlUnit,
+    command: SecurityAccessCommand,
+    request: dict[str, Any],
+    result: dict[str, Any],
+    previous_version: int,
+    session_version: int,
+    actor_user_id: UUID,
+) -> DiagnosticCommand:
+    return DiagnosticCommand(
+        ecu_id=ecu.id,
+        command_id=command.command_id,
+        service_id=UdsServiceId.SECURITY_ACCESS,
+        request=request,
+        result=result,
+        previous_version=previous_version,
+        session_version=session_version,
+        requested_by_user_id=actor_user_id,
+    )
+
+
+def _security_denial_from_result(result: dict[str, Any]) -> DiagnosticContractError:
+    negative_code = int(result["negative_response_code"])
+    reason = (
+        "security access attempt limit exceeded"
+        if negative_code == UdsNegativeResponseCode.EXCEED_NUMBER_OF_ATTEMPTS
+        else "security access key is invalid"
+    )
+    error = DiagnosticContractError(
+        reason=reason,
+        negative_response_code=negative_code,
+    )
+    assert error.details is not None
+    error.details.update(
+        failed_attempts=int(result["failed_attempts"]),
+        locked_until_ms=result.get("locked_until_ms"),
+        security_version=int(result["security_version"]),
+    )
+    return error
+
+
+def _record_security_evidence(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    ecu: ElectronicControlUnit,
+    execution: DiagnosticCommand,
+    security_state: DiagnosticSecurityState,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> None:
+    evidence = {
+        **_base_evidence(vehicle, ecu),
+        "command_id": execution.command_id,
+        "service_id": execution.service_id,
+        "positive_response_service_id": execution.service_id + 0x40,
+        "access_type": execution.result["access_type"],
+        "accepted": execution.result["accepted"],
+        "security_level": execution.result["security_level"],
+        "failed_attempts": security_state.failed_attempts,
+        "locked_until_ms": security_state.locked_until_ms,
+        "security_version": security_state.version,
+        "session_version": execution.session_version,
+        "simulation_time_ms": ecu.simulation_time_ms,
+    }
+    enqueue_event(
+        session,
+        event_type="atep.diagnostics.security.accessed.v1",
+        aggregate_type="diagnostic_security_state",
+        aggregate_id=security_state.id,
+        payload=evidence,
+        correlation_id=correlation_id,
+    )
+    record_audit(
+        session,
+        actor_user_id=actor_user_id,
+        action="diagnostics.security_accessed",
+        resource_type="diagnostic_security_state",
+        resource_id=security_state.id,
         correlation_id=correlation_id,
         details=evidence,
     )

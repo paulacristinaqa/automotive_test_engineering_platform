@@ -3,12 +3,15 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Path, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from atep.core.errors import DiagnosticContractError
 from atep.db.session import get_session
 from atep.diagnostics.models import (
     DiagnosticCommand,
     DiagnosticDataIdentifier,
     DiagnosticRoutine,
     DiagnosticRoutineState,
+    DiagnosticSecurityState,
+    DiagnosticSessionState,
     DiagnosticTroubleCode,
 )
 from atep.diagnostics.schemas import (
@@ -28,6 +31,8 @@ from atep.diagnostics.schemas import (
     RoutineCreate,
     RoutinePage,
     RoutineResponse,
+    SecurityAccessCommand,
+    SecurityAccessStateResponse,
 )
 from atep.diagnostics.service import (
     clear_dtcs,
@@ -35,6 +40,7 @@ from atep.diagnostics.service import (
     control_session,
     create_did,
     create_routine,
+    get_or_create_security_state,
     get_or_create_session,
     list_dids,
     list_dtcs,
@@ -44,6 +50,7 @@ from atep.diagnostics.service import (
     require_did,
     require_dtc,
     require_routine,
+    security_access,
     write_did,
 )
 from atep.ecus.models import ElectronicControlUnit
@@ -150,6 +157,78 @@ def routine_response(
         created_at=routine.created_at,
         updated_at=state.updated_at,
     )
+
+
+def security_state_response(
+    security_state: DiagnosticSecurityState,
+    diagnostic_state: DiagnosticSessionState,
+    ecu: ElectronicControlUnit,
+) -> SecurityAccessStateResponse:
+    return SecurityAccessStateResponse(
+        ecu_id=ecu.identifier,
+        security_level=diagnostic_state.security_level,
+        failed_attempts=security_state.failed_attempts,
+        locked_until_ms=security_state.locked_until_ms,
+        challenge_active=(
+            security_state.expected_key_digest is not None
+            and security_state.seed_expires_at_ms is not None
+            and ecu.simulation_time_ms <= security_state.seed_expires_at_ms
+        ),
+        seed_expires_at_ms=security_state.seed_expires_at_ms,
+        security_version=security_state.version,
+        session_version=diagnostic_state.version,
+        simulation_time_ms=ecu.simulation_time_ms,
+    )
+
+
+@router.get("/security-access/state", response_model=SecurityAccessStateResponse)
+async def get_security_access_state_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(diagnostics_read)],
+) -> SecurityAccessStateResponse:
+    _vehicle, ecu = await _context(session, vehicle_id=vehicle_id, ecu_id=ecu_id)
+    diagnostic_state = await get_or_create_session(session, ecu=ecu)
+    security_state = await get_or_create_security_state(session, ecu=ecu)
+    await session.commit()
+    return security_state_response(security_state, diagnostic_state, ecu)
+
+
+@router.post(
+    "/security-access",
+    response_model=DiagnosticCommandResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def security_access_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    command: SecurityAccessCommand,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(diagnostics_manage)],
+) -> DiagnosticCommandResponse:
+    vehicle, ecu = await _context(session, vehicle_id=vehicle_id, ecu_id=ecu_id)
+    try:
+        execution, duplicate = await security_access(
+            session,
+            vehicle=vehicle,
+            ecu=ecu,
+            command=command,
+            actor_user_id=actor.id,
+            correlation_id=request_correlation_id(request),
+        )
+    except DiagnosticContractError:
+        # Invalid-key attempts are versioned evidence and must survive the negative response.
+        await session.commit()
+        raise
+    await session.commit()
+    await session.refresh(execution, attribute_names=["created_at"])
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+        response.headers["X-Idempotent-Replay"] = "true"
+    return command_response(execution, ecu, duplicate=duplicate)
 
 
 @router.post("/routines", response_model=RoutineResponse, status_code=status.HTTP_201_CREATED)
