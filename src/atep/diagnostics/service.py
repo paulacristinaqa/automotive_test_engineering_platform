@@ -10,6 +10,8 @@ from atep.audit.service import record_audit
 from atep.core.errors import (
     DiagnosticCommandConflictError,
     DiagnosticContractError,
+    EcuSimulationCommandConflictError,
+    EcuStateVersionConflictError,
     ResourceNotFoundError,
 )
 from atep.diagnostics.models import (
@@ -22,6 +24,7 @@ from atep.diagnostics.models import (
     DiagnosticTroubleCode,
 )
 from atep.diagnostics.schemas import (
+    DiagnosticEcuResetCommand,
     DiagnosticSessionControlCommand,
     DidCreate,
     DidDataType,
@@ -35,10 +38,13 @@ from atep.diagnostics.schemas import (
     RoutineCreate,
     SecurityAccessCommand,
     SecurityAccessType,
+    UdsEcuResetType,
     UdsNegativeResponseCode,
     UdsServiceId,
 )
 from atep.ecus.models import ElectronicControlUnit
+from atep.ecus.schemas import EcuResetCommand, EcuResetMode
+from atep.ecus.service import execute_ecu_reset
 from atep.events.outbox import enqueue_event
 from atep.vehicles.models import Vehicle
 
@@ -816,6 +822,121 @@ async def control_session(
         correlation_id=correlation_id,
         event_type="atep.diagnostics.session.changed.v1",
         action="diagnostics.session_changed",
+    )
+    return execution, False
+
+
+async def reset_ecu(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    ecu: ElectronicControlUnit,
+    command: DiagnosticEcuResetCommand,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> tuple[DiagnosticCommand, bool]:
+    request = command.model_dump(mode="json")
+    existing = await _existing_command(session, ecu=ecu, command_id=command.command_id)
+    if existing is not None:
+        if existing.service_id == UdsServiceId.ECU_RESET and existing.request == request:
+            return existing, True
+        raise DiagnosticCommandConflictError()
+
+    diagnostic_session = await get_or_create_session(session, ecu=ecu, lock=True)
+    security_state = await get_or_create_security_state(session, ecu=ecu, lock=True)
+    if command.expected_session_version != diagnostic_session.version:
+        raise DiagnosticContractError(
+            reason=f"session version is {diagnostic_session.version}",
+            negative_response_code=UdsNegativeResponseCode.CONDITIONS_NOT_CORRECT,
+        )
+    if command.expected_security_version != security_state.version:
+        raise DiagnosticContractError(
+            reason=f"security version is {security_state.version}",
+            negative_response_code=UdsNegativeResponseCode.CONDITIONS_NOT_CORRECT,
+        )
+    if diagnostic_session.session_type == "default":
+        raise DiagnosticContractError(
+            reason="ECU Reset is not available in default session",
+            negative_response_code=UdsNegativeResponseCode.SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION,
+        )
+    if (
+        command.reset_type
+        in {UdsEcuResetType.HARD_RESET, UdsEcuResetType.KEY_OFF_ON_RESET}
+        and diagnostic_session.security_level < 1
+    ):
+        raise DiagnosticContractError(
+            reason="hard and key-off/on resets require security level 1",
+            negative_response_code=UdsNegativeResponseCode.SECURITY_ACCESS_DENIED,
+        )
+
+    mode = {
+        UdsEcuResetType.HARD_RESET: EcuResetMode.HARD,
+        UdsEcuResetType.KEY_OFF_ON_RESET: EcuResetMode.POWER_CYCLE,
+        UdsEcuResetType.SOFT_RESET: EcuResetMode.SOFT,
+    }[command.reset_type]
+    try:
+        ecu_execution, _ = await execute_ecu_reset(
+            session,
+            vehicle=vehicle,
+            ecu=ecu,
+            command=EcuResetCommand(
+                command_id=command.command_id,
+                expected_version=command.expected_ecu_version,
+                mode=mode,
+            ),
+            actor_user_id=actor_user_id,
+            correlation_id=correlation_id,
+        )
+    except EcuStateVersionConflictError as exc:
+        raise DiagnosticContractError(
+            reason="ECU version does not match the reset request",
+            negative_response_code=UdsNegativeResponseCode.CONDITIONS_NOT_CORRECT,
+        ) from exc
+    except EcuSimulationCommandConflictError as exc:
+        raise DiagnosticCommandConflictError() from exc
+    previous_session_version = diagnostic_session.version
+    diagnostic_session.session_type = "default"
+    diagnostic_session.security_level = 0
+    diagnostic_session.simulation_time_ms = ecu_execution.simulation_time_ms
+    diagnostic_session.version += 1
+    security_state.expected_key_digest = None
+    security_state.seed_expires_at_ms = None
+    security_state.failed_attempts = 0
+    security_state.locked_until_ms = None
+    security_state.target_level = 0
+    security_state.version += 1
+    result = {
+        "reset_type": int(command.reset_type),
+        "mode": mode.value,
+        "reset_duration_ms": ecu_execution.result["reset_duration_ms"],
+        "boot_count": ecu_execution.result["boot_count"],
+        "ecu_version": ecu_execution.state_version,
+        "simulation_time_ms": ecu_execution.simulation_time_ms,
+        "session_type": diagnostic_session.session_type,
+        "security_level": diagnostic_session.security_level,
+        "security_version": security_state.version,
+    }
+    execution = DiagnosticCommand(
+        ecu_id=ecu.id,
+        command_id=command.command_id,
+        service_id=UdsServiceId.ECU_RESET,
+        request=request,
+        result=result,
+        previous_version=previous_session_version,
+        session_version=diagnostic_session.version,
+        requested_by_user_id=actor_user_id,
+    )
+    session.add(execution)
+    await session.flush()
+    _record_evidence(
+        session,
+        vehicle=vehicle,
+        ecu=ecu,
+        execution=execution,
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id,
+        event_type="atep.diagnostics.ecu.reset.v1",
+        action="diagnostics.ecu_reset",
     )
     return execution, False
 

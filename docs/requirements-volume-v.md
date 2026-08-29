@@ -25,7 +25,11 @@
 | DG-F-019 | A seed shall expire after 30,000 ECU logical milliseconds and an accepted key shall unlock diagnostic security level 1. | Implemented in V-4 |
 | DG-F-020 | Three invalid keys shall activate a 10,000 logical-millisecond delay and reject access until it expires. | Implemented in V-4 |
 | DG-F-021 | Positive and negative Security Access command identities shall replay exactly without repeating state changes or attempt increments. | Implemented in V-4 |
-| DG-F-022 | ECU reset and flashing shall be implemented incrementally. | Planned |
+| DG-F-022 | UDS `0x11` shall support hard reset, key-off/on reset, and soft reset through the existing ECU lifecycle. | Implemented in V-5 |
+| DG-F-023 | Every accepted diagnostic ECU reset shall restore the default session, security level zero, and an empty Security Access challenge/lockout state. | Implemented in V-5 |
+| DG-F-024 | Hard and key-off/on resets shall require security level 1; every reset type shall require a non-default diagnostic session. | Implemented in V-5 |
+| DG-F-025 | Diagnostic ECU reset commands shall provide exact replay and stable changed-reuse conflicts. | Implemented in V-5 |
+| DG-F-026 | ECU flashing shall be implemented incrementally. | Planned |
 
 ## Non-Functional Requirements
 
@@ -49,10 +53,14 @@
 | DG-NF-016 | Seeds and key digests shall remain protected command/state evidence and shall never be copied into audit or outbox payloads. | Implemented in V-4 |
 | DG-NF-017 | Failed-attempt state, negative command evidence, audit, and outbox records shall commit atomically before the stable error response. | Implemented in V-4 |
 | DG-NF-018 | Security Access shall depend only on ECU logical time and local deterministic computation, without timers, GPU, cloud, or paid APIs. | Implemented in V-4 |
+| DG-NF-019 | ECU lifecycle mutation, diagnostic state reset, command evidence, audit, and outbox writes shall commit atomically. | Implemented in V-5 |
+| DG-NF-020 | ECU Reset shall validate ECU, session, and security optimistic versions and expose UDS-aware stable errors. | Implemented in V-5 |
+| DG-NF-021 | Reset duration and post-reset diagnostic time shall derive only from the deterministic ECU simulation clock. | Implemented in V-5 |
 
 ## Traceability
 
-V-1 through V-4 evidence is provided by `src/atep/diagnostics`, migrations
+V-1 through V-5 evidence is provided by `src/atep/diagnostics`, migrations
 `0031_diagnostics_foundation`, `0032_diagnostic_data_identifiers`, and
-`0033_diagnostic_routines`, `0034_diagnostic_security_access`,
+`0033_diagnostic_routines`, `0034_diagnostic_security_access`, the existing Volume III ECU reset
+lifecycle,
 `tests/test_diagnostics.py`, API contract tests, and the separate Volume V engineering workbook.

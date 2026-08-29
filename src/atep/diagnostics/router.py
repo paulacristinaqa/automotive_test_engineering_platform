@@ -16,6 +16,7 @@ from atep.diagnostics.models import (
 )
 from atep.diagnostics.schemas import (
     DiagnosticCommandResponse,
+    DiagnosticEcuResetCommand,
     DiagnosticSessionControlCommand,
     DiagnosticSessionResponse,
     DidCreate,
@@ -50,6 +51,7 @@ from atep.diagnostics.service import (
     require_did,
     require_dtc,
     require_routine,
+    reset_ecu,
     security_access,
     write_did,
 )
@@ -484,6 +486,37 @@ async def control_session_endpoint(
     await session.refresh(execution, attribute_names=["created_at"])
     if duplicate:
         response.status_code = status.HTTP_200_OK
+    return command_response(execution, ecu, duplicate=duplicate)
+
+
+@router.post(
+    "/ecu-reset",
+    response_model=DiagnosticCommandResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def reset_ecu_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    command: DiagnosticEcuResetCommand,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(diagnostics_manage)],
+) -> DiagnosticCommandResponse:
+    vehicle, ecu = await _context(session, vehicle_id=vehicle_id, ecu_id=ecu_id)
+    execution, duplicate = await reset_ecu(
+        session,
+        vehicle=vehicle,
+        ecu=ecu,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(execution, attribute_names=["created_at"])
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+        response.headers["X-Idempotent-Replay"] = "true"
     return command_response(execution, ecu, duplicate=duplicate)
 
 

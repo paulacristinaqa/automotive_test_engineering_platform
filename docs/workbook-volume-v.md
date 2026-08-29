@@ -1,8 +1,8 @@
 # ATEP Volume V - Diagnostics Engineering Workbook
 
-**Document status:** Increments V-1 through V-4 implemented
+**Document status:** Increments V-1 through V-5 implemented
 **Language:** English  
-**Last updated:** 2026-08-28
+**Last updated:** 2026-08-29
 **Repository:** `paulacristinaqa/automotive_test_engineering_platform`
 
 ## 1. Document Purpose
@@ -15,7 +15,7 @@ evidence, verification strategy, risks, and study exercises for the Diagnostics 
 | Field | Value |
 |---|---|
 | Volume | V - Diagnostics |
-| Baseline | Increments V-1 through V-4 |
+| Baseline | Increments V-1 through V-5 |
 | Architecture style | ECU-scoped diagnostic aggregate and transactional domain service |
 | Primary runtime | Python 3.12, FastAPI, SQLAlchemy, PostgreSQL |
 | Quality gates | pytest, Ruff, strict mypy, Alembic, integration CI, DOCX render and accessibility audit |
@@ -28,6 +28,7 @@ evidence, verification strategy, risks, and study exercises for the Diagnostics 
 | 0.2.0 | 2026-08-25 | Added a typed DID catalogue, UDS `0x22`/`0x2E`, session authorization, value/version constraints, minimized evidence, migration, APIs, and tests. |
 | 0.3.0 | 2026-08-25 | Added a bounded routine catalogue, UDS Routine Control `0x31`, deterministic logical-time execution, start/stop/result subfunctions, versioned replay, minimized evidence, migration, APIs, and tests. |
 | 0.4.0 | 2026-08-28 | Added UDS Security Access `0x27`, deterministic level-1 seed/key exchange, logical-time expiry and lockout, idempotent negative evidence, secret minimization, migration, APIs, and tests. |
+| 0.5.0 | 2026-08-29 | Added UDS ECU Reset `0x11`, cross-volume ECU lifecycle orchestration, reset/session/security version checks, deterministic logical time, exact replay, RBAC, atomic audit/outbox evidence, API, and tests. |
 
 ## 4. Scope and Boundaries
 
@@ -53,11 +54,14 @@ evidence, verification strategy, risks, and study exercises for the Diagnostics 
 - Three-attempt lockout, seed expiry, and required delay based on ECU logical time.
 - Masked raw-key input, digest-only protected state, and seed/key-minimized shared evidence.
 - Exact replay for accepted and denied Security Access commands.
+- UDS ECU Reset hard, key-off/on, and soft subfunctions through the existing ECU lifecycle.
+- Atomic restoration of default session, security level zero, and empty challenge/lockout state.
+- Reset/session/security optimistic versions, session/security policy, and exact reset replay.
 
 ### 4.2 Deferred
 
 - ISO-TP segmentation, CAN transport binding, DoIP, and physical adapters.
-- ECU Reset and flash transfer services.
+- Flash transfer services.
 - OBD-II mode/PID compatibility and fleet-scale remote diagnostics.
 
 ## 5. Architecture
@@ -118,6 +122,7 @@ session change can reset authorization without rewriting challenge history.
 | POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/routines/{identifier}/control` | `diagnostics:manage` | Execute UDS `0x31` start, stop, or result request. |
 | GET | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/security-access/state` | `diagnostics:read` | Retrieve non-secret version, attempt, lockout, and challenge status. |
 | POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/security-access` | `diagnostics:manage` | Execute UDS `0x27` requestSeed or sendKey. |
+| POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/ecu-reset` | `diagnostics:manage` | Execute UDS `0x11` through the ECU lifecycle. |
 
 ## 8. UDS Semantics
 
@@ -175,6 +180,17 @@ invalid key returns NRC `0x35`. Successful access raises the session security le
 positive response identity `0x67`. The key derivation helper is intentionally a transparent,
 deterministic simulator fixture and must not be treated as production ECU cryptography.
 
+### 8.8 ECU Reset (`0x11`)
+
+V-5 supports hardReset (`0x01`), keyOffOnReset (`0x02`), and softReset (`0x03`). Every request
+requires programming or extended session; hard and key-off/on reset additionally require security
+level 1. The command checks ECU, session, and Security Access versions before invoking the existing
+Volume III ECU reset lifecycle. The lifecycle owns operational state, memory policy, fault
+preservation, boot count, ECU version, reset duration, and logical-time advancement. Within the same
+transaction, the diagnostic layer restores default session and security level zero, invalidates
+seed/attempt/lockout state, increments diagnostic versions, and records UDS evidence. The positive
+response identity is `0x51`. Exact retry replays stored results without a second reset.
+
 ## 9. Error and Consistency Contract
 
 | Condition | Stable code | HTTP | UDS evidence |
@@ -192,6 +208,9 @@ deterministic simulator fixture and must not be treated as production ECU crypto
 | Invalid Security Access key | `diagnostic_contract_invalid` | 422 | NRC `0x35` invalid key |
 | Third invalid key | `diagnostic_contract_invalid` | 422 | NRC `0x36` exceed number of attempts |
 | Access during logical lockout | `diagnostic_contract_invalid` | 422 | NRC `0x37` required time delay not expired |
+| Reset in default session | `diagnostic_contract_invalid` | 422 | NRC `0x7F` service not supported in active session |
+| Hard or key-off/on reset without level 1 | `diagnostic_contract_invalid` | 422 | NRC `0x33` security access denied |
+| Stale ECU, session, or security reset version | `diagnostic_contract_invalid` | 422 | NRC `0x22` conditions not correct |
 | Unknown ECU or DTC | Platform resource-not-found code | 404 | Adapter maps transport response later |
 | Invalid body or pagination | `request_validation_error` | 422 | Rejected at the public contract boundary |
 
@@ -264,6 +283,19 @@ services or secret provisioning. It is explicitly non-production. Raw keys are m
 persisted; seeds and digests stay in protected state/command storage and never enter shared audit
 or outbox evidence.
 
+### ADR-DG-013 - Orchestrate One ECU Reset Lifecycle Across Volumes
+
+UDS `0x11` calls the reset behavior already owned by Volume III rather than reimplementing memory,
+boot, fault, timing, or operational-state rules. One database transaction contains both ECU-native
+and diagnostic evidence, followed by the session/security reset. This keeps the simulated ECU and
+external tester view consistent and makes rollback reliable.
+
+### ADR-DG-014 - Apply Reset Authorization Before Lifecycle Mutation
+
+Default-session reset is rejected. Hard and key-off/on reset additionally require level-1 Security
+Access; soft reset requires only programming or extended session. ECU, diagnostic-session, and
+security-state versions are validated so a stale tester cannot reset newer aggregate state.
+
 ## 11. Verification Catalogue
 
 | Test | Objective | Level |
@@ -325,6 +357,14 @@ or outbox evidence.
 | Secret minimization | Prove raw key, seed, and key digest never enter audit or outbox evidence. | Service/security |
 | Safe state query | Expose versions, attempt count, lockout, and challenge presence without secret material. | API/OpenAPI |
 | Security atomicity | Commit failed attempt, command, audit, and outbox before returning the negative response. | Integration |
+| Reset command shape | Publish subfunctions `0x01`, `0x02`, and `0x03` plus three bounded expected versions. | Schema/OpenAPI |
+| Reset session policy | Reject every reset in default session with NRC `0x7F`. | Service/API |
+| Reset security policy | Reject hard and key-off/on reset below level 1 with NRC `0x33`. | Service/API |
+| Cross-volume reset | Prove UDS reset invokes ECU memory/boot/fault/time rules instead of duplicating them. | Service/integration |
+| Diagnostic restoration | Restore default session, security zero, and empty challenge/lockout state. | Service/integration |
+| Reset concurrency | Reject stale ECU, session, or security versions with NRC `0x22`. | Service/API |
+| Reset replay | Return stored `0x11` evidence without another boot, time advance, or version increment. | Service/integration |
+| Reset atomicity | Commit ECU mutation, both evidence streams, diagnostic state, audit, and outbox together. | Integration |
 
 ## 12. Implemented Evidence
 
@@ -340,10 +380,11 @@ or outbox evidence.
 - DID events are `atep.diagnostics.did.created.v1`, `atep.diagnostics.did.read.v1`, and `atep.diagnostics.did.written.v1`.
 - Routine events are `atep.diagnostics.routine.created.v1` and `atep.diagnostics.routine.controlled.v1`.
 - Security Access events use `atep.diagnostics.security.accessed.v1` without seed/key material.
+- UDS ECU Reset reuses `atep.ecu.reset.completed.v1` and adds `atep.diagnostics.ecu.reset.v1` in the same transaction.
 
 ## 13. Risks and Technical Debt
 
-- V-1 through V-4 expose semantic UDS operations but do not yet encode wire PDUs.
+- V-1 through V-5 expose semantic UDS operations but do not yet encode wire PDUs.
 - Status-mask meaning is retained as a byte; named bit helpers should be added with richer DTC queries.
 - DTC creation is a controlled simulator boundary; automatic fault-to-DTC mapping is future work.
 - The current clear operation loads at most 200 DTCs, matching the per-ECU V-1 storage bound.
@@ -351,12 +392,13 @@ or outbox evidence.
 - Exact replay stores DID values in protected command evidence; retention and field-level access controls should be revisited before production telemetry use.
 - Routine result templates are deterministic fixtures; future routines may require pluggable ECU behavior and explicit failure results.
 - V-4 key derivation is transparent and deterministic for simulation; production security requires OEM algorithms, protected key material, hardware-backed execution, and threat analysis.
+- V-5 returns a completed semantic reset response; transport adapters must later model response timing and ECU communication loss around physical reset execution.
 
 ## 14. Roadmap
 
-V-1 through V-4 are implemented. The recommended next development is V-5: ECU Reset (`0x11`)
-integrated with the ECU lifecycle, diagnostic-session/security reset, deterministic logical time,
-exact replay, RBAC, audit, outbox, and failure-safe evidence.
+V-1 through V-5 are implemented. The recommended next development is V-6: Request Download,
+Transfer Data, and Request Transfer Exit (`0x34`, `0x36`, and `0x37`) as a bounded, resumable flash
+pipeline with security/session policy, block sequencing, checksums, rollback, and exact replay.
 
 ## 15. Study Exercises
 
@@ -396,3 +438,9 @@ exact replay, RBAC, audit, outbox, and failure-safe evidence.
 34. Prove an exact invalid-key retry does not increment failed attempts twice.
 35. Advance ECU logical time to one millisecond before and exactly at lockout expiry.
 36. Explain why Security Access state and diagnostic-session security level use separate versions.
+37. Calculate the positive response identity for ECU Reset `0x11`.
+38. Compare hardReset, keyOffOnReset, and softReset authorization in the implemented policy.
+39. Trace one accepted reset across ECU version/time/boot mutation and diagnostic state restoration.
+40. Prove an exact reset replay cannot increment boot count or simulation time twice.
+41. Explain why Volume V orchestrates rather than duplicates the Volume III reset lifecycle.
+42. Design rollback evidence for a failure after ECU mutation but before diagnostic evidence commit.

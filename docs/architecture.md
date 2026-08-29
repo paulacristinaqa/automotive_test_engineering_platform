@@ -422,6 +422,13 @@ attempts commit before the stable negative response. Raw keys are masked and nev
 shared audit/outbox evidence excludes seeds, keys, and key digests. The deterministic derivation is
 explicitly a test simulator boundary rather than production cryptography.
 
+V-5 adds ECU Reset (`0x11`) as a cross-volume application service. It calls the existing Volume III
+reset lifecycle instead of duplicating memory, boot, fault, or operational-state rules. The ECU
+mutation and its native evidence share one transaction with the default-session transition,
+Security Access invalidation, UDS command evidence, diagnostic audit, and diagnostic outbox event.
+Hard and key-off/on reset require level-1 authorization; soft reset still requires a non-default
+session. ECU, session, and security versions make concurrent or stale requests explicit.
+
 Each ECU owns one current, optimistic-versioned diagnostic session. Mutating commands have
 ECU-scoped idempotency identities. Exact retry returns stored evidence; changed reuse is rejected.
 DTCs use ECU simulation time, retain bounded snapshots in protected persistence, and exclude those

@@ -4,7 +4,7 @@ Volume V owns diagnostic protocol semantics. Volume III continues to own ECU exe
 signals, and internal fault lifecycle; Volume V converts selected fault evidence into persisted
 Diagnostic Trouble Codes without making the two representations identical.
 
-## V-1 through V-4 Request Flow
+## V-1 through V-5 Request Flow
 
 Authenticated client -> FastAPI diagnostic route -> diagnostic RBAC -> vehicle and ECU lookup ->
 UDS domain service -> PostgreSQL diagnostic state/evidence + audit + transactional outbox -> stable
@@ -19,6 +19,7 @@ response or platform error envelope with a UDS negative response code.
 - `0x2E` Write Data by Identifier: session-authorized, versioned DID mutation.
 - `0x31` Routine Control: session-authorized start, stop, and result retrieval.
 - `0x27` Security Access: deterministic level-1 seed/key exchange with bounded lockout.
+- `0x11` ECU Reset: hard, key-off/on, and soft reset through the Volume III ECU lifecycle.
 
 Positive response service IDs are calculated as request service ID plus `0x40`. The domain reports
 NRC `0x22` for stale versions, `0x31` for invalid values/ranges, and `0x7F` when a DID service is not
@@ -52,6 +53,14 @@ millisecond delay. Raw keys use a masked input field and are immediately reduced
 seeds, keys, and key digests are excluded from logs, audit, and outbox. The deliberately simple
 deterministic key derivation is a simulator fixture for test engineering, not production ECU
 cryptography.
+
+V-5 adds an orchestration boundary rather than a second reset implementation. An accepted UDS
+ECU Reset invokes the existing Volume III lifecycle, including boot count, reset duration, memory
+policy, logical time, ECU version, audit, and outbox evidence. In the same PostgreSQL transaction it
+restores the diagnostic session to default, clears security level and protected challenge/lockout
+state, increments their versions, and records UDS `0x11` evidence. Soft reset is allowed in extended
+or programming session; hard and key-off/on resets additionally require security level 1. Exact
+retry returns the stored result without resetting or incrementing the ECU twice.
 
 The current POST DTC endpoint is a controlled simulator/test-fixture ingestion boundary. A later
 bridge will translate confirmed Volume III fault candidates or received UDS responses into this
