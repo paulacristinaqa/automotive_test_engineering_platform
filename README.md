@@ -14,14 +14,15 @@ analysis, and enterprise fleet capabilities.
 
 The repository contains the executable foundation of **Volume I — Core Platform**, the completed
 bounded baseline of **Volume II — Digital Vehicle**, the first seven implemented increments of
-**Volume III — ECU Simulator**, **Volume IV — CAN Network**, and the V-1 through V-4 diagnostic
-foundation with UDS sessions, DTC persistence, typed data, deterministic routines, and Security Access.
+**Volume III — ECU Simulator**, **Volume IV — CAN Network**, and the V-1 through V-5 diagnostic
+foundation with UDS sessions, DTC persistence, typed data, deterministic routines, Security Access,
+and ECU Reset orchestration.
 Implemented behavior is backed by requirements, architecture decisions, migrations, automated
 tests, a disposable integration environment, and an English engineering workbook.
 
 > **Project status:** active development. Volumes III and IV are baselined; Volume V includes
 > diagnostic sessions, DTC persistence, typed Data Identifiers, and UDS services `0x10`, `0x14`,
-> `0x19`, `0x22`, `0x2E`, Routine Control `0x31`, and Security Access `0x27`. The first
+> `0x19`, `0x22`, `0x2E`, Routine Control `0x31`, Security Access `0x27`, and ECU Reset `0x11`. The first
 > ATEP-to-Android-Automotive integration contract now provides a vehicle catalogue and
 > idempotent telemetry and command delivery for the Vehicle Gateway. Persistent test runs now
 > publish authenticated live WebSocket updates to CarSystemUI, which continues to isolate
@@ -356,7 +357,7 @@ operational guidance, and review worksheets.
 | II | Digital Vehicle | Baseline complete — increments II-1 through II-6 implemented |
 | III | ECU Simulator | Baseline complete — increments III-1 through III-7 implemented |
 | IV | CAN Network | Implemented — increments IV-1 through IV-7 |
-| V | Diagnostics | In progress — increments V-1 through V-4 implemented |
+| V | Diagnostics | In progress — increments V-1 through V-5 implemented |
 | VI | Electric Vehicle | Planned |
 | VII | ADAS | Planned |
 | VIII | Test Framework | Planned |

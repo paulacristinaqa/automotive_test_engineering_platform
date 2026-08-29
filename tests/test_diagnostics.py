@@ -19,6 +19,7 @@ from atep.diagnostics.models import (
     DiagnosticTroubleCode,
 )
 from atep.diagnostics.schemas import (
+    DiagnosticEcuResetCommand,
     DiagnosticSessionControlCommand,
     DiagnosticSessionType,
     DidCreate,
@@ -28,6 +29,7 @@ from atep.diagnostics.schemas import (
     RoutineControlCommand,
     RoutineCreate,
     SecurityAccessCommand,
+    UdsEcuResetType,
     UdsNegativeResponseCode,
 )
 from atep.diagnostics.service import (
@@ -38,6 +40,7 @@ from atep.diagnostics.service import (
     derive_simulated_security_key,
     read_dids,
     report_dtc,
+    reset_ecu,
     security_access,
     write_did,
 )
@@ -214,6 +217,133 @@ def test_security_access_contract_masks_and_requires_key_by_subfunction() -> Non
             key="NOT-A-VALID-KEY!",
         )
     assert "NOT-A-VALID-KEY!" not in str(error.value)
+
+
+@pytest.mark.asyncio
+async def test_uds_ecu_reset_is_atomic_idempotent_and_resets_diagnostics() -> None:
+    vehicle, ecu = vehicle_and_ecu()
+    diagnostic_state = DiagnosticSessionState(
+        id=uuid4(),
+        ecu_id=ecu.id,
+        session_type="extended",
+        security_level=1,
+        version=5,
+        simulation_time_ms=ecu.simulation_time_ms,
+    )
+    access_state = DiagnosticSecurityState(
+        id=uuid4(),
+        ecu_id=ecu.id,
+        challenge_counter=3,
+        expected_key_digest="a" * 64,
+        seed_expires_at_ms=30_000,
+        failed_attempts=2,
+        locked_until_ms=12_000,
+        target_level=1,
+        version=7,
+    )
+    command = DiagnosticEcuResetCommand(
+        command_id="uds-ecu-reset-001",
+        reset_type=1,
+        expected_ecu_version=4,
+        expected_session_version=5,
+        expected_security_version=7,
+    )
+    session = FakeSession(None, diagnostic_state, access_state, ecu, None)
+
+    execution, duplicate = await reset_ecu(
+        cast(AsyncSession, session),
+        vehicle=vehicle,
+        ecu=ecu,
+        command=command,
+        actor_user_id=uuid4(),
+        correlation_id=uuid4(),
+    )
+
+    assert duplicate is False
+    assert execution.service_id == 0x11
+    assert execution.result["reset_type"] == 0x01
+    assert execution.result["mode"] == "hard"
+    assert execution.result["reset_duration_ms"] == 100
+    assert execution.result["ecu_version"] == 5
+    assert execution.result["simulation_time_ms"] == 2_600
+    assert ecu.operational_state == "offline"
+    assert ecu.boot_count == 2
+    assert diagnostic_state.session_type == "default"
+    assert diagnostic_state.security_level == 0
+    assert diagnostic_state.version == 6
+    assert diagnostic_state.simulation_time_ms == 2_600
+    assert access_state.expected_key_digest is None
+    assert access_state.seed_expires_at_ms is None
+    assert access_state.failed_attempts == 0
+    assert access_state.locked_until_ms is None
+    assert access_state.target_level == 0
+    assert access_state.version == 8
+    events = [item.event_type for item in session.added if isinstance(item, OutboxEvent)]
+    audits = [item.action for item in session.added if isinstance(item, AuditRecord)]
+    assert events == ["atep.ecu.reset.completed.v1", "atep.diagnostics.ecu.reset.v1"]
+    assert audits == ["ecu.reset_completed", "diagnostics.ecu_reset"]
+
+    replayed, duplicate = await reset_ecu(
+        cast(AsyncSession, FakeSession(execution)),
+        vehicle=vehicle,
+        ecu=ecu,
+        command=command,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert replayed is execution
+    assert duplicate is True
+
+
+@pytest.mark.asyncio
+async def test_uds_ecu_reset_enforces_session_and_security_policy() -> None:
+    vehicle, ecu = vehicle_and_ecu()
+    diagnostic_state = DiagnosticSessionState(
+        id=uuid4(),
+        ecu_id=ecu.id,
+        session_type="extended",
+        security_level=0,
+        version=2,
+        simulation_time_ms=ecu.simulation_time_ms,
+    )
+    access_state = security_state(ecu, version=3)
+    hard_reset = DiagnosticEcuResetCommand(
+        command_id="uds-hard-reset-denied",
+        reset_type=1,
+        expected_ecu_version=4,
+        expected_session_version=2,
+        expected_security_version=3,
+    )
+    with pytest.raises(DiagnosticContractError) as error:
+        await reset_ecu(
+            cast(AsyncSession, FakeSession(None, diagnostic_state, access_state)),
+            vehicle=vehicle,
+            ecu=ecu,
+            command=hard_reset,
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+    assert error.value.details is not None
+    assert error.value.details["negative_response_code"] == 0x33
+
+    diagnostic_state.session_type = "default"
+    soft_reset = hard_reset.model_copy(
+        update={
+            "command_id": "uds-soft-reset-default",
+            "reset_type": UdsEcuResetType.SOFT_RESET,
+        }
+    )
+    with pytest.raises(DiagnosticContractError) as error:
+        await reset_ecu(
+            cast(AsyncSession, FakeSession(None, diagnostic_state, access_state)),
+            vehicle=vehicle,
+            ecu=ecu,
+            command=soft_reset,
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+    assert error.value.details is not None
+    assert error.value.details["negative_response_code"] == 0x7F
 
 
 @pytest.mark.asyncio

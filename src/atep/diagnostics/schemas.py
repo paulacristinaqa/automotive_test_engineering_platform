@@ -24,6 +24,7 @@ RoutineParameters = dict[str, DidValue]
 
 class UdsServiceId(IntEnum):
     DIAGNOSTIC_SESSION_CONTROL = 0x10
+    ECU_RESET = 0x11
     CLEAR_DIAGNOSTIC_INFORMATION = 0x14
     READ_DTC_INFORMATION = 0x19
     READ_DATA_BY_IDENTIFIER = 0x22
@@ -36,6 +37,7 @@ class UdsNegativeResponseCode(IntEnum):
     REQUEST_SEQUENCE_ERROR = 0x24
     CONDITIONS_NOT_CORRECT = 0x22
     REQUEST_OUT_OF_RANGE = 0x31
+    SECURITY_ACCESS_DENIED = 0x33
     INVALID_KEY = 0x35
     EXCEED_NUMBER_OF_ATTEMPTS = 0x36
     REQUIRED_TIME_DELAY_NOT_EXPIRED = 0x37
@@ -77,6 +79,22 @@ class RoutineStatus(StrEnum):
 class SecurityAccessType(IntEnum):
     REQUEST_SEED_LEVEL_1 = 0x01
     SEND_KEY_LEVEL_1 = 0x02
+
+
+class UdsEcuResetType(IntEnum):
+    HARD_RESET = 0x01
+    KEY_OFF_ON_RESET = 0x02
+    SOFT_RESET = 0x03
+
+
+class DiagnosticEcuResetCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    command_id: CommandId
+    reset_type: UdsEcuResetType
+    expected_ecu_version: int = Field(ge=1)
+    expected_session_version: int = Field(ge=1)
+    expected_security_version: int = Field(ge=1)
 
 
 class SecurityAccessCommand(BaseModel):

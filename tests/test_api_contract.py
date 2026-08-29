@@ -403,6 +403,7 @@ def test_diagnostics_contracts_and_safe_pagination_are_published() -> None:
     root = "/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics"
     assert "get" in paths[f"{root}/session"]
     assert "post" in paths[f"{root}/session-control"]
+    assert "post" in paths[f"{root}/ecu-reset"]
     assert {"get", "post"} <= set(paths[f"{root}/dtcs"])
     assert "get" in paths[f"{root}/dtcs/{{code}}"]
     assert "post" in paths[f"{root}/dtcs/clear"]
@@ -436,6 +437,11 @@ def test_diagnostics_contracts_and_safe_pagination_are_published() -> None:
     assert (
         schemas["DiagnosticSessionControlCommand"]["properties"]["expected_version"]["minimum"] == 1
     )
+    reset_contract = schemas["DiagnosticEcuResetCommand"]["properties"]
+    assert reset_contract["expected_ecu_version"]["minimum"] == 1
+    assert reset_contract["expected_session_version"]["minimum"] == 1
+    assert reset_contract["expected_security_version"]["minimum"] == 1
+    assert schemas["UdsEcuResetType"]["enum"] == [1, 2, 3]
     assert schemas["DidCreate"]["properties"]["identifier"]["maximum"] == 65535
     assert schemas["DidReadCommand"]["properties"]["identifiers"]["maxItems"] == 16
     assert schemas["RoutineCreate"]["properties"]["identifier"]["maximum"] == 65535
