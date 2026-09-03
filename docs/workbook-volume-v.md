@@ -1,8 +1,8 @@
 # ATEP Volume V - Diagnostics Engineering Workbook
 
-**Document status:** Increments V-1 through V-5 implemented
+**Document status:** Increments V-1 through V-6 implemented
 **Language:** English  
-**Last updated:** 2026-08-29
+**Last updated:** 2026-09-03
 **Repository:** `paulacristinaqa/automotive_test_engineering_platform`
 
 ## 1. Document Purpose
@@ -15,7 +15,7 @@ evidence, verification strategy, risks, and study exercises for the Diagnostics 
 | Field | Value |
 |---|---|
 | Volume | V - Diagnostics |
-| Baseline | Increments V-1 through V-5 |
+| Baseline | Increments V-1 through V-6 |
 | Architecture style | ECU-scoped diagnostic aggregate and transactional domain service |
 | Primary runtime | Python 3.12, FastAPI, SQLAlchemy, PostgreSQL |
 | Quality gates | pytest, Ruff, strict mypy, Alembic, integration CI, DOCX render and accessibility audit |
@@ -29,6 +29,7 @@ evidence, verification strategy, risks, and study exercises for the Diagnostics 
 | 0.3.0 | 2026-08-25 | Added a bounded routine catalogue, UDS Routine Control `0x31`, deterministic logical-time execution, start/stop/result subfunctions, versioned replay, minimized evidence, migration, APIs, and tests. |
 | 0.4.0 | 2026-08-28 | Added UDS Security Access `0x27`, deterministic level-1 seed/key exchange, logical-time expiry and lockout, idempotent negative evidence, secret minimization, migration, APIs, and tests. |
 | 0.5.0 | 2026-08-29 | Added UDS ECU Reset `0x11`, cross-volume ECU lifecycle orchestration, reset/session/security version checks, deterministic logical time, exact replay, RBAC, atomic audit/outbox evidence, API, and tests. |
+| 0.6.0 | 2026-09-03 | Added bounded UDS firmware download `0x34`/`0x36`/`0x37`, ordered block transfer, SHA-256 verification, firmware activation, payload minimization, migration, APIs, and tests. |
 
 ## 4. Scope and Boundaries
 
@@ -57,11 +58,13 @@ evidence, verification strategy, risks, and study exercises for the Diagnostics 
 - UDS ECU Reset hard, key-off/on, and soft subfunctions through the existing ECU lifecycle.
 - Atomic restoration of default session, security level zero, and empty challenge/lockout state.
 - Reset/session/security optimistic versions, session/security policy, and exact reset replay.
+- ECU-scoped firmware-transfer state and UDS Request Download, Transfer Data, and Request Transfer Exit.
+- Programming-session and level-1 security policy, 64-KiB image and 256-byte block bounds.
+- Ordered block counters, SHA-256 image verification, atomic firmware activation, and exact replay.
 
 ### 4.2 Deferred
 
 - ISO-TP segmentation, CAN transport binding, DoIP, and physical adapters.
-- Flash transfer services.
 - OBD-II mode/PID compatibility and fleet-scale remote diagnostics.
 
 ## 5. Architecture
@@ -101,6 +104,11 @@ invalid-attempt count, logical lockout deadline, target level, and optimistic ve
 stores a raw key. The current unlocked security level remains on `DiagnosticSessionState`, so a
 session change can reset authorization without rewriting challenge history.
 
+`DiagnosticFlashState` stores one ECU-local transfer lifecycle: address/size negotiation, target
+firmware and ECU version, maximum block length, next sequence counter, received byte count,
+protected transient image bytes, final SHA-256 digest, status, and optimistic version. Completed
+transfers purge raw bytes after verification.
+
 ## 7. Public API and Security
 
 | Method | Path | Permission | Purpose |
@@ -123,6 +131,10 @@ session change can reset authorization without rewriting challenge history.
 | GET | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/security-access/state` | `diagnostics:read` | Retrieve non-secret version, attempt, lockout, and challenge status. |
 | POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/security-access` | `diagnostics:manage` | Execute UDS `0x27` requestSeed or sendKey. |
 | POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/ecu-reset` | `diagnostics:manage` | Execute UDS `0x11` through the ECU lifecycle. |
+| GET | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/flash/state` | `diagnostics:read` | Retrieve bounded transfer progress and digest metadata. |
+| POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/flash/request-download` | `diagnostics:manage` | Negotiate UDS `0x34` firmware transfer. |
+| POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/flash/transfer-data` | `diagnostics:manage` | Submit one ordered UDS `0x36` block. |
+| POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/flash/request-transfer-exit` | `diagnostics:manage` | Verify and activate through UDS `0x37`. |
 
 ## 8. UDS Semantics
 
@@ -191,6 +203,19 @@ transaction, the diagnostic layer restores default session and security level ze
 seed/attempt/lockout state, increments diagnostic versions, and records UDS evidence. The positive
 response identity is `0x51`. Exact retry replays stored results without a second reset.
 
+### 8.9 ECU Flash (`0x34`, `0x36`, `0x37`)
+
+V-6 models flashing as a semantic, transport-neutral pipeline. Request Download requires the
+programming session, security level 1, matching ECU/session/security versions, an address range
+inside the 16-bit ECU space, and an image no larger than 65,536 bytes. Its positive response is
+`0x74` and negotiates a 256-byte maximum block length. Transfer Data (`0x76`) accepts only the
+expected byte counter, wraps 255 to 0, prevents overflow, and advances an independent transfer
+version. Command and shared evidence retain block size and SHA-256, never raw firmware bytes.
+Request Transfer Exit (`0x77`) requires the exact byte count, matching transfer/ECU versions, and
+constant-time SHA-256 verification before changing the ECU profile version and ECU optimistic
+version. Completion purges the assembled image bytes while retaining digest and bounded metadata.
+Every accepted mutation, command record, audit record, and outbox event shares one transaction.
+
 ## 9. Error and Consistency Contract
 
 | Condition | Stable code | HTTP | UDS evidence |
@@ -211,6 +236,12 @@ response identity is `0x51`. Exact retry replays stored results without a second
 | Reset in default session | `diagnostic_contract_invalid` | 422 | NRC `0x7F` service not supported in active session |
 | Hard or key-off/on reset without level 1 | `diagnostic_contract_invalid` | 422 | NRC `0x33` security access denied |
 | Stale ECU, session, or security reset version | `diagnostic_contract_invalid` | 422 | NRC `0x22` conditions not correct |
+| Flash outside programming session | `diagnostic_contract_invalid` | 422 | NRC `0x7F` service not supported in active session |
+| Flash without security level 1 | `diagnostic_contract_invalid` | 422 | NRC `0x33` security access denied |
+| Transfer before download or exit before complete image | `diagnostic_contract_invalid` | 422 | NRC `0x24` request sequence error |
+| Wrong block sequence counter | `diagnostic_contract_invalid` | 422 | NRC `0x73` wrong block sequence counter |
+| Oversized block or image overflow | `diagnostic_contract_invalid` | 422 | NRC `0x13` invalid format/length |
+| Stale transfer/ECU version or digest mismatch | `diagnostic_contract_invalid` | 422 | NRC `0x22` conditions not correct |
 | Unknown ECU or DTC | Platform resource-not-found code | 404 | Adapter maps transport response later |
 | Invalid body or pagination | `request_validation_error` | 422 | Rejected at the public contract boundary |
 
@@ -296,6 +327,18 @@ Default-session reset is rejected. Hard and key-off/on reset additionally requir
 Access; soft reset requires only programming or extended session. ECU, diagnostic-session, and
 security-state versions are validated so a stale tester cannot reset newer aggregate state.
 
+### ADR-DG-015 - Keep Firmware Payloads Out of Shared Evidence
+
+Raw firmware is required only while assembling an active transfer. Diagnostic command requests,
+audit, outbox, and logs contain block length and SHA-256 rather than payload bytes. Successful
+completion purges the assembled image and retains only bounded metadata and its digest.
+
+### ADR-DG-016 - Activate Firmware Only at a Verified Transaction Boundary
+
+Transfer blocks update only the flash aggregate. The ECU profile/version changes only when Request
+Transfer Exit verifies the declared byte count, transfer/ECU versions, and full-image SHA-256.
+Firmware activation, transfer completion, command evidence, audit, and outbox then commit together.
+
 ## 11. Verification Catalogue
 
 | Test | Objective | Level |
@@ -365,6 +408,16 @@ security-state versions are validated so a stale tester cannot reset newer aggre
 | Reset concurrency | Reject stale ECU, session, or security versions with NRC `0x22`. | Service/API |
 | Reset replay | Return stored `0x11` evidence without another boot, time advance, or version increment. | Service/integration |
 | Reset atomicity | Commit ECU mutation, both evidence streams, diagnostic state, audit, and outbox together. | Integration |
+| Download negotiation | Require programming session, level 1, matching versions, 16-bit range, and <=65,536 bytes. | Schema/service/API |
+| Block bounds | Reject empty, malformed, larger-than-256-byte, or overflowing blocks. | Schema/service |
+| Block sequence | Accept only the expected 0-255 byte counter and wrap 255 to 0. | Service/integration |
+| Transfer concurrency | Reject stale transfer or ECU versions with NRC `0x22`. | Service/API |
+| Incomplete exit | Reject Transfer Exit before the declared byte count with NRC `0x24`. | Service/API |
+| Digest verification | Reject a mismatched SHA-256 without changing the ECU firmware version. | Service/integration |
+| Flash activation | Update firmware profile and ECU version only after full verification. | Service/integration |
+| Flash replay | Replay `0x34`/`0x36`/`0x37` without appending a block or activating twice. | Service/integration |
+| Payload minimization | Prove raw image/block bytes never enter commands, logs, audit, or outbox. | Service/security |
+| Flash atomicity | Commit transfer, firmware activation, command, audit, and outbox together. | Integration |
 
 ## 12. Implemented Evidence
 
@@ -373,6 +426,7 @@ security-state versions are validated so a stale tester cannot reset newer aggre
 - Migration `0032_diagnostic_data_identifiers` owns typed DID persistence and versioning.
 - Migration `0033_diagnostic_routines` owns routine definitions and execution states.
 - Migration `0034_diagnostic_security_access` owns the ECU Security Access challenge state.
+- Migration `0035_diagnostic_flash` owns the ECU firmware-transfer state.
 - Events are `atep.diagnostics.session.changed.v1`, `atep.diagnostics.dtc.reported.v1`, and `atep.diagnostics.dtc.cleared.v1`.
 - Permissions are `diagnostics:read` and `diagnostics:manage`.
 - `tests/test_diagnostics.py` verifies contracts, logical time, versioning, replay, conflicts, evidence minimization, and permissions.
@@ -381,10 +435,11 @@ security-state versions are validated so a stale tester cannot reset newer aggre
 - Routine events are `atep.diagnostics.routine.created.v1` and `atep.diagnostics.routine.controlled.v1`.
 - Security Access events use `atep.diagnostics.security.accessed.v1` without seed/key material.
 - UDS ECU Reset reuses `atep.ecu.reset.completed.v1` and adds `atep.diagnostics.ecu.reset.v1` in the same transaction.
+- Flash events are `atep.diagnostics.flash.download.requested.v1`, `atep.diagnostics.flash.block.transferred.v1`, and `atep.diagnostics.flash.completed.v1`; none contains raw firmware bytes.
 
 ## 13. Risks and Technical Debt
 
-- V-1 through V-5 expose semantic UDS operations but do not yet encode wire PDUs.
+- V-1 through V-6 expose semantic UDS operations but do not yet encode wire PDUs.
 - Status-mask meaning is retained as a byte; named bit helpers should be added with richer DTC queries.
 - DTC creation is a controlled simulator boundary; automatic fault-to-DTC mapping is future work.
 - The current clear operation loads at most 200 DTCs, matching the per-ECU V-1 storage bound.
@@ -393,12 +448,13 @@ security-state versions are validated so a stale tester cannot reset newer aggre
 - Routine result templates are deterministic fixtures; future routines may require pluggable ECU behavior and explicit failure results.
 - V-4 key derivation is transparent and deterministic for simulation; production security requires OEM algorithms, protected key material, hardware-backed execution, and threat analysis.
 - V-5 returns a completed semantic reset response; transport adapters must later model response timing and ECU communication loss around physical reset execution.
+- V-6 is a bounded simulator pipeline, not a bootloader or production flasher; signing, anti-rollback, erase/program routines, power-loss recovery, and OEM secure-boot policy remain future hardening.
 
 ## 14. Roadmap
 
-V-1 through V-5 are implemented. The recommended next development is V-6: Request Download,
-Transfer Data, and Request Transfer Exit (`0x34`, `0x36`, and `0x37`) as a bounded, resumable flash
-pipeline with security/session policy, block sequencing, checksums, rollback, and exact replay.
+V-1 through V-6 are implemented. The recommended next development is V-7: OBD-II compatibility,
+the DoIP transport boundary, diagnostic campaigns, and end-to-end scenarios that connect Digital
+Vehicle, ECU, CAN, Diagnostics, test execution, evidence, and Android Automotive visibility.
 
 ## 15. Study Exercises
 
@@ -444,3 +500,21 @@ pipeline with security/session policy, block sequencing, checksums, rollback, an
 40. Prove an exact reset replay cannot increment boot count or simulation time twice.
 41. Explain why Volume V orchestrates rather than duplicates the Volume III reset lifecycle.
 42. Design rollback evidence for a failure after ECU mutation but before diagnostic evidence commit.
+43. Calculate the positive response identities for `0x34`, `0x36`, and `0x37`.
+44. Explain why Request Download requires both programming session and Security Access level 1.
+45. Design block-sequence tests for duplicate, skipped, stale-version, and 255-to-0 wrap cases.
+46. Prove that raw firmware bytes do not appear in command, audit, outbox, or log evidence.
+47. Compare block SHA-256 evidence with the full-image digest verified at Transfer Exit.
+48. Trace a successful flash from negotiation through ECU profile/version activation.
+49. Design negative tests for incomplete images, overflow, digest mismatch, and stale ECU version.
+50. Explain which production concerns remain outside this simulator pipeline.
+
+## 16. V-6 Review Worksheet
+
+Use this worksheet after studying or demonstrating the increment:
+
+1. Record the tested firmware size, block size, number of blocks, and final SHA-256.
+2. Capture one successful `0x34` -> `0x36` -> `0x37` trace and its command/event identities.
+3. Capture one wrong-sequence, one incomplete-image, and one digest-mismatch result with NRC evidence.
+4. Verify that no raw firmware hex appears in logs, diagnostic commands, audit, or outbox records.
+5. Explain whether the observed result is sufficient for a simulator baseline and which production bootloader controls are still absent.

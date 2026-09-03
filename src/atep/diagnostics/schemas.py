@@ -31,9 +31,14 @@ class UdsServiceId(IntEnum):
     WRITE_DATA_BY_IDENTIFIER = 0x2E
     SECURITY_ACCESS = 0x27
     ROUTINE_CONTROL = 0x31
+    REQUEST_DOWNLOAD = 0x34
+    TRANSFER_DATA = 0x36
+    REQUEST_TRANSFER_EXIT = 0x37
 
 
 class UdsNegativeResponseCode(IntEnum):
+    INCORRECT_MESSAGE_LENGTH_OR_INVALID_FORMAT = 0x13
+    WRONG_BLOCK_SEQUENCE_COUNTER = 0x73
     REQUEST_SEQUENCE_ERROR = 0x24
     CONDITIONS_NOT_CORRECT = 0x22
     REQUEST_OUT_OF_RANGE = 0x31
@@ -95,6 +100,69 @@ class DiagnosticEcuResetCommand(BaseModel):
     expected_ecu_version: int = Field(ge=1)
     expected_session_version: int = Field(ge=1)
     expected_security_version: int = Field(ge=1)
+
+
+class FlashRequestDownloadCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    command_id: CommandId
+    memory_address: int = Field(ge=0, le=0xFFFF)
+    memory_size: int = Field(ge=1, le=65_536)
+    firmware_version: str = Field(min_length=1, max_length=20, pattern=r"^[0-9]+\.[0-9]+\.[0-9]+$")
+    data_format_identifier: int = Field(default=0, ge=0, le=0)
+    expected_ecu_version: int = Field(ge=1)
+    expected_session_version: int = Field(ge=1)
+    expected_security_version: int = Field(ge=1)
+
+    @model_validator(mode="after")
+    def bounded_address_range(self) -> "FlashRequestDownloadCommand":
+        if self.memory_address + self.memory_size > 65_536:
+            raise ValueError("download range exceeds the 16-bit ECU address space")
+        return self
+
+
+class FlashTransferDataCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+
+    command_id: CommandId
+    block_sequence_counter: int = Field(ge=0, le=255)
+    data_hex: SecretStr = Field(min_length=2, max_length=512)
+    expected_transfer_version: int = Field(ge=1)
+
+    @field_validator("data_hex")
+    @classmethod
+    def hexadecimal_block(cls, value: SecretStr) -> SecretStr:
+        raw = value.get_secret_value()
+        if len(raw) % 2 != 0 or re.fullmatch(r"[0-9A-Fa-f]+", raw) is None:
+            raise ValueError("data_hex must contain an even number of hexadecimal characters")
+        return SecretStr(raw.upper())
+
+
+class FlashTransferExitCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    command_id: CommandId
+    expected_transfer_version: int = Field(ge=1)
+    expected_ecu_version: int = Field(ge=1)
+    expected_sha256: str = Field(pattern=r"^[0-9A-Fa-f]{64}$")
+
+    @field_validator("expected_sha256")
+    @classmethod
+    def normalized_digest(cls, value: str) -> str:
+        return value.lower()
+
+
+class FlashStateResponse(BaseModel):
+    ecu_id: str
+    status: str
+    memory_address: int
+    memory_size: int
+    firmware_version: str
+    max_block_length: int
+    next_block_sequence_counter: int
+    bytes_received: int
+    image_sha256: str | None
+    transfer_version: int
 
 
 class SecurityAccessCommand(BaseModel):

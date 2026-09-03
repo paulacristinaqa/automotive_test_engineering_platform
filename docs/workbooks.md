@@ -10,7 +10,7 @@ decisions while preserving cross-volume traceability.
 | II | Digital Vehicle | II-1 through II-6 implemented | `docs/workbook-volume-ii.md` | `docs/ATEP_Volume_II_Digital_Vehicle_Engineering_Workbook.docx` |
 | III | ECU Simulator | III-1 through III-7 implemented | `docs/workbook-volume-iii.md` | `docs/ATEP_Volume_III_ECU_Simulator_Engineering_Workbook.docx` |
 | IV | CAN Network | IV-1 through IV-7 implemented | `docs/workbook-volume-iv.md` | `docs/ATEP_Volume_IV_CAN_Network_Engineering_Workbook.docx` |
-| V | Diagnostics | V-1 through V-5 implemented | `docs/workbook-volume-v.md` | `docs/ATEP_Volume_V_Diagnostics_Engineering_Workbook.docx` |
+| V | Diagnostics | V-1 through V-6 implemented | `docs/workbook-volume-v.md` | `docs/ATEP_Volume_V_Diagnostics_Engineering_Workbook.docx` |
 | VI | Electric Vehicle | Planned | To be created when development begins | To be created |
 | VII | ADAS | Planned | To be created when development begins | To be created |
 | VIII | Test Framework | Planned | To be created when development begins | To be created |

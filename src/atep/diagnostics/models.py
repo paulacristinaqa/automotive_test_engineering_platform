@@ -9,6 +9,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    LargeBinary,
     String,
     UniqueConstraint,
 )
@@ -77,6 +78,48 @@ class DiagnosticSecurityState(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     failed_attempts: Mapped[int] = mapped_column(Integer, default=0)
     locked_until_ms: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     target_level: Mapped[int] = mapped_column(Integer, default=0)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+
+class DiagnosticFlashState(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "diagnostic_flash_states"
+    __table_args__ = (
+        UniqueConstraint("ecu_id", name="uq_diagnostic_flash_ecu"),
+        CheckConstraint(
+            "status IN ('idle', 'downloading', 'completed')",
+            name="ck_diagnostic_flash_status",
+        ),
+        CheckConstraint("memory_address >= 0", name="ck_diagnostic_flash_address"),
+        CheckConstraint(
+            "memory_size >= 0 AND memory_size <= 65536",
+            name="ck_diagnostic_flash_size",
+        ),
+        CheckConstraint(
+            "bytes_received >= 0 AND bytes_received <= memory_size",
+            name="ck_diagnostic_flash_received",
+        ),
+        CheckConstraint(
+            "next_block_sequence_counter >= 0 AND next_block_sequence_counter <= 255",
+            name="ck_diagnostic_flash_sequence",
+        ),
+        CheckConstraint("version >= 1", name="ck_diagnostic_flash_version"),
+    )
+
+    ecu_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("electronic_control_units.id", ondelete="CASCADE"),
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(String(16), default="idle", index=True)
+    memory_address: Mapped[int] = mapped_column(Integer, default=0)
+    memory_size: Mapped[int] = mapped_column(Integer, default=0)
+    firmware_version: Mapped[str] = mapped_column(String(20), default="")
+    target_ecu_version: Mapped[int] = mapped_column(Integer, default=1)
+    max_block_length: Mapped[int] = mapped_column(Integer, default=256)
+    next_block_sequence_counter: Mapped[int] = mapped_column(Integer, default=1)
+    bytes_received: Mapped[int] = mapped_column(Integer, default=0)
+    image_data: Mapped[bytes] = mapped_column(LargeBinary, default=bytes)
+    image_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
 
 

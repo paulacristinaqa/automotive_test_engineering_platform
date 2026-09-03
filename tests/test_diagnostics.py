@@ -12,6 +12,7 @@ from atep.core.errors import DiagnosticCommandConflictError, DiagnosticContractE
 from atep.diagnostics.models import (
     DiagnosticCommand,
     DiagnosticDataIdentifier,
+    DiagnosticFlashState,
     DiagnosticRoutine,
     DiagnosticRoutineState,
     DiagnosticSecurityState,
@@ -26,6 +27,9 @@ from atep.diagnostics.schemas import (
     DidReadCommand,
     DidWriteCommand,
     DtcReportCommand,
+    FlashRequestDownloadCommand,
+    FlashTransferDataCommand,
+    FlashTransferExitCommand,
     RoutineControlCommand,
     RoutineCreate,
     SecurityAccessCommand,
@@ -40,8 +44,11 @@ from atep.diagnostics.service import (
     derive_simulated_security_key,
     read_dids,
     report_dtc,
+    request_download,
+    request_transfer_exit,
     reset_ecu,
     security_access,
+    transfer_data,
     write_did,
 )
 from atep.ecus.models import ElectronicControlUnit
@@ -180,6 +187,24 @@ def security_state(ecu: ElectronicControlUnit, *, version: int = 1) -> Diagnosti
         failed_attempts=0,
         locked_until_ms=None,
         target_level=0,
+        version=version,
+    )
+
+
+def flash_state(ecu: ElectronicControlUnit, *, version: int = 1) -> DiagnosticFlashState:
+    return DiagnosticFlashState(
+        id=uuid4(),
+        ecu_id=ecu.id,
+        status="idle",
+        memory_address=0,
+        memory_size=0,
+        firmware_version="",
+        target_ecu_version=ecu.version,
+        max_block_length=256,
+        next_block_sequence_counter=1,
+        bytes_received=0,
+        image_data=b"",
+        image_sha256=None,
         version=version,
     )
 
@@ -344,6 +369,178 @@ async def test_uds_ecu_reset_enforces_session_and_security_policy() -> None:
         )
     assert error.value.details is not None
     assert error.value.details["negative_response_code"] == 0x7F
+
+
+@pytest.mark.asyncio
+async def test_uds_flash_pipeline_is_bounded_atomic_and_digest_verified() -> None:
+    vehicle, ecu = vehicle_and_ecu()
+    diagnostic_state = DiagnosticSessionState(
+        id=uuid4(),
+        ecu_id=ecu.id,
+        session_type="programming",
+        security_level=1,
+        version=4,
+        simulation_time_ms=ecu.simulation_time_ms,
+    )
+    access_state = security_state(ecu, version=3)
+    transfer = flash_state(ecu, version=1)
+    image = bytes.fromhex("0102030405060708")
+    digest = hashlib.sha256(image).hexdigest()
+
+    download, duplicate = await request_download(
+        cast(AsyncSession, FakeSession(None, diagnostic_state, access_state, transfer, ecu)),
+        vehicle=vehicle,
+        ecu=ecu,
+        command=FlashRequestDownloadCommand(
+            command_id="flash-download-001",
+            memory_address=0x8000,
+            memory_size=len(image),
+            firmware_version="2.0.0",
+            expected_ecu_version=4,
+            expected_session_version=4,
+            expected_security_version=3,
+        ),
+        actor_user_id=uuid4(),
+        correlation_id=uuid4(),
+    )
+    assert duplicate is False
+    assert download.service_id == 0x34
+    assert transfer.status == "downloading"
+    assert transfer.version == 2
+    assert transfer.max_block_length == 256
+
+    block_session = FakeSession(None, diagnostic_state, access_state, transfer)
+    block, duplicate = await transfer_data(
+        cast(AsyncSession, block_session),
+        vehicle=vehicle,
+        ecu=ecu,
+        command=FlashTransferDataCommand(
+            command_id="flash-block-001",
+            block_sequence_counter=1,
+            data_hex=image.hex(),
+            expected_transfer_version=2,
+        ),
+        actor_user_id=uuid4(),
+        correlation_id=uuid4(),
+    )
+    assert duplicate is False
+    assert block.service_id == 0x36
+    assert block.request["block_sha256"] == digest
+    assert "data_hex" not in block.request
+    assert transfer.bytes_received == len(image)
+    assert transfer.version == 3
+
+    exit_session = FakeSession(None, diagnostic_state, access_state, transfer, ecu)
+    completed, duplicate = await request_transfer_exit(
+        cast(AsyncSession, exit_session),
+        vehicle=vehicle,
+        ecu=ecu,
+        command=FlashTransferExitCommand(
+            command_id="flash-exit-001",
+            expected_transfer_version=3,
+            expected_ecu_version=4,
+            expected_sha256=digest,
+        ),
+        actor_user_id=uuid4(),
+        correlation_id=uuid4(),
+    )
+    assert duplicate is False
+    assert completed.service_id == 0x37
+    assert completed.result["image_sha256"] == digest
+    assert transfer.status == "completed"
+    assert transfer.image_data == b""
+    assert transfer.version == 4
+    assert ecu.profile_version == "2.0.0"
+    assert ecu.version == 5
+    events = [item.event_type for item in exit_session.added if isinstance(item, OutboxEvent)]
+    assert events == ["atep.diagnostics.flash.completed.v1"]
+
+
+@pytest.mark.asyncio
+async def test_uds_flash_rejects_wrong_sequence_and_incomplete_image() -> None:
+    vehicle, ecu = vehicle_and_ecu()
+    diagnostic_state = DiagnosticSessionState(
+        id=uuid4(),
+        ecu_id=ecu.id,
+        session_type="programming",
+        security_level=1,
+        version=1,
+        simulation_time_ms=ecu.simulation_time_ms,
+    )
+    access_state = security_state(ecu)
+    transfer = flash_state(ecu, version=2)
+    transfer.status = "downloading"
+    transfer.memory_size = 8
+    transfer.firmware_version = "2.0.0"
+    transfer.target_ecu_version = ecu.version
+
+    with pytest.raises(DiagnosticContractError) as error:
+        await transfer_data(
+            cast(AsyncSession, FakeSession(None, diagnostic_state, access_state, transfer)),
+            vehicle=vehicle,
+            ecu=ecu,
+            command=FlashTransferDataCommand(
+                command_id="flash-wrong-sequence",
+                block_sequence_counter=2,
+                data_hex="0102",
+                expected_transfer_version=2,
+            ),
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+    assert error.value.details is not None
+    assert error.value.details["negative_response_code"] == 0x73
+
+    with pytest.raises(DiagnosticContractError) as error:
+        await request_transfer_exit(
+            cast(AsyncSession, FakeSession(None, diagnostic_state, access_state, transfer, ecu)),
+            vehicle=vehicle,
+            ecu=ecu,
+            command=FlashTransferExitCommand(
+                command_id="flash-incomplete",
+                expected_transfer_version=2,
+                expected_ecu_version=4,
+                expected_sha256=hashlib.sha256(b"").hexdigest(),
+            ),
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+    assert error.value.details is not None
+    assert error.value.details["negative_response_code"] == 0x24
+
+
+@pytest.mark.asyncio
+async def test_uds_flash_block_counter_wraps_from_255_to_zero() -> None:
+    vehicle, ecu = vehicle_and_ecu()
+    diagnostic_state = DiagnosticSessionState(
+        id=uuid4(),
+        ecu_id=ecu.id,
+        session_type="programming",
+        security_level=1,
+        version=1,
+        simulation_time_ms=ecu.simulation_time_ms,
+    )
+    access_state = security_state(ecu)
+    transfer = flash_state(ecu, version=8)
+    transfer.status = "downloading"
+    transfer.memory_size = 1
+    transfer.next_block_sequence_counter = 255
+
+    await transfer_data(
+        cast(AsyncSession, FakeSession(None, diagnostic_state, access_state, transfer)),
+        vehicle=vehicle,
+        ecu=ecu,
+        command=FlashTransferDataCommand(
+            command_id="flash-block-wrap",
+            block_sequence_counter=255,
+            data_hex="01",
+            expected_transfer_version=8,
+        ),
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+
+    assert transfer.next_block_sequence_counter == 0
 
 
 @pytest.mark.asyncio

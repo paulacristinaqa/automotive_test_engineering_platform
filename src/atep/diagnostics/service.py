@@ -17,6 +17,7 @@ from atep.core.errors import (
 from atep.diagnostics.models import (
     DiagnosticCommand,
     DiagnosticDataIdentifier,
+    DiagnosticFlashState,
     DiagnosticRoutine,
     DiagnosticRoutineState,
     DiagnosticSecurityState,
@@ -33,6 +34,9 @@ from atep.diagnostics.schemas import (
     DidWriteCommand,
     DtcClearCommand,
     DtcReportCommand,
+    FlashRequestDownloadCommand,
+    FlashTransferDataCommand,
+    FlashTransferExitCommand,
     RoutineControlCommand,
     RoutineControlType,
     RoutineCreate,
@@ -85,6 +89,33 @@ async def get_or_create_security_state(
             failed_attempts=0,
             locked_until_ms=None,
             target_level=0,
+            version=1,
+        )
+        session.add(state)
+        await session.flush()
+    return state
+
+
+async def get_or_create_flash_state(
+    session: AsyncSession, *, ecu: ElectronicControlUnit, lock: bool = False
+) -> DiagnosticFlashState:
+    query = select(DiagnosticFlashState).where(DiagnosticFlashState.ecu_id == ecu.id)
+    if lock:
+        query = query.with_for_update()
+    state = await session.scalar(query)
+    if state is None:
+        state = DiagnosticFlashState(
+            ecu_id=ecu.id,
+            status="idle",
+            memory_address=0,
+            memory_size=0,
+            firmware_version="",
+            target_ecu_version=ecu.version,
+            max_block_length=256,
+            next_block_sequence_counter=1,
+            bytes_received=0,
+            image_data=b"",
+            image_sha256=None,
             version=1,
         )
         session.add(state)
@@ -153,9 +184,13 @@ async def security_access(
     previous_version = diagnostic_session.version
     if command.access_type == SecurityAccessType.REQUEST_SEED_LEVEL_1:
         security_state.challenge_counter += 1
-        seed = hashlib.sha256(
-            f"{ecu.id}:{security_state.challenge_counter}:{now_ms}:{security_state.version}".encode()
-        ).hexdigest()[:16].upper()
+        seed = (
+            hashlib.sha256(
+                f"{ecu.id}:{security_state.challenge_counter}:{now_ms}:{security_state.version}".encode()
+            )
+            .hexdigest()[:16]
+            .upper()
+        )
         expected_key = derive_simulated_security_key(seed)
         security_state.expected_key_digest = hashlib.sha256(expected_key.encode()).hexdigest()
         security_state.seed_expires_at_ms = now_ms + 30_000
@@ -860,8 +895,7 @@ async def reset_ecu(
             negative_response_code=UdsNegativeResponseCode.SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION,
         )
     if (
-        command.reset_type
-        in {UdsEcuResetType.HARD_RESET, UdsEcuResetType.KEY_OFF_ON_RESET}
+        command.reset_type in {UdsEcuResetType.HARD_RESET, UdsEcuResetType.KEY_OFF_ON_RESET}
         and diagnostic_session.security_level < 1
     ):
         raise DiagnosticContractError(
@@ -937,6 +971,275 @@ async def reset_ecu(
         correlation_id=correlation_id,
         event_type="atep.diagnostics.ecu.reset.v1",
         action="diagnostics.ecu_reset",
+    )
+    return execution, False
+
+
+async def request_download(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    ecu: ElectronicControlUnit,
+    command: FlashRequestDownloadCommand,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> tuple[DiagnosticCommand, bool]:
+    request = command.model_dump(mode="json")
+    existing = await _existing_command(session, ecu=ecu, command_id=command.command_id)
+    if existing is not None:
+        if existing.service_id == UdsServiceId.REQUEST_DOWNLOAD and existing.request == request:
+            return existing, True
+        raise DiagnosticCommandConflictError()
+
+    diagnostic_state = await get_or_create_session(session, ecu=ecu, lock=True)
+    security_state = await get_or_create_security_state(session, ecu=ecu, lock=True)
+    transfer = await get_or_create_flash_state(session, ecu=ecu, lock=True)
+    locked_ecu = await _locked_ecu(session, ecu)
+    _require_flash_access(
+        diagnostic_state=diagnostic_state,
+        security_state=security_state,
+        expected_session_version=command.expected_session_version,
+        expected_security_version=command.expected_security_version,
+    )
+    if command.expected_ecu_version != locked_ecu.version:
+        raise DiagnosticContractError(
+            reason=f"ECU version is {locked_ecu.version}",
+            negative_response_code=UdsNegativeResponseCode.CONDITIONS_NOT_CORRECT,
+        )
+    if transfer.status == "downloading":
+        raise DiagnosticContractError(
+            reason="a firmware download is already active",
+            negative_response_code=UdsNegativeResponseCode.CONDITIONS_NOT_CORRECT,
+        )
+
+    transfer.status = "downloading"
+    transfer.memory_address = command.memory_address
+    transfer.memory_size = command.memory_size
+    transfer.firmware_version = command.firmware_version
+    transfer.target_ecu_version = locked_ecu.version
+    transfer.max_block_length = 256
+    transfer.next_block_sequence_counter = 1
+    transfer.bytes_received = 0
+    transfer.image_data = b""
+    transfer.image_sha256 = None
+    transfer.version += 1
+    result = {
+        "accepted": True,
+        "memory_address": transfer.memory_address,
+        "memory_size": transfer.memory_size,
+        "firmware_version": transfer.firmware_version,
+        "max_block_length": transfer.max_block_length,
+        "transfer_version": transfer.version,
+    }
+    execution = _new_flash_execution(
+        ecu=locked_ecu,
+        command_id=command.command_id,
+        service_id=UdsServiceId.REQUEST_DOWNLOAD,
+        request=request,
+        result=result,
+        session_version=diagnostic_state.version,
+        actor_user_id=actor_user_id,
+    )
+    session.add(execution)
+    await session.flush()
+    _record_evidence(
+        session,
+        vehicle=vehicle,
+        ecu=locked_ecu,
+        execution=execution,
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id,
+        event_type="atep.diagnostics.flash.download.requested.v1",
+        action="diagnostics.flash_download_requested",
+    )
+    return execution, False
+
+
+async def transfer_data(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    ecu: ElectronicControlUnit,
+    command: FlashTransferDataCommand,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> tuple[DiagnosticCommand, bool]:
+    block = bytes.fromhex(command.data_hex.get_secret_value())
+    block_sha256 = hashlib.sha256(block).hexdigest()
+    request = {
+        "command_id": command.command_id,
+        "block_sequence_counter": command.block_sequence_counter,
+        "block_size": len(block),
+        "block_sha256": block_sha256,
+        "expected_transfer_version": command.expected_transfer_version,
+    }
+    existing = await _existing_command(session, ecu=ecu, command_id=command.command_id)
+    if existing is not None:
+        if existing.service_id == UdsServiceId.TRANSFER_DATA and existing.request == request:
+            return existing, True
+        raise DiagnosticCommandConflictError()
+
+    diagnostic_state = await get_or_create_session(session, ecu=ecu, lock=True)
+    security_state = await get_or_create_security_state(session, ecu=ecu, lock=True)
+    transfer = await get_or_create_flash_state(session, ecu=ecu, lock=True)
+    _require_active_flash_access(diagnostic_state, security_state)
+    if transfer.status != "downloading":
+        raise DiagnosticContractError(
+            reason="Request Download must start a transfer before Transfer Data",
+            negative_response_code=UdsNegativeResponseCode.REQUEST_SEQUENCE_ERROR,
+        )
+    if command.expected_transfer_version != transfer.version:
+        raise DiagnosticContractError(
+            reason=f"transfer version is {transfer.version}",
+            negative_response_code=UdsNegativeResponseCode.CONDITIONS_NOT_CORRECT,
+        )
+    if command.block_sequence_counter != transfer.next_block_sequence_counter:
+        raise DiagnosticContractError(
+            reason=f"expected block sequence counter {transfer.next_block_sequence_counter}",
+            negative_response_code=UdsNegativeResponseCode.WRONG_BLOCK_SEQUENCE_COUNTER,
+        )
+    if (
+        len(block) > transfer.max_block_length
+        or transfer.bytes_received + len(block) > transfer.memory_size
+    ):
+        raise DiagnosticContractError(
+            reason="firmware block exceeds the negotiated transfer bounds",
+            negative_response_code=(
+                UdsNegativeResponseCode.INCORRECT_MESSAGE_LENGTH_OR_INVALID_FORMAT
+            ),
+        )
+
+    transfer.image_data = bytes(transfer.image_data) + block
+    transfer.bytes_received += len(block)
+    transfer.next_block_sequence_counter = (
+        0
+        if transfer.next_block_sequence_counter == 255
+        else transfer.next_block_sequence_counter + 1
+    )
+    transfer.version += 1
+    result = {
+        "block_sequence_counter": command.block_sequence_counter,
+        "block_size": len(block),
+        "block_sha256": block_sha256,
+        "bytes_received": transfer.bytes_received,
+        "remaining_bytes": transfer.memory_size - transfer.bytes_received,
+        "next_block_sequence_counter": transfer.next_block_sequence_counter,
+        "transfer_version": transfer.version,
+    }
+    execution = _new_flash_execution(
+        ecu=ecu,
+        command_id=command.command_id,
+        service_id=UdsServiceId.TRANSFER_DATA,
+        request=request,
+        result=result,
+        session_version=diagnostic_state.version,
+        actor_user_id=actor_user_id,
+    )
+    session.add(execution)
+    await session.flush()
+    _record_evidence(
+        session,
+        vehicle=vehicle,
+        ecu=ecu,
+        execution=execution,
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id,
+        event_type="atep.diagnostics.flash.block.transferred.v1",
+        action="diagnostics.flash_block_transferred",
+    )
+    return execution, False
+
+
+async def request_transfer_exit(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    ecu: ElectronicControlUnit,
+    command: FlashTransferExitCommand,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> tuple[DiagnosticCommand, bool]:
+    request = command.model_dump(mode="json")
+    existing = await _existing_command(session, ecu=ecu, command_id=command.command_id)
+    if existing is not None:
+        if (
+            existing.service_id == UdsServiceId.REQUEST_TRANSFER_EXIT
+            and existing.request == request
+        ):
+            return existing, True
+        raise DiagnosticCommandConflictError()
+
+    diagnostic_state = await get_or_create_session(session, ecu=ecu, lock=True)
+    security_state = await get_or_create_security_state(session, ecu=ecu, lock=True)
+    transfer = await get_or_create_flash_state(session, ecu=ecu, lock=True)
+    locked_ecu = await _locked_ecu(session, ecu)
+    _require_active_flash_access(diagnostic_state, security_state)
+    if transfer.status != "downloading":
+        raise DiagnosticContractError(
+            reason="no firmware transfer is active",
+            negative_response_code=UdsNegativeResponseCode.REQUEST_SEQUENCE_ERROR,
+        )
+    if command.expected_transfer_version != transfer.version:
+        raise DiagnosticContractError(
+            reason=f"transfer version is {transfer.version}",
+            negative_response_code=UdsNegativeResponseCode.CONDITIONS_NOT_CORRECT,
+        )
+    if (
+        command.expected_ecu_version != locked_ecu.version
+        or locked_ecu.version != transfer.target_ecu_version
+    ):
+        raise DiagnosticContractError(
+            reason=f"ECU version is {locked_ecu.version}",
+            negative_response_code=UdsNegativeResponseCode.CONDITIONS_NOT_CORRECT,
+        )
+    if transfer.bytes_received != transfer.memory_size:
+        raise DiagnosticContractError(
+            reason=f"received {transfer.bytes_received} of {transfer.memory_size} bytes",
+            negative_response_code=UdsNegativeResponseCode.REQUEST_SEQUENCE_ERROR,
+        )
+    actual_sha256 = hashlib.sha256(bytes(transfer.image_data)).hexdigest()
+    if not secrets.compare_digest(actual_sha256, command.expected_sha256):
+        raise DiagnosticContractError(
+            reason="firmware image digest does not match",
+            negative_response_code=UdsNegativeResponseCode.CONDITIONS_NOT_CORRECT,
+        )
+
+    previous_ecu_version = locked_ecu.version
+    locked_ecu.profile_version = transfer.firmware_version
+    locked_ecu.version += 1
+    transfer.status = "completed"
+    transfer.image_sha256 = actual_sha256
+    transfer.image_data = b""
+    transfer.version += 1
+    result = {
+        "accepted": True,
+        "firmware_version": transfer.firmware_version,
+        "image_size": transfer.memory_size,
+        "image_sha256": actual_sha256,
+        "previous_ecu_version": previous_ecu_version,
+        "ecu_version": locked_ecu.version,
+        "transfer_version": transfer.version,
+    }
+    execution = _new_flash_execution(
+        ecu=locked_ecu,
+        command_id=command.command_id,
+        service_id=UdsServiceId.REQUEST_TRANSFER_EXIT,
+        request=request,
+        result=result,
+        session_version=diagnostic_state.version,
+        actor_user_id=actor_user_id,
+    )
+    session.add(execution)
+    await session.flush()
+    _record_evidence(
+        session,
+        vehicle=vehicle,
+        ecu=locked_ecu,
+        execution=execution,
+        actor_user_id=actor_user_id,
+        correlation_id=correlation_id,
+        event_type="atep.diagnostics.flash.completed.v1",
+        action="diagnostics.flash_completed",
     )
     return execution, False
 
@@ -1117,6 +1420,77 @@ async def _existing_command(
         )
     )
     return existing
+
+
+async def _locked_ecu(session: AsyncSession, ecu: ElectronicControlUnit) -> ElectronicControlUnit:
+    locked = await session.scalar(
+        select(ElectronicControlUnit).where(ElectronicControlUnit.id == ecu.id).with_for_update()
+    )
+    if locked is None:
+        raise ResourceNotFoundError("electronic control unit")
+    return locked
+
+
+def _require_flash_access(
+    *,
+    diagnostic_state: DiagnosticSessionState,
+    security_state: DiagnosticSecurityState,
+    expected_session_version: int,
+    expected_security_version: int,
+) -> None:
+    if expected_session_version != diagnostic_state.version:
+        raise DiagnosticContractError(
+            reason=f"session version is {diagnostic_state.version}",
+            negative_response_code=UdsNegativeResponseCode.CONDITIONS_NOT_CORRECT,
+        )
+    if expected_security_version != security_state.version:
+        raise DiagnosticContractError(
+            reason=f"security version is {security_state.version}",
+            negative_response_code=UdsNegativeResponseCode.CONDITIONS_NOT_CORRECT,
+        )
+    _require_active_flash_access(diagnostic_state, security_state)
+
+
+def _require_active_flash_access(
+    diagnostic_state: DiagnosticSessionState, security_state: DiagnosticSecurityState
+) -> None:
+    if diagnostic_state.session_type != "programming":
+        raise DiagnosticContractError(
+            reason="firmware transfer requires the programming session",
+            negative_response_code=UdsNegativeResponseCode.SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION,
+        )
+    if diagnostic_state.security_level < 1:
+        raise DiagnosticContractError(
+            reason="firmware transfer requires security level 1",
+            negative_response_code=UdsNegativeResponseCode.SECURITY_ACCESS_DENIED,
+        )
+    if security_state.target_level not in {0, 1}:
+        raise DiagnosticContractError(
+            reason="invalid diagnostic security state",
+            negative_response_code=UdsNegativeResponseCode.CONDITIONS_NOT_CORRECT,
+        )
+
+
+def _new_flash_execution(
+    *,
+    ecu: ElectronicControlUnit,
+    command_id: str,
+    service_id: UdsServiceId,
+    request: dict[str, Any],
+    result: dict[str, Any],
+    session_version: int,
+    actor_user_id: UUID,
+) -> DiagnosticCommand:
+    return DiagnosticCommand(
+        ecu_id=ecu.id,
+        command_id=command_id,
+        service_id=service_id,
+        request=request,
+        result=result,
+        previous_version=session_version,
+        session_version=session_version,
+        requested_by_user_id=actor_user_id,
+    )
 
 
 def _record_evidence(
