@@ -72,6 +72,8 @@ An intended end-to-end scenario is:
   temperature sensors, explicit noise/fault modes, and replayable evidence;
 - coupled battery-energy, thermal, regenerative-braking, steering, suspension, and automatic
   lighting behavior with an explicit deterministic energy balance;
+- vehicle-scoped electric battery packs with bounded cell projections, SOC/SOH, deterministic
+  electrical/thermal steps, BMS warning/protection states, contactor isolation, and exact replay;
 - bounded multi-vehicle simulation sessions with canonical SHA-256 snapshots and isolated restore;
 - vehicle-scoped classic CAN topology with bounded ECU nodes and standard/extended frame contracts;
 - deterministic CAN frame submission with logical microsecond time, replay safety, RBAC, audit,
@@ -263,6 +265,7 @@ source .venv/bin/activate
 | Live test run | `WS /api/v1/test-runs/{run_id}/stream` | active bearer token + `test_runs:read` |
 | Environment profiles | `/api/v1/environment-profiles` and lifecycle status | `environment_profiles:read`, `environment_profiles:manage` |
 | Diagnostics | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics` | `diagnostics:read`, `diagnostics:manage` |
+| Electric vehicle battery | `/api/v1/vehicles/{vehicle_id}/electric/battery` and `/steps` | `electric_vehicle:read`, `electric_vehicle:manage` |
 | Health | `/health/live`, `/health/ready` | Development probe policy |
 
 All API failures follow a stable correlation-aware error envelope. Passwords, password hashes,
@@ -359,7 +362,7 @@ operational guidance, and review worksheets.
 | III | ECU Simulator | Baseline complete — increments III-1 through III-7 implemented |
 | IV | CAN Network | Implemented — increments IV-1 through IV-7 |
 | V | Diagnostics | Baseline complete — increments V-1 through V-7 implemented |
-| VI | Electric Vehicle | Planned |
+| VI | Electric Vehicle | In progress - VI-1 battery and BMS foundation implemented |
 | VII | ADAS | Planned |
 | VIII | Test Framework | Planned |
 | IX | AI Test Engineer | Planned |

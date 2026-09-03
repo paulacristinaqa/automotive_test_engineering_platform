@@ -492,6 +492,20 @@ def test_test_job_scheduler_contracts_and_safe_pagination_are_published() -> Non
     assert "vehicle_id" in parameters
 
 
+def test_electric_vehicle_battery_contracts_are_published() -> None:
+    schema = core_app.openapi()
+    paths = schema["paths"]
+    battery = paths["/api/v1/vehicles/{vehicle_id}/electric/battery"]
+    assert {"get", "post"} <= set(battery)
+    assert "/api/v1/vehicles/{vehicle_id}/electric/battery/steps" in paths
+    create_schema = schema["components"]["schemas"]["BatteryPackCreate"]
+    assert create_schema["properties"]["series_cell_count"]["minimum"] == 4
+    assert create_schema["properties"]["series_cell_count"]["maximum"] == 192
+    step_schema = schema["components"]["schemas"]["BatterySimulationCommand"]
+    assert step_schema["properties"]["duration_ms"]["maximum"] == 3_600_000
+    assert step_schema["properties"]["pack_current_a"]["minimum"] == -1_000.0
+
+
 def test_test_artifact_contracts_and_safe_pagination_are_published() -> None:
     paths = core_app.openapi()["paths"]
     collection = paths["/api/v1/test-runs/{run_id}/artifacts"]

@@ -26,6 +26,7 @@ from atep.diagnostics.router import router as diagnostics_router
 from atep.ecus.router import profiles_router as ecu_profiles_router
 from atep.ecus.router import router as ecus_router
 from atep.ecus.router import scenarios_router as ecu_scenarios_router
+from atep.electric_vehicle.router import router as electric_vehicle_router
 from atep.environment_profiles.router import router as environment_profiles_router
 from atep.identity.bootstrap import ensure_bootstrap_admin
 from atep.identity.roles_router import router as roles_router
@@ -115,6 +116,7 @@ app.include_router(ecu_profiles_router, prefix="/api/v1", dependencies=rate_limi
 app.include_router(ecu_scenarios_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(can_network_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(diagnostics_router, prefix="/api/v1", dependencies=rate_limited)
+app.include_router(electric_vehicle_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(vehicle_gateway_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(simulation_sessions_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(test_runs_router, prefix="/api/v1", dependencies=rate_limited)
