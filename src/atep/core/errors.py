@@ -306,6 +306,34 @@ class DiagnosticContractError(ApplicationError):
         )
 
 
+class BatteryPackAlreadyExistsError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="battery_pack_already_exists",
+            message="The vehicle already has a battery pack.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class BatteryStateVersionConflictError(ApplicationError):
+    def __init__(self, *, current_version: int) -> None:
+        super().__init__(
+            code="battery_state_version_conflict",
+            message="The battery state was changed by another operation.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_version": current_version},
+        )
+
+
+class BatterySimulationCommandConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="battery_simulation_command_conflict",
+            message="The battery simulation command identifier was already used differently.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
 class CanDbcCatalogueAlreadyExistsError(ApplicationError):
     def __init__(self) -> None:
         super().__init__(

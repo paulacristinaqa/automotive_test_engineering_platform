@@ -1,5 +1,14 @@
 # Volume I architecture
 
+## Volume VI Electric-Vehicle Boundary
+
+The first Volume VI increment adds a vehicle-scoped battery aggregate beside the lightweight
+Volume II battery projection. It persists bounded cells, SOC/SOH, electrical and thermal state,
+BMS operating state, contactors, logical time, and exact command snapshots. Mutations are
+optimistic-versioned and idempotent; pack-level audit and outbox evidence commits atomically while
+excluding the full cell array. Future motor, charging, thermal, regeneration, and range modules
+consume this boundary without direct access to its tables.
+
 ## Architectural style
 
 The first increment is a **modular control-plane service** plus independently deployable

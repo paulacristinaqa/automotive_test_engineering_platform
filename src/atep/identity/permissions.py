@@ -22,6 +22,8 @@ class PermissionName(StrEnum):
     CAN_NETWORKS_MANAGE = "can_networks:manage"
     DIAGNOSTICS_READ = "diagnostics:read"
     DIAGNOSTICS_MANAGE = "diagnostics:manage"
+    ELECTRIC_VEHICLE_READ = "electric_vehicle:read"
+    ELECTRIC_VEHICLE_MANAGE = "electric_vehicle:manage"
     TEST_RUNS_READ = "test_runs:read"
     TEST_RUNS_WRITE = "test_runs:write"
     ENVIRONMENT_PROFILES_READ = "environment_profiles:read"
