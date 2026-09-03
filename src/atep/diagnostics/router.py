@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from atep.core.errors import DiagnosticContractError
 from atep.db.session import get_session
 from atep.diagnostics.models import (
+    DiagnosticCampaign,
     DiagnosticCommand,
     DiagnosticDataIdentifier,
     DiagnosticFlashState,
@@ -16,6 +17,8 @@ from atep.diagnostics.models import (
     DiagnosticTroubleCode,
 )
 from atep.diagnostics.schemas import (
+    DiagnosticCampaignCommand,
+    DiagnosticCampaignResponse,
     DiagnosticCommandResponse,
     DiagnosticEcuResetCommand,
     DiagnosticSessionControlCommand,
@@ -33,6 +36,10 @@ from atep.diagnostics.schemas import (
     FlashStateResponse,
     FlashTransferDataCommand,
     FlashTransferExitCommand,
+    ObdMode01Request,
+    ObdMode01Response,
+    ObdMode03Response,
+    ObdPidValue,
     RoutineControlCommand,
     RoutineCreate,
     RoutinePage,
@@ -46,6 +53,7 @@ from atep.diagnostics.service import (
     control_session,
     create_did,
     create_routine,
+    execute_diagnostic_campaign,
     get_or_create_flash_state,
     get_or_create_security_state,
     get_or_create_session,
@@ -53,9 +61,11 @@ from atep.diagnostics.service import (
     list_dtcs,
     list_routines,
     read_dids,
+    read_obd_mode_01,
     report_dtc,
     request_download,
     request_transfer_exit,
+    require_diagnostic_campaign,
     require_did,
     require_dtc,
     require_routine,
@@ -207,6 +217,93 @@ def flash_state_response(
         image_sha256=transfer.image_sha256,
         transfer_version=transfer.version,
     )
+
+
+def campaign_response(
+    campaign: DiagnosticCampaign, ecu: ElectronicControlUnit, *, duplicate: bool
+) -> DiagnosticCampaignResponse:
+    return DiagnosticCampaignResponse(
+        command_id=campaign.command_id,
+        ecu_id=ecu.identifier,
+        name=campaign.name,
+        transport=campaign.transport,
+        doip=campaign.doip_envelope,
+        status=campaign.status,
+        step_count=len(campaign.results),
+        results=campaign.results,
+        duplicate=duplicate,
+        created_at=campaign.created_at,
+    )
+
+
+@router.post("/obd/mode-01", response_model=ObdMode01Response)
+async def read_obd_current_data_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    payload: ObdMode01Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(diagnostics_read)],
+) -> ObdMode01Response:
+    _vehicle, ecu = await _context(session, vehicle_id=vehicle_id, ecu_id=ecu_id)
+    values = await read_obd_mode_01(session, ecu=ecu, request=payload)
+    return ObdMode01Response(
+        ecu_id=ecu.identifier,
+        values=[ObdPidValue.model_validate(value) for value in values],
+    )
+
+
+@router.get("/obd/mode-03", response_model=ObdMode03Response)
+async def read_obd_stored_dtcs_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _actor: Annotated[User, Depends(diagnostics_read)],
+) -> ObdMode03Response:
+    _vehicle, ecu = await _context(session, vehicle_id=vehicle_id, ecu_id=ecu_id)
+    dtcs, _total = await list_dtcs(session, ecu=ecu, limit=200, offset=0, status_mask=None)
+    return ObdMode03Response(ecu_id=ecu.identifier, dtcs=[dtc_response(dtc, ecu) for dtc in dtcs])
+
+
+@router.post(
+    "/campaigns", response_model=DiagnosticCampaignResponse, status_code=status.HTTP_201_CREATED
+)
+async def execute_diagnostic_campaign_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    command: DiagnosticCampaignCommand,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(diagnostics_manage)],
+) -> DiagnosticCampaignResponse:
+    vehicle, ecu = await _context(session, vehicle_id=vehicle_id, ecu_id=ecu_id)
+    campaign, duplicate = await execute_diagnostic_campaign(
+        session,
+        vehicle=vehicle,
+        ecu=ecu,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(campaign, attribute_names=["created_at"])
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+        response.headers["X-Idempotent-Replay"] = "true"
+    return campaign_response(campaign, ecu, duplicate=duplicate)
+
+
+@router.get("/campaigns/{command_id}", response_model=DiagnosticCampaignResponse)
+async def get_diagnostic_campaign_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    command_id: Annotated[str, Path(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._:-]+$")],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(diagnostics_read)],
+) -> DiagnosticCampaignResponse:
+    _vehicle, ecu = await _context(session, vehicle_id=vehicle_id, ecu_id=ecu_id)
+    campaign = await require_diagnostic_campaign(session, ecu=ecu, command_id=command_id)
+    return campaign_response(campaign, ecu, duplicate=False)
 
 
 @router.get("/flash/state", response_model=FlashStateResponse)

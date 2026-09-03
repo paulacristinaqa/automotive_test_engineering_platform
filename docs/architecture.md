@@ -401,7 +401,7 @@ to DTC reports, but the two lifecycles remain explicit and independently testabl
 V-1 implements Diagnostic Session Control (`0x10`), the Read DTC Information (`0x19`) query
 boundary, and Clear Diagnostic Information (`0x14`) for the all-DTC group. Positive response IDs
 and selected negative response codes are retained as protocol evidence while HTTP/OpenAPI remains
-the public control-plane transport. ISO-TP, CAN PDU framing, and DoIP are future adapters.
+the public control-plane transport. ISO-TP and CAN PDU framing remain future adapters.
 
 V-2 adds an ECU-scoped typed DID catalogue plus Read Data by Identifier (`0x22`) and Write Data by
 Identifier (`0x2E`). Reads are bounded to sixteen unique identifiers; writes require an explicitly
@@ -436,6 +436,14 @@ version. Programming session plus level-1 Security Access is required throughout
 never placed in diagnostic command requests, audit, outbox, or logs, and completed transfers purge
 the assembled bytes after SHA-256 verification. Transfer state, firmware activation, command
 evidence, audit, and outbox share one PostgreSQL transaction.
+
+V-7 completes the diagnostic baseline with an OBD-II compatibility projection, a logical DoIP
+boundary, and diagnostic campaigns. Mode 01 resolves four supported PIDs through typed DIDs;
+Mode 03 reuses stored DTCs. The DoIP envelope validates protocol/routing metadata and distinct
+logical addresses but does not own sockets or wire framing. Campaigns persist one to 32 ordered
+OBD/UDS read results with ECU-scoped idempotency. Campaign, minimized audit evidence, and the
+transactional outbox event commit together, while DID values and DTC snapshots remain outside
+shared evidence.
 
 Each ECU owns one current, optimistic-versioned diagnostic session. Mutating commands have
 ECU-scoped idempotency identities. Exact retry returns stored evidence; changed reuse is rejected.

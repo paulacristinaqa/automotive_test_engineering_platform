@@ -4,10 +4,10 @@ Volume V owns diagnostic protocol semantics. Volume III continues to own ECU exe
 signals, and internal fault lifecycle; Volume V converts selected fault evidence into persisted
 Diagnostic Trouble Codes without making the two representations identical.
 
-## V-1 through V-6 Request Flow
+## V-1 through V-7 Request Flow
 
 Authenticated client -> FastAPI diagnostic route -> diagnostic RBAC -> vehicle and ECU lookup ->
-UDS domain service -> PostgreSQL diagnostic state/evidence + audit + transactional outbox -> stable
+diagnostic domain service -> PostgreSQL state/evidence + audit + transactional outbox -> stable
 response or platform error envelope with a UDS negative response code.
 
 ## Supported UDS Baseline
@@ -25,7 +25,9 @@ response or platform error envelope with a UDS negative response code.
 Positive response service IDs are calculated as request service ID plus `0x40`. The domain reports
 NRC `0x22` for stale versions, `0x31` for invalid values/ranges, and `0x7F` when a DID service is not
 supported in the active session. Wire-level PDU framing,
-ISO-TP, CAN transport, and DoIP remain adapter responsibilities rather than HTTP API concerns.
+ISO-TP and CAN transport remain adapter responsibilities rather than HTTP API concerns. V-7 adds
+the validated logical DoIP boundary, but deliberately leaves TCP/UDP framing and discovery outside
+the domain service.
 
 ## Consistency and Evidence
 
@@ -70,6 +72,15 @@ and stores only block size and SHA-256 in command/shared evidence. Request Trans
 the exact declared byte count and image digest before atomically updating the ECU profile/version.
 The completed state purges raw bytes and retains only bounded metadata and the digest. No cloud,
 GPU, paid API, or real flashing hardware is required.
+
+V-7 projects four supported OBD-II Mode 01 PIDs through typed DIDs: coolant temperature (`0x05`),
+vehicle speed (`0x0D`), control-module voltage (`0x42`), and hybrid-battery remaining life (`0x5B`).
+Mode 03 reuses stored DTCs. A DoIP envelope validates protocol version, routing activation type,
+and distinct 16-bit source/target logical addresses without creating a socket. Persistent campaigns
+run one to 32 ordered OBD Mode 01, OBD Mode 03, or UDS `0x22` read steps. Exact replay returns the
+stored result; changed reuse returns the existing stable diagnostic command conflict. Campaign,
+audit, and `atep.diagnostics.campaign.completed.v1` outbox evidence share one transaction, while
+shared evidence contains only step types/counts rather than diagnostic values or snapshots.
 
 The current POST DTC endpoint is a controlled simulator/test-fixture ingestion boundary. A later
 bridge will translate confirmed Volume III fault candidates or received UDS responses into this

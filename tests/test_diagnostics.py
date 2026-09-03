@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from atep.audit.models import AuditRecord
 from atep.core.errors import DiagnosticCommandConflictError, DiagnosticContractError
 from atep.diagnostics.models import (
+    DiagnosticCampaign,
     DiagnosticCommand,
     DiagnosticDataIdentifier,
     DiagnosticFlashState,
@@ -20,16 +21,23 @@ from atep.diagnostics.models import (
     DiagnosticTroubleCode,
 )
 from atep.diagnostics.schemas import (
+    DiagnosticCampaignCommand,
+    DiagnosticCampaignStep,
+    DiagnosticCampaignStepType,
     DiagnosticEcuResetCommand,
     DiagnosticSessionControlCommand,
     DiagnosticSessionType,
+    DiagnosticTransport,
     DidCreate,
     DidReadCommand,
     DidWriteCommand,
+    DoipEnvelope,
     DtcReportCommand,
     FlashRequestDownloadCommand,
     FlashTransferDataCommand,
     FlashTransferExitCommand,
+    ObdMode01Request,
+    ObdPid,
     RoutineControlCommand,
     RoutineCreate,
     SecurityAccessCommand,
@@ -42,7 +50,9 @@ from atep.diagnostics.service import (
     create_did,
     create_routine,
     derive_simulated_security_key,
+    execute_diagnostic_campaign,
     read_dids,
+    read_obd_mode_01,
     report_dtc,
     request_download,
     request_transfer_exit,
@@ -62,6 +72,7 @@ class FakeSession:
     def __init__(self, *scalar_values: Any) -> None:
         self.scalar_values = list(scalar_values)
         self.added: list[Any] = []
+        self.execute_values: list[Any] = []
 
     async def scalar(self, _: Any) -> Any:
         return self.scalar_values.pop(0) if self.scalar_values else None
@@ -73,6 +84,20 @@ class FakeSession:
         for value in self.added:
             if getattr(value, "id", None) is None:
                 value.id = uuid4()
+
+    async def execute(self, _: Any) -> Any:
+        return self.execute_values.pop(0)
+
+
+class FakeScalarResult:
+    def __init__(self, values: list[Any]) -> None:
+        self.values = values
+
+    def scalars(self) -> "FakeScalarResult":
+        return self
+
+    def all(self) -> list[Any]:
+        return self.values
 
 
 def vehicle_and_ecu() -> tuple[Vehicle, ElectronicControlUnit]:
@@ -1403,3 +1428,170 @@ def test_diagnostic_command_model_preserves_uds_service_identity() -> None:
         requested_by_user_id=uuid4(),
     )
     assert command.service_id + 0x40 == 0x59
+
+
+def obd_did(
+    ecu: ElectronicControlUnit,
+    *,
+    identifier: int,
+    name: str,
+    value: int | float,
+    unit: str,
+) -> DiagnosticDataIdentifier:
+    return DiagnosticDataIdentifier(
+        id=uuid4(),
+        ecu_id=ecu.id,
+        identifier=identifier,
+        name=name,
+        description="",
+        data_type="decimal" if isinstance(value, float) else "integer",
+        unit=unit,
+        writable=False,
+        readable_sessions=["default", "extended"],
+        writable_sessions=[],
+        value=value,
+        minimum=None,
+        maximum=None,
+        max_length=None,
+        version=2,
+        created_by_user_id=uuid4(),
+    )
+
+
+def test_obd_and_doip_contracts_are_bounded_and_transport_consistent() -> None:
+    request = ObdMode01Request(pids=[ObdPid.VEHICLE_SPEED])
+    assert request.pids == [0x0D]
+    with pytest.raises(ValidationError, match="must be unique"):
+        ObdMode01Request(pids=[ObdPid.VEHICLE_SPEED, ObdPid.VEHICLE_SPEED])
+    with pytest.raises(ValidationError, match="must differ"):
+        DoipEnvelope(source_address=0x0E00, target_address=0x0E00)
+    with pytest.raises(ValidationError, match="requires a DoIP envelope"):
+        DiagnosticCampaignCommand(
+            command_id="campaign-invalid-doip",
+            name="Invalid DoIP campaign",
+            transport=DiagnosticTransport.DOIP,
+            steps=[
+                DiagnosticCampaignStep(
+                    name="Read DTCs", step_type=DiagnosticCampaignStepType.OBD_MODE_03
+                )
+            ],
+        )
+
+
+@pytest.mark.asyncio
+async def test_obd_mode_01_resolves_supported_pid_through_typed_did() -> None:
+    _vehicle, ecu = vehicle_and_ecu()
+    speed = obd_did(
+        ecu, identifier=0xF40D, name="Vehicle speed", value=42, unit="kilometres_per_hour"
+    )
+    session = cast(AsyncSession, FakeSession(speed))
+    values = await read_obd_mode_01(
+        session, ecu=ecu, request=ObdMode01Request(pids=[ObdPid.VEHICLE_SPEED])
+    )
+    assert values == [
+        {
+            "pid": 0x0D,
+            "pid_hex": "0x0D",
+            "did_identifier": 0xF40D,
+            "name": "Vehicle speed",
+            "value": 42,
+            "unit": "kilometres_per_hour",
+            "did_version": 2,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_doip_campaign_combines_obd_uds_and_dtc_evidence_atomically() -> None:
+    vehicle, ecu = vehicle_and_ecu()
+    speed = obd_did(
+        ecu, identifier=0xF40D, name="Vehicle speed", value=42, unit="kilometres_per_hour"
+    )
+    temperature = writable_temperature_did(ecu)
+    now = datetime(2026, 8, 25, 12, 0, tzinfo=UTC)
+    dtc = DiagnosticTroubleCode(
+        id=uuid4(),
+        ecu_id=ecu.id,
+        code="0A80FF",
+        status_mask=0x09,
+        severity="critical",
+        description="Battery degradation",
+        occurrence_count=2,
+        first_seen_ms=1_000,
+        last_seen_ms=2_500,
+        snapshot={},
+        version=2,
+        created_at=now,
+        updated_at=now,
+    )
+    command = DiagnosticCampaignCommand(
+        command_id="campaign-doip-001",
+        name="EV diagnostic health check",
+        transport=DiagnosticTransport.DOIP,
+        doip=DoipEnvelope(source_address=0x0E00, target_address=0x0001),
+        steps=[
+            DiagnosticCampaignStep(
+                name="Read vehicle speed",
+                step_type=DiagnosticCampaignStepType.OBD_MODE_01,
+                pids=[ObdPid.VEHICLE_SPEED],
+            ),
+            DiagnosticCampaignStep(
+                name="Read stored DTCs", step_type=DiagnosticCampaignStepType.OBD_MODE_03
+            ),
+            DiagnosticCampaignStep(
+                name="Read battery temperature",
+                step_type=DiagnosticCampaignStepType.UDS_READ_DIDS,
+                identifiers=[0xF190],
+            ),
+        ],
+    )
+    fake = FakeSession(None, speed, 1, temperature)
+    fake.execute_values = [FakeScalarResult([dtc])]
+    campaign, duplicate = await execute_diagnostic_campaign(
+        cast(AsyncSession, fake),
+        vehicle=vehicle,
+        ecu=ecu,
+        command=command,
+        actor_user_id=uuid4(),
+        correlation_id=uuid4(),
+    )
+    assert duplicate is False
+    assert campaign.status == "completed"
+    assert [result["status"] for result in campaign.results] == ["passed"] * 3
+    assert campaign.results[1]["dtcs"][0]["code"] == "0A80FF"
+    assert campaign.results[2]["positive_response_service_id"] == 0x62
+    assert any(
+        isinstance(item, OutboxEvent)
+        and item.event_type == "atep.diagnostics.campaign.completed.v1"
+        for item in fake.added
+    )
+    assert any(
+        isinstance(item, AuditRecord) and item.action == "diagnostics.campaign_completed"
+        for item in fake.added
+    )
+
+    replay, replayed = await execute_diagnostic_campaign(
+        cast(AsyncSession, FakeSession(campaign)),
+        vehicle=vehicle,
+        ecu=ecu,
+        command=command,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    assert replay is campaign
+    assert replayed is True
+
+
+def test_diagnostic_campaign_model_keeps_protocol_boundary_explicit() -> None:
+    campaign = DiagnosticCampaign(
+        ecu_id=uuid4(),
+        command_id="campaign-model-001",
+        name="Diagnostic health check",
+        transport="doip",
+        doip_envelope={"source_address": 0x0E00, "target_address": 0x0001},
+        request={"steps": []},
+        results=[],
+        status="completed",
+        requested_by_user_id=uuid4(),
+    )
+    assert campaign.transport == "doip"

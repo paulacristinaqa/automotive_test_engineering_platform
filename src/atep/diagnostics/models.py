@@ -246,3 +246,28 @@ class DiagnosticTroubleCode(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     last_seen_ms: Mapped[int] = mapped_column(BigInteger)
     snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     version: Mapped[int] = mapped_column(Integer, default=1)
+
+
+class DiagnosticCampaign(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "diagnostic_campaigns"
+    __table_args__ = (
+        UniqueConstraint("ecu_id", "command_id", name="uq_diagnostic_campaign_command"),
+        CheckConstraint("transport IN ('local', 'doip')", name="ck_diagnostic_campaign_transport"),
+        CheckConstraint("status IN ('completed')", name="ck_diagnostic_campaign_status"),
+    )
+
+    ecu_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("electronic_control_units.id", ondelete="CASCADE"),
+        index=True,
+    )
+    command_id: Mapped[str] = mapped_column(String(64))
+    name: Mapped[str] = mapped_column(String(80))
+    transport: Mapped[str] = mapped_column(String(16), index=True)
+    doip_envelope: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    request: Mapped[dict[str, Any]] = mapped_column(JSON)
+    results: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String(16), default="completed", index=True)
+    requested_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )

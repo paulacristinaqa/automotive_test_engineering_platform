@@ -15,6 +15,7 @@ from atep.core.errors import (
     ResourceNotFoundError,
 )
 from atep.diagnostics.models import (
+    DiagnosticCampaign,
     DiagnosticCommand,
     DiagnosticDataIdentifier,
     DiagnosticFlashState,
@@ -25,6 +26,8 @@ from atep.diagnostics.models import (
     DiagnosticTroubleCode,
 )
 from atep.diagnostics.schemas import (
+    DiagnosticCampaignCommand,
+    DiagnosticCampaignStepType,
     DiagnosticEcuResetCommand,
     DiagnosticSessionControlCommand,
     DidCreate,
@@ -37,6 +40,8 @@ from atep.diagnostics.schemas import (
     FlashRequestDownloadCommand,
     FlashTransferDataCommand,
     FlashTransferExitCommand,
+    ObdMode01Request,
+    ObdPid,
     RoutineControlCommand,
     RoutineControlType,
     RoutineCreate,
@@ -51,6 +56,13 @@ from atep.ecus.schemas import EcuResetCommand, EcuResetMode
 from atep.ecus.service import execute_ecu_reset
 from atep.events.outbox import enqueue_event
 from atep.vehicles.models import Vehicle
+
+OBD_PID_DID_MAPPING: dict[ObdPid, int] = {
+    ObdPid.ENGINE_COOLANT_TEMPERATURE: 0xF405,
+    ObdPid.VEHICLE_SPEED: 0xF40D,
+    ObdPid.CONTROL_MODULE_VOLTAGE: 0xF442,
+    ObdPid.HYBRID_BATTERY_REMAINING_LIFE: 0xF45B,
+}
 
 
 async def get_or_create_session(
@@ -1242,6 +1254,157 @@ async def request_transfer_exit(
         action="diagnostics.flash_completed",
     )
     return execution, False
+
+
+async def read_obd_mode_01(
+    session: AsyncSession,
+    *,
+    ecu: ElectronicControlUnit,
+    request: ObdMode01Request,
+) -> list[dict[str, object]]:
+    """Resolve the supported SAE-style PIDs through the typed UDS DID catalogue."""
+    values: list[dict[str, object]] = []
+    for pid in request.pids:
+        did_identifier = OBD_PID_DID_MAPPING[pid]
+        did = await require_did(session, ecu=ecu, identifier=did_identifier)
+        values.append(
+            {
+                "pid": int(pid),
+                "pid_hex": f"0x{int(pid):02X}",
+                "did_identifier": did.identifier,
+                "name": did.name,
+                "value": did.value,
+                "unit": did.unit,
+                "did_version": did.version,
+            }
+        )
+    return values
+
+
+async def execute_diagnostic_campaign(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    ecu: ElectronicControlUnit,
+    command: DiagnosticCampaignCommand,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> tuple[DiagnosticCampaign, bool]:
+    request = command.model_dump(mode="json")
+    existing = await session.scalar(
+        select(DiagnosticCampaign).where(
+            DiagnosticCampaign.ecu_id == ecu.id,
+            DiagnosticCampaign.command_id == command.command_id,
+        )
+    )
+    if existing is not None:
+        if existing.request == request:
+            return existing, True
+        raise DiagnosticCommandConflictError()
+
+    results: list[dict[str, Any]] = []
+    for index, step in enumerate(command.steps):
+        if step.step_type == DiagnosticCampaignStepType.OBD_MODE_01:
+            values = await read_obd_mode_01(
+                session, ecu=ecu, request=ObdMode01Request(pids=step.pids)
+            )
+            payload: dict[str, Any] = {"mode": 0x01, "values": values}
+        elif step.step_type == DiagnosticCampaignStepType.OBD_MODE_03:
+            dtcs, _ = await list_dtcs(session, ecu=ecu, limit=200, offset=0, status_mask=None)
+            payload = {
+                "mode": 0x03,
+                "dtcs": [
+                    {
+                        "code": dtc.code,
+                        "status_mask": dtc.status_mask,
+                        "severity": dtc.severity,
+                        "occurrence_count": dtc.occurrence_count,
+                    }
+                    for dtc in dtcs
+                ],
+            }
+        else:
+            dids = [
+                await require_did(session, ecu=ecu, identifier=identifier)
+                for identifier in step.identifiers
+            ]
+            payload = {
+                "service_id": int(UdsServiceId.READ_DATA_BY_IDENTIFIER),
+                "positive_response_service_id": int(UdsServiceId.READ_DATA_BY_IDENTIFIER) + 0x40,
+                "values": [
+                    {
+                        "identifier": did.identifier,
+                        "value": did.value,
+                        "unit": did.unit,
+                        "version": did.version,
+                    }
+                    for did in dids
+                ],
+            }
+        results.append(
+            {
+                "index": index,
+                "name": step.name,
+                "step_type": step.step_type.value,
+                "status": "passed",
+                **payload,
+            }
+        )
+
+    campaign = DiagnosticCampaign(
+        ecu_id=ecu.id,
+        command_id=command.command_id,
+        name=command.name,
+        transport=command.transport.value,
+        doip_envelope=command.doip.model_dump(mode="json") if command.doip else None,
+        request=request,
+        results=results,
+        status="completed",
+        requested_by_user_id=actor_user_id,
+    )
+    session.add(campaign)
+    await session.flush()
+    evidence = {
+        **_base_evidence(vehicle, ecu),
+        "campaign_id": str(campaign.id),
+        "command_id": campaign.command_id,
+        "transport": campaign.transport,
+        "status": campaign.status,
+        "step_count": len(results),
+        "step_types": [result["step_type"] for result in results],
+    }
+    enqueue_event(
+        session,
+        event_type="atep.diagnostics.campaign.completed.v1",
+        aggregate_type="diagnostic_campaign",
+        aggregate_id=campaign.id,
+        payload=evidence,
+        correlation_id=correlation_id,
+    )
+    record_audit(
+        session,
+        actor_user_id=actor_user_id,
+        action="diagnostics.campaign_completed",
+        resource_type="diagnostic_campaign",
+        resource_id=campaign.id,
+        correlation_id=correlation_id,
+        details=evidence,
+    )
+    return campaign, False
+
+
+async def require_diagnostic_campaign(
+    session: AsyncSession, *, ecu: ElectronicControlUnit, command_id: str
+) -> DiagnosticCampaign:
+    campaign = await session.scalar(
+        select(DiagnosticCampaign).where(
+            DiagnosticCampaign.ecu_id == ecu.id,
+            DiagnosticCampaign.command_id == command_id,
+        )
+    )
+    if campaign is None:
+        raise ResourceNotFoundError("diagnostic campaign")
+    return campaign
 
 
 async def report_dtc(

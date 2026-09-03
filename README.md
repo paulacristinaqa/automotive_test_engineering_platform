@@ -14,13 +14,13 @@ analysis, and enterprise fleet capabilities.
 
 The repository contains the executable foundation of **Volume I — Core Platform**, the completed
 bounded baseline of **Volume II — Digital Vehicle**, the first seven implemented increments of
-**Volume III — ECU Simulator**, **Volume IV — CAN Network**, and the V-1 through V-6 diagnostic
+**Volume III — ECU Simulator**, **Volume IV — CAN Network**, and the complete V-1 through V-7 diagnostic
 foundation with UDS sessions, DTC persistence, typed data, deterministic routines, Security Access,
 ECU Reset orchestration, and a bounded digest-verified ECU flash pipeline.
 Implemented behavior is backed by requirements, architecture decisions, migrations, automated
 tests, a disposable integration environment, and an English engineering workbook.
 
-> **Project status:** active development. Volumes III and IV are baselined; Volume V includes
+> **Project status:** active development. Volumes III, IV, and V are baselined; Volume V includes
 > diagnostic sessions, DTC persistence, typed Data Identifiers, and UDS services `0x10`, `0x14`,
 > `0x19`, `0x22`, `0x2E`, Routine Control `0x31`, Security Access `0x27`, ECU Reset `0x11`, and flash
 > services `0x34`/`0x36`/`0x37`. The first
@@ -358,7 +358,7 @@ operational guidance, and review worksheets.
 | II | Digital Vehicle | Baseline complete — increments II-1 through II-6 implemented |
 | III | ECU Simulator | Baseline complete — increments III-1 through III-7 implemented |
 | IV | CAN Network | Implemented — increments IV-1 through IV-7 |
-| V | Diagnostics | In progress — increments V-1 through V-6 implemented |
+| V | Diagnostics | Baseline complete — increments V-1 through V-7 implemented |
 | VI | Electric Vehicle | Planned |
 | VII | ADAS | Planned |
 | VIII | Test Framework | Planned |
