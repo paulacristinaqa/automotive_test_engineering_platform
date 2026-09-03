@@ -266,6 +266,7 @@ source .venv/bin/activate
 | Environment profiles | `/api/v1/environment-profiles` and lifecycle status | `environment_profiles:read`, `environment_profiles:manage` |
 | Diagnostics | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics` | `diagnostics:read`, `diagnostics:manage` |
 | Electric vehicle battery | `/api/v1/vehicles/{vehicle_id}/electric/battery` and `/steps` | `electric_vehicle:read`, `electric_vehicle:manage` |
+| Electric motor and inverter | `/api/v1/vehicles/{vehicle_id}/electric/powertrain` and `/steps` | `electric_vehicle:read`, `electric_vehicle:manage` |
 | Health | `/health/live`, `/health/ready` | Development probe policy |
 
 All API failures follow a stable correlation-aware error envelope. Passwords, password hashes,
@@ -362,7 +363,7 @@ operational guidance, and review worksheets.
 | III | ECU Simulator | Baseline complete — increments III-1 through III-7 implemented |
 | IV | CAN Network | Implemented — increments IV-1 through IV-7 |
 | V | Diagnostics | Baseline complete — increments V-1 through V-7 implemented |
-| VI | Electric Vehicle | In progress - VI-1 battery and BMS foundation implemented |
+| VI | Electric Vehicle | In progress - VI-1 battery/BMS and VI-2 motor/inverter implemented |
 | VII | ADAS | Planned |
 | VIII | Test Framework | Planned |
 | IX | AI Test Engineer | Planned |

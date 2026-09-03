@@ -75,3 +75,61 @@ class BatteryPackResponse(BaseModel):
         if len(self.cells) != self.series_cell_count:
             raise ValueError("cells must match series_cell_count")
         return self
+
+
+class DriveMode(StrEnum):
+    ECO = "eco"
+    NORMAL = "normal"
+    SPORT = "sport"
+
+
+class PowertrainOperatingState(StrEnum):
+    STANDBY = "standby"
+    READY = "ready"
+    DERATED = "derated"
+    PROTECTION = "protection"
+
+
+class MotorInverterCreate(BaseModel):
+    max_torque_nm: float = Field(default=400.0, gt=0.0, le=2_000.0)
+    max_speed_rpm: int = Field(default=16_000, ge=1_000, le=30_000)
+    max_inverter_power_kw: float = Field(default=180.0, gt=0.0, le=1_500.0)
+    base_efficiency_pct: float = Field(default=94.0, ge=50.0, le=99.5)
+    initial_motor_temperature_c: float = Field(default=25.0, ge=-40.0, le=140.0)
+    initial_inverter_temperature_c: float = Field(default=25.0, ge=-40.0, le=100.0)
+
+
+class MotorSimulationCommand(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    command_id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._:-]+$")
+    duration_ms: int = Field(ge=1, le=3_600_000)
+    requested_torque_nm: float = Field(ge=0.0, le=2_000.0)
+    motor_speed_rpm: int = Field(ge=0, le=30_000)
+    drive_mode: DriveMode = DriveMode.NORMAL
+    ambient_temperature_c: float = Field(default=25.0, ge=-50.0, le=80.0)
+    expected_version: int = Field(ge=1)
+
+
+class MotorInverterResponse(BaseModel):
+    vehicle_id: str
+    max_torque_nm: float
+    max_speed_rpm: int
+    max_inverter_power_kw: float
+    base_efficiency_pct: float
+    requested_torque_nm: float
+    delivered_torque_nm: float
+    motor_speed_rpm: int
+    mechanical_power_kw: float
+    electrical_power_kw: float
+    efficiency_pct: float
+    power_loss_kw: float
+    battery_power_limit_kw: float
+    motor_temperature_c: float
+    inverter_temperature_c: float
+    drive_mode: DriveMode
+    operating_state: PowertrainOperatingState
+    limiting_reason: str | None
+    version: int
+    simulation_time_ms: int
+    duplicate: bool = False

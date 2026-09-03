@@ -3,7 +3,7 @@
 | Increment | Outcome | Status |
 |---|---|---|
 | VI-1 | Persistent battery pack, bounded cell model, SOC/SOH, deterministic thermal behavior, BMS protection, RBAC, audit, and outbox | Implemented |
-| VI-2 | Motor torque, inverter efficiency, electrical power, and drive-mode limits | Planned |
+| VI-2 | Motor torque, inverter efficiency, electrical power, and drive-mode limits | Implemented |
 | VI-3 | Regenerative-braking strategy and blended friction braking | Planned |
 | VI-4 | AC/DC charging sessions, charge curves, limits, and fault handling | Planned |
 | VI-5 | Active thermal-management loops for battery, motor, and cabin | Planned |
@@ -21,5 +21,10 @@ and BMS thresholds select normal, warning, or protection behavior. Protection op
 and makes delivered current zero. Commands use optimistic versioning, exact replay, stable changed-
 reuse conflicts, bounded inputs, minimized audit/outbox evidence, and no wall-clock simulation loop.
 
-The recommended next increment is VI-2: motor, inverter, torque delivery, efficiency maps, and
-power limits derived from the battery's available electrical state.
+VI-2 adds one motor/inverter aggregate per vehicle, bounded torque and speed, eco/normal/sport
+drive modes, a deterministic efficiency surface, mechanical/electrical power, thermal losses,
+motor and inverter temperature, protection, and battery-derived power limits. Negative torque is
+deliberately rejected until VI-3 defines regenerative and blended braking semantics.
+
+The recommended next increment is VI-3: regenerative-braking strategy and blended friction
+braking with explicit energy recovery and battery charge-acceptance limits.

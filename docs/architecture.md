@@ -6,8 +6,14 @@ The first Volume VI increment adds a vehicle-scoped battery aggregate beside the
 Volume II battery projection. It persists bounded cells, SOC/SOH, electrical and thermal state,
 BMS operating state, contactors, logical time, and exact command snapshots. Mutations are
 optimistic-versioned and idempotent; pack-level audit and outbox evidence commits atomically while
-excluding the full cell array. Future motor, charging, thermal, regeneration, and range modules
-consume this boundary without direct access to its tables.
+excluding the full cell array.
+
+VI-2 adds a separate one-per-vehicle motor/inverter aggregate. Its commanded steps lock and read
+the battery aggregate, derive propulsion availability from voltage, contactors, and BMS state, and
+then calculate torque, mechanical/electrical power, efficiency loss, and thermal behavior. This
+keeps battery and propulsion ownership explicit while allowing deterministic cross-domain tests.
+Future charging, thermal, regeneration, and range modules consume these boundaries without direct
+access to their tables.
 
 ## Architectural style
 

@@ -18,6 +18,20 @@
 | EV-F-012 | Reusing a command identifier with different content shall return a stable conflict. | Changed-reuse test |
 | EV-F-013 | A stale expected version shall return the current battery state version. | Optimistic-concurrency test |
 | EV-F-014 | Battery read and mutation operations shall require dedicated RBAC permissions. | Permission catalogue and API dependencies |
+| EV-F-015 | The platform shall create at most one motor/inverter state for a vehicle that already owns a battery pack. | Migration `0038`; creation tests |
+| EV-F-016 | The powertrain shall expose requested and delivered torque, speed, mechanical power, electrical power, efficiency, loss, and temperature. | Powertrain response contract |
+| EV-F-017 | Eco, normal, and sport modes shall apply deterministic torque ceilings of 60%, 85%, and 100%. | Drive-mode tests |
+| EV-F-018 | Delivered torque shall not exceed the configured motor torque limit. | Torque-limit tests |
+| EV-F-019 | Torque shall be zero above the configured motor speed limit. | Overspeed test |
+| EV-F-020 | Mechanical power shall be calculated from delivered torque and angular speed. | Power calculation test |
+| EV-F-021 | Electrical power shall include deterministic inverter/motor efficiency loss. | Efficiency and loss test |
+| EV-F-022 | Available propulsion power shall be constrained by inverter rating and current battery voltage, contactor, and BMS state. | Battery-limit tests |
+| EV-F-023 | Open battery contactors or BMS protection shall prevent propulsion torque. | Battery-unavailable test |
+| EV-F-024 | Motor or inverter thermal protection shall remove delivered torque and power. | Thermal-protection test |
+| EV-F-025 | Motor commands shall use optimistic versioning and exact idempotent replay. | Conflict and replay tests |
+| EV-F-026 | Motor creation and completed steps shall produce atomic audit and outbox evidence. | Service evidence tests |
+| EV-F-027 | Negative torque shall be rejected until VI-3 defines regenerative braking. | Contract-bound test |
+| EV-F-028 | Powertrain read and mutation operations shall use the Volume VI RBAC permissions. | API dependencies |
 
 ## Non-Functional Requirements
 
@@ -31,6 +45,10 @@
 | EV-NF-006 | Evidence minimization | Shared audit/events exclude the full per-cell array. |
 | EV-NF-007 | Local-first operation | VI-1 requires no paid API, cloud account, or GPU. |
 | EV-NF-008 | Traceability | Requirements, implementation, migration, automated tests, and workbook remain linked. |
+| EV-NF-009 | Cross-domain consistency | Each motor step reads the locked authoritative battery state before deriving power availability. |
+| EV-NF-010 | Explainability | Every derated or protected result publishes a stable limiting reason. |
+| EV-NF-011 | Bounded thermal behavior | Motor and inverter temperature inputs and protection thresholds are explicit. |
+| EV-NF-012 | Local-first operation | VI-2 uses no paid service, external API, cloud account, or GPU. |
 
 ## API Traceability
 
@@ -39,3 +57,6 @@
 | `POST /api/v1/vehicles/{vehicle_id}/electric/battery` | EV-F-001 through EV-F-004, EV-F-010, EV-F-014 |
 | `GET /api/v1/vehicles/{vehicle_id}/electric/battery` | EV-F-004, EV-F-014 |
 | `POST /api/v1/vehicles/{vehicle_id}/electric/battery/steps` | EV-F-005 through EV-F-014 |
+| `POST /api/v1/vehicles/{vehicle_id}/electric/powertrain` | EV-F-015, EV-F-016, EV-F-026, EV-F-028 |
+| `GET /api/v1/vehicles/{vehicle_id}/electric/powertrain` | EV-F-016, EV-F-022, EV-F-028 |
+| `POST /api/v1/vehicles/{vehicle_id}/electric/powertrain/steps` | EV-F-017 through EV-F-028 |
