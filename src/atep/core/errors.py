@@ -334,6 +334,34 @@ class BatterySimulationCommandConflictError(ApplicationError):
         )
 
 
+class MotorInverterAlreadyExistsError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="motor_inverter_already_exists",
+            message="The vehicle already has a motor and inverter state.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class MotorStateVersionConflictError(ApplicationError):
+    def __init__(self, *, current_version: int) -> None:
+        super().__init__(
+            code="motor_state_version_conflict",
+            message="The motor and inverter state was changed by another operation.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_version": current_version},
+        )
+
+
+class MotorSimulationCommandConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="motor_simulation_command_conflict",
+            message="The motor simulation command identifier was already used differently.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
 class CanDbcCatalogueAlreadyExistsError(ApplicationError):
     def __init__(self) -> None:
         super().__init__(

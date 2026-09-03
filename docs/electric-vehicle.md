@@ -46,11 +46,44 @@ Creation emits `atep.electric_vehicle.battery.created.v1`; steps emit
 `atep.electric_vehicle.battery.step.completed.v1`. Audit and event evidence includes pack-level
 state and versions but intentionally excludes the full cell array.
 
-## Deliberate VI-1 Limits
+## VI-2 Motor and Inverter
+
+VI-2 adds a separate motor/inverter aggregate whose available propulsion power is derived from the
+authoritative battery pack at every commanded step. The model exposes requested and delivered
+torque, motor speed, mechanical and electrical power, efficiency, loss, motor temperature,
+inverter temperature, drive mode, operating state, and a stable limiting reason.
+
+```text
+Motor command
+    -> motor state and battery row locks
+    -> optimistic version check
+    -> drive-mode torque ceiling
+    -> battery/inverter electrical-power ceiling
+    -> deterministic efficiency and thermal calculations
+    -> ready, derated, or protection classification
+    -> motor step + audit + outbox (one transaction)
+```
+
+- Eco, normal, and sport expose 60%, 85%, and 100% of configured peak torque.
+- Mechanical power follows torque multiplied by angular speed; electrical power accounts for the
+  deterministic efficiency surface, and their difference is recorded as power loss.
+- Battery contactors and BMS protection can reduce available power to zero. BMS warning reduces
+  the assumed battery current ceiling from 1,000 A to 600 A.
+- Speed above the configured motor limit produces zero delivered torque.
+- Motor temperature at 150 C or inverter temperature at 110 C enters protection and removes
+  delivered torque and power.
+- Negative requested torque is rejected because regenerative braking belongs to VI-3.
+- Commands preserve the VI-1 logical-time, optimistic-version, exact-replay, audit, and outbox
+  patterns.
+
+## Deliberate VI-1 and VI-2 Limits
 
 - SOH is persisted but degradation and cycle aging begin in a later increment.
 - Cell balancing, sensor faults, thermal propagation, modules in parallel, and chemistry-specific
   voltage curves are future model refinements.
-- Motor/inverter, regenerative braking, charging, thermal-control actuators, and range estimation
-  remain VI-2 through VI-6 work.
+- Regenerative braking, charging, thermal-control actuators, and range estimation remain VI-3
+  through VI-6 work.
+- VI-2 uses an explainable analytic efficiency surface rather than a production calibration map.
+- The motor step reads battery availability but does not yet debit battery SOC; full coupled energy
+  flow is introduced with cross-domain drive scenarios.
 - Cross-volume CAN, UDS, ECU, and automated-test orchestration is planned for VI-7.

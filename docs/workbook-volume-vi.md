@@ -5,17 +5,17 @@
 | Field | Value |
 |---|---|
 | Document | ATEP Engineering Workbook - Volume VI: Electric Vehicle |
-| Version | 0.1.0 |
+| Version | 0.2.0 |
 | Baseline date | 3 September 2026 |
-| Status | VI-1 battery and BMS foundation implemented |
+| Status | VI-1 battery/BMS and VI-2 motor/inverter implemented |
 | Audience | Automotive software, simulation, QA, functional-safety, and platform engineers |
 
 ## 1. Purpose and Scope
 
 Volume VI turns the platform's general digital vehicle into a testable electric-energy system.
-The first increment establishes a persistent battery pack and deterministic BMS behavior suitable
-for repeatable software tests. It provides the foundation for motor torque, charging, thermal
-control, regenerative braking, range estimation, and full cross-domain EV scenarios.
+VI-1 establishes a persistent battery pack and deterministic BMS behavior. VI-2 adds a persistent
+motor/inverter aggregate, torque delivery, efficiency, power loss, thermal protection, drive-mode
+limits, and battery-derived propulsion availability for repeatable software tests.
 
 ### In Scope for VI-1
 
@@ -29,11 +29,20 @@ control, regenerative braking, range estimation, and full cross-domain EV scenar
 - optimistic concurrency and exact idempotent replay;
 - dedicated RBAC, audit, outbox, migration, API, and automated tests.
 
+### In Scope for VI-2
+
+- one motor/inverter state per battery-equipped vehicle;
+- requested and delivered torque, speed, mechanical/electrical power, efficiency, and loss;
+- eco, normal, and sport torque ceilings;
+- battery contactor, BMS, voltage, and inverter power constraints;
+- motor and inverter thermal evolution and protection;
+- stable limiting reasons, optimistic concurrency, exact replay, audit, and outbox evidence.
+
 ### Deferred
 
 - chemistry-specific equivalent-circuit and open-circuit-voltage curves;
 - cell balancing, aging, sensor faults, and module topology;
-- inverter, motor, regen, charging, cooling actuators, and range estimation;
+- regenerative braking, charging, cooling actuators, and range estimation;
 - BMS ECU, CAN, UDS, dashboard, and test-framework end-to-end orchestration.
 
 ## 2. Architecture
@@ -43,6 +52,8 @@ The FastAPI electric-vehicle boundary coordinates these explicit components:
 - RBAC through `electric_vehicle:read` and `electric_vehicle:manage`;
 - `BatteryPackState` as the one-per-vehicle electrical, thermal, BMS, contactor, and cell state;
 - `BatterySimulationStep` as the command identity and immutable replay evidence;
+- `MotorInverterState` as the one-per-vehicle propulsion, efficiency, power, and thermal state;
+- `MotorSimulationStep` as the propulsion command identity and immutable replay evidence;
 - `AuditRecord` and `OutboxEvent` in the same database transaction as each accepted mutation.
 
 ### Cross-Volume Ownership
@@ -61,6 +72,9 @@ Volume VI state through explicit integration contracts rather than sharing datab
 | Chemistry | Stable chemistry identifier | `lfp`, `nmc` |
 | Operating state | BMS decision | `normal`, `warning`, `protection` |
 | Contactor state | High-voltage isolation state | `open`, `closed` |
+| MotorInverterState | Authoritative propulsion state | one per vehicle; version >= 1 |
+| Drive mode | Driver-selectable torque policy | `eco`, `normal`, `sport` |
+| Powertrain state | Propulsion decision | `standby`, `ready`, `derated`, `protection` |
 
 ### Sign Convention
 
@@ -88,6 +102,18 @@ simulation parameters, not production calibration data. When the projected tempe
 protection boundary, the model stops at the boundary, opens contactors, and reports zero delivered
 current rather than extrapolating heating beyond isolation.
 
+### VI-2 Propulsion Model
+
+- Mode torque ceiling = configured peak torque multiplied by 0.60, 0.85, or 1.00 for eco,
+  normal, or sport.
+- Mechanical power (kW) = delivered torque multiplied by 2 pi multiplied by rpm / 60 / 1,000.
+- Electrical power (kW) = mechanical power divided by deterministic efficiency.
+- Conversion loss (kW) = electrical power minus mechanical power.
+- Available electrical power is the lower of inverter rating and battery voltage multiplied by
+  the BMS-dependent current ceiling.
+- Motor and inverter temperatures integrate their share of conversion loss and passive cooling
+  over logical time. Protection trips at 150 C motor or 110 C inverter temperature.
+
 ## 5. BMS State Policy
 
 | Condition | State | Contactors | Delivered current |
@@ -108,6 +134,9 @@ hysteresis, debounce, chemistry, current, voltage, isolation, and sensor-plausib
 | `POST /api/v1/vehicles/{vehicle_id}/electric/battery` | Create the vehicle battery baseline | `electric_vehicle:manage` |
 | `GET /api/v1/vehicles/{vehicle_id}/electric/battery` | Read pack, BMS, and cell state | `electric_vehicle:read` |
 | `POST /api/v1/vehicles/{vehicle_id}/electric/battery/steps` | Execute a deterministic electrical/thermal step | `electric_vehicle:manage` |
+| `POST /api/v1/vehicles/{vehicle_id}/electric/powertrain` | Create the motor/inverter baseline | `electric_vehicle:manage` |
+| `GET /api/v1/vehicles/{vehicle_id}/electric/powertrain` | Read torque, power, efficiency, and thermal state | `electric_vehicle:read` |
+| `POST /api/v1/vehicles/{vehicle_id}/electric/powertrain/steps` | Execute a deterministic propulsion step | `electric_vehicle:manage` |
 
 ### Stable Errors
 
@@ -117,23 +146,29 @@ hysteresis, debounce, chemistry, current, voltage, isolation, and sensor-plausib
 | `battery_pack_not_found` | No battery pack exists for the vehicle. |
 | `battery_state_version_conflict` | `expected_version` is stale. |
 | `battery_simulation_command_conflict` | A command ID was reused with different content. |
+| `motor_inverter_already_exists` | The vehicle already owns a motor/inverter state. |
+| `motor_inverter_not_found` | No motor/inverter state exists for the vehicle. |
+| `motor_state_version_conflict` | The powertrain `expected_version` is stale. |
+| `motor_simulation_command_conflict` | A motor command ID was reused differently. |
 | `forbidden` | The authenticated user lacks the required permission. |
 | `validation_error` | A request violates a declared bound or format. |
 
 ## 7. Persistence and Events
 
 Migration `0037_battery_bms_foundation` creates `battery_pack_states` and
-`battery_simulation_steps`. Database checks reinforce API limits for cell count, capacity, SOC,
-SOH, versions, duration, BMS state, and contactor state.
+`battery_simulation_steps`. Migration `0038_motor_inverter` creates `motor_inverter_states` and
+`motor_simulation_steps`. Database checks reinforce the bounded states, versions, and durations.
 
 | Event | Purpose | Privacy/minimization rule |
 |---|---|---|
 | `atep.electric_vehicle.battery.created.v1` | Announce a configured pack | Pack metadata only; no full cells |
 | `atep.electric_vehicle.battery.step.completed.v1` | Announce deterministic state evolution | Pack summary and versions; no full cells |
+| `atep.electric_vehicle.motor_inverter.created.v1` | Announce configured propulsion hardware | Bounded configuration only |
+| `atep.electric_vehicle.motor.step.completed.v1` | Announce torque and power outcome | Summary, limit reason, and versions |
 
 ## 8. Requirements Baseline
 
-VI-1 implements EV-F-001 through EV-F-014 and EV-NF-001 through EV-NF-008. The authoritative
+VI-1 and VI-2 implement EV-F-001 through EV-F-028 and EV-NF-001 through EV-NF-012. The authoritative
 traceability table is maintained in `docs/requirements-volume-vi.md`.
 
 ## 9. Architecture Decisions
@@ -158,6 +193,23 @@ audit payloads. Rationale: an exact retry remains stable even after later pack m
 
 Decision: clamp a thermal transition at the protection threshold and set delivered current to zero.
 Rationale: continuing full-current heating after contactor opening would create invalid evidence.
+
+### ADR-EV-005 - Keep Battery and Propulsion Aggregates Separate
+
+Decision: motor commands lock and read the battery aggregate but persist propulsion state in a
+dedicated aggregate. Rationale: explicit ownership prevents a single oversized EV state while
+still producing consistent power-limit evidence.
+
+### ADR-EV-006 - Use an Explainable Analytic Efficiency Surface
+
+Decision: VI-2 derives efficiency from bounded torque and speed ratios. Rationale: the model is
+portable, deterministic, and auditable without proprietary calibration data. Versioned efficiency
+maps can replace it later behind the same contract.
+
+### ADR-EV-007 - Reserve Negative Torque for Regeneration
+
+Decision: reject negative requested torque in VI-2. Rationale: regeneration requires battery
+charge-acceptance and blended-brake policies that belong together in VI-3.
 
 ## 10. Test Catalogue
 
@@ -187,12 +239,32 @@ Rationale: continuing full-current heating after contactor opening would create 
 | EV-T-022 | OpenAPI contract | Inspect routes and numeric limits | Versioned bounded schema published |
 | EV-T-023 | Migration upgrade | Apply revision from Volume V head | Both VI-1 tables and indexes exist |
 | EV-T-024 | Migration downgrade | Revert revision in disposable database | VI-1 tables removed cleanly |
+| EV-T-025 | Motor creation | Create one state after battery creation | Version 1 and standby |
+| EV-T-026 | Duplicate motor | Enforce one state per vehicle | Stable 409 conflict |
+| EV-T-027 | Normal torque delivery | Request torque within all limits | Requested torque delivered |
+| EV-T-028 | Mechanical power | Apply torque at nonzero speed | Torque times angular speed |
+| EV-T-029 | Electrical power | Inspect conversion input | Greater than mechanical power |
+| EV-T-030 | Efficiency loss | Compare electrical and mechanical power | Positive deterministic loss |
+| EV-T-031 | Eco limit | Request peak torque in eco | Delivery capped at 60% |
+| EV-T-032 | Normal limit | Request peak torque in normal | Delivery capped at 85% |
+| EV-T-033 | Sport limit | Request peak torque in sport | Delivery capped at 100% |
+| EV-T-034 | Battery unavailable | Open battery contactors | Zero delivered torque |
+| EV-T-035 | Battery power limit | Exceed available electrical power | Derated torque and reason |
+| EV-T-036 | Overspeed | Exceed configured motor speed | Zero torque and speed-limit reason |
+| EV-T-037 | Thermal protection | Reach motor or inverter trip | Protection and zero power |
+| EV-T-038 | Regen deferred | Submit negative torque | Stable validation error |
+| EV-T-039 | Motor exact replay | Retry identical motor command | Persisted snapshot returned |
+| EV-T-040 | Motor changed reuse | Reuse ID with changed input | Stable command conflict |
+| EV-T-041 | Motor version conflict | Submit stale state version | Current version returned |
+| EV-T-042 | Motor atomic evidence | Inspect step, audit, and outbox | All commit or all roll back |
+| EV-T-043 | Powertrain OpenAPI | Inspect routes and physical bounds | Bounded schema published |
+| EV-T-044 | Migration 0038 | Upgrade and downgrade disposable DB | Tables created and removed cleanly |
 
 ## 11. Verification Evidence
 
-| Gate | VI-1 evidence |
+| Gate | VI-1 and VI-2 evidence |
 |---|---|
-| Domain tests | Contract, creation, deterministic discharge, thermal protection, replay, conflicts |
+| Domain tests | Battery/BMS plus motor torque, power, efficiency, limits, thermal protection, replay, conflicts |
 | API contract | Routes and safe numeric limits published in OpenAPI |
 | Ruff | Required before merge |
 | Strict mypy | Required before merge |
@@ -210,6 +282,9 @@ Rationale: continuing full-current heating after contactor opening would create 
 | SOH does not age | Cannot test degradation yet | Add cycle/calendar aging after charge and drive behavior stabilizes |
 | No current derating | Warning state remains simplistic | Add temperature/SOC-dependent charge and discharge limits |
 | Separate Volume II battery projection | Possible divergence | Add an explicit projection/synchronization contract in VI-7 |
+| Analytic efficiency surface | Lower fidelity than dyno calibration | Add versioned torque-speed-efficiency maps later |
+| Motor step does not debit SOC | Energy domains can diverge across long scenarios | Couple energy flow in VI-6/VI-7 scenarios |
+| Fixed motor thermal constants | Cannot represent every cooling design | Add calibration profiles in VI-5 |
 
 ## 13. Exercises
 
@@ -227,8 +302,19 @@ Rationale: continuing full-current heating after contactor opening would create 
 
 7. Design a chemistry-specific OCV curve without breaking persisted replay evidence.
 
+8. Create the motor/inverter baseline and explain why it begins in standby.
+
+9. Compare eco, normal, and sport peak-torque limits.
+
+10. Calculate mechanical and electrical power for 100 Nm at 3,000 rpm.
+
+11. Open the battery contactors and prove that propulsion torque becomes unavailable.
+
+12. Trigger the motor thermal boundary and inspect the stable limiting reason.
+
 ## 14. Next Development
 
-VI-2 will add motor and inverter state, requested and delivered torque, efficiency, electrical power,
-thermal loss, speed limits, and battery-derived charge/discharge power constraints. It should reuse
-the same logical-time, optimistic-version, idempotency, RBAC, audit, outbox, and evidence patterns.
+VI-3 will add regenerative braking, battery charge-acceptance limits, requested deceleration,
+recoverable motor torque, recovered electrical energy, and blended friction-brake allocation. It
+will retain logical time, explicit sign conventions, optimistic versions, idempotency, RBAC,
+audit, outbox, and bounded evidence.
