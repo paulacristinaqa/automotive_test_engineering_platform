@@ -8,6 +8,7 @@ from atep.db.session import get_session
 from atep.diagnostics.models import (
     DiagnosticCommand,
     DiagnosticDataIdentifier,
+    DiagnosticFlashState,
     DiagnosticRoutine,
     DiagnosticRoutineState,
     DiagnosticSecurityState,
@@ -28,6 +29,10 @@ from atep.diagnostics.schemas import (
     DtcPage,
     DtcReportCommand,
     DtcResponse,
+    FlashRequestDownloadCommand,
+    FlashStateResponse,
+    FlashTransferDataCommand,
+    FlashTransferExitCommand,
     RoutineControlCommand,
     RoutineCreate,
     RoutinePage,
@@ -41,6 +46,7 @@ from atep.diagnostics.service import (
     control_session,
     create_did,
     create_routine,
+    get_or_create_flash_state,
     get_or_create_security_state,
     get_or_create_session,
     list_dids,
@@ -48,11 +54,14 @@ from atep.diagnostics.service import (
     list_routines,
     read_dids,
     report_dtc,
+    request_download,
+    request_transfer_exit,
     require_did,
     require_dtc,
     require_routine,
     reset_ecu,
     security_access,
+    transfer_data,
     write_did,
 )
 from atep.ecus.models import ElectronicControlUnit
@@ -181,6 +190,129 @@ def security_state_response(
         session_version=diagnostic_state.version,
         simulation_time_ms=ecu.simulation_time_ms,
     )
+
+
+def flash_state_response(
+    transfer: DiagnosticFlashState, ecu: ElectronicControlUnit
+) -> FlashStateResponse:
+    return FlashStateResponse(
+        ecu_id=ecu.identifier,
+        status=transfer.status,
+        memory_address=transfer.memory_address,
+        memory_size=transfer.memory_size,
+        firmware_version=transfer.firmware_version,
+        max_block_length=transfer.max_block_length,
+        next_block_sequence_counter=transfer.next_block_sequence_counter,
+        bytes_received=transfer.bytes_received,
+        image_sha256=transfer.image_sha256,
+        transfer_version=transfer.version,
+    )
+
+
+@router.get("/flash/state", response_model=FlashStateResponse)
+async def get_flash_state_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(diagnostics_read)],
+) -> FlashStateResponse:
+    _vehicle, ecu = await _context(session, vehicle_id=vehicle_id, ecu_id=ecu_id)
+    transfer = await get_or_create_flash_state(session, ecu=ecu)
+    await session.commit()
+    return flash_state_response(transfer, ecu)
+
+
+@router.post(
+    "/flash/request-download",
+    response_model=DiagnosticCommandResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def request_download_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    command: FlashRequestDownloadCommand,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(diagnostics_manage)],
+) -> DiagnosticCommandResponse:
+    vehicle, ecu = await _context(session, vehicle_id=vehicle_id, ecu_id=ecu_id)
+    execution, duplicate = await request_download(
+        session,
+        vehicle=vehicle,
+        ecu=ecu,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(execution, attribute_names=["created_at"])
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+        response.headers["X-Idempotent-Replay"] = "true"
+    return command_response(execution, ecu, duplicate=duplicate)
+
+
+@router.post(
+    "/flash/transfer-data",
+    response_model=DiagnosticCommandResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def transfer_data_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    command: FlashTransferDataCommand,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(diagnostics_manage)],
+) -> DiagnosticCommandResponse:
+    vehicle, ecu = await _context(session, vehicle_id=vehicle_id, ecu_id=ecu_id)
+    execution, duplicate = await transfer_data(
+        session,
+        vehicle=vehicle,
+        ecu=ecu,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(execution, attribute_names=["created_at"])
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+        response.headers["X-Idempotent-Replay"] = "true"
+    return command_response(execution, ecu, duplicate=duplicate)
+
+
+@router.post(
+    "/flash/request-transfer-exit",
+    response_model=DiagnosticCommandResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def request_transfer_exit_endpoint(
+    vehicle_id: str,
+    ecu_id: str,
+    command: FlashTransferExitCommand,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(diagnostics_manage)],
+) -> DiagnosticCommandResponse:
+    vehicle, ecu = await _context(session, vehicle_id=vehicle_id, ecu_id=ecu_id)
+    execution, duplicate = await request_transfer_exit(
+        session,
+        vehicle=vehicle,
+        ecu=ecu,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(execution, attribute_names=["created_at"])
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+        response.headers["X-Idempotent-Replay"] = "true"
+    return command_response(execution, ecu, duplicate=duplicate)
 
 
 @router.get("/security-access/state", response_model=SecurityAccessStateResponse)

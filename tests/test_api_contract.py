@@ -404,6 +404,10 @@ def test_diagnostics_contracts_and_safe_pagination_are_published() -> None:
     assert "get" in paths[f"{root}/session"]
     assert "post" in paths[f"{root}/session-control"]
     assert "post" in paths[f"{root}/ecu-reset"]
+    assert "get" in paths[f"{root}/flash/state"]
+    assert "post" in paths[f"{root}/flash/request-download"]
+    assert "post" in paths[f"{root}/flash/transfer-data"]
+    assert "post" in paths[f"{root}/flash/request-transfer-exit"]
     assert {"get", "post"} <= set(paths[f"{root}/dtcs"])
     assert "get" in paths[f"{root}/dtcs/{{code}}"]
     assert "post" in paths[f"{root}/dtcs/clear"]
@@ -442,6 +446,13 @@ def test_diagnostics_contracts_and_safe_pagination_are_published() -> None:
     assert reset_contract["expected_session_version"]["minimum"] == 1
     assert reset_contract["expected_security_version"]["minimum"] == 1
     assert schemas["UdsEcuResetType"]["enum"] == [1, 2, 3]
+    download_contract = schemas["FlashRequestDownloadCommand"]["properties"]
+    assert download_contract["memory_address"]["maximum"] == 65535
+    assert download_contract["memory_size"]["maximum"] == 65536
+    assert download_contract["data_format_identifier"]["maximum"] == 0
+    block_contract = schemas["FlashTransferDataCommand"]["properties"]
+    assert block_contract["block_sequence_counter"]["maximum"] == 255
+    assert block_contract["data_hex"]["maxLength"] == 512
     assert schemas["DidCreate"]["properties"]["identifier"]["maximum"] == 65535
     assert schemas["DidReadCommand"]["properties"]["identifiers"]["maxItems"] == 16
     assert schemas["RoutineCreate"]["properties"]["identifier"]["maximum"] == 65535

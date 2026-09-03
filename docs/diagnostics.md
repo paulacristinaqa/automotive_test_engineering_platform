@@ -4,7 +4,7 @@ Volume V owns diagnostic protocol semantics. Volume III continues to own ECU exe
 signals, and internal fault lifecycle; Volume V converts selected fault evidence into persisted
 Diagnostic Trouble Codes without making the two representations identical.
 
-## V-1 through V-5 Request Flow
+## V-1 through V-6 Request Flow
 
 Authenticated client -> FastAPI diagnostic route -> diagnostic RBAC -> vehicle and ECU lookup ->
 UDS domain service -> PostgreSQL diagnostic state/evidence + audit + transactional outbox -> stable
@@ -20,6 +20,7 @@ response or platform error envelope with a UDS negative response code.
 - `0x31` Routine Control: session-authorized start, stop, and result retrieval.
 - `0x27` Security Access: deterministic level-1 seed/key exchange with bounded lockout.
 - `0x11` ECU Reset: hard, key-off/on, and soft reset through the Volume III ECU lifecycle.
+- `0x34`, `0x36`, `0x37` ECU flash: bounded download negotiation, ordered blocks, and digest-verified activation.
 
 Positive response service IDs are calculated as request service ID plus `0x40`. The domain reports
 NRC `0x22` for stale versions, `0x31` for invalid values/ranges, and `0x7F` when a DID service is not
@@ -61,6 +62,14 @@ restores the diagnostic session to default, clears security level and protected 
 state, increments their versions, and records UDS `0x11` evidence. Soft reset is allowed in extended
 or programming session; hard and key-off/on resets additionally require security level 1. Exact
 retry returns the stored result without resetting or incrementing the ECU twice.
+
+V-6 adds one protected firmware-transfer state per ECU. Request Download requires programming
+session, security level 1, matching ECU/session/security versions, a 16-bit address range, and an
+image no larger than 65,536 bytes. Transfer Data accepts blocks of at most 256 bytes in sequence
+and stores only block size and SHA-256 in command/shared evidence. Request Transfer Exit requires
+the exact declared byte count and image digest before atomically updating the ECU profile/version.
+The completed state purges raw bytes and retains only bounded metadata and the digest. No cloud,
+GPU, paid API, or real flashing hardware is required.
 
 The current POST DTC endpoint is a controlled simulator/test-fixture ingestion boundary. A later
 bridge will translate confirmed Volume III fault candidates or received UDS responses into this

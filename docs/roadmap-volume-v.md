@@ -7,8 +7,8 @@
 | V-3 | Routine Control (`0x31`) with deterministic execution evidence | Implemented |
 | V-4 | Security Access (`0x27`) with bounded seed/key attempts and lockout simulation | Implemented |
 | V-5 | ECU Reset (`0x11`) integrated with the ECU lifecycle | Implemented |
-| V-6 | Request Download/Transfer Data/Transfer Exit flash pipeline (`0x34`, `0x36`, `0x37`) | Recommended next |
-| V-7 | OBD-II compatibility, DoIP transport boundary, campaigns, and end-to-end diagnostic scenarios | Planned |
+| V-6 | Request Download/Transfer Data/Transfer Exit flash pipeline (`0x34`, `0x36`, `0x37`) | Implemented |
+| V-7 | OBD-II compatibility, DoIP transport boundary, campaigns, and end-to-end diagnostic scenarios | Recommended next |
 
 V-1 establishes protocol-independent diagnostic persistence. V-2 adds a bounded typed DID
 catalogue, session-authorized reads/writes, version checks, exact replay, and value-minimized
@@ -18,3 +18,6 @@ V-4 adds deterministic level-1 Security Access, protected seed/key handling, thr
 logical-time expiry/delay, exact positive and negative replay, and minimized shared evidence. V-5
 orchestrates the existing ECU reset lifecycle through UDS `0x11`, restores the diagnostic session
 and security state, advances logical time, and persists exact cross-volume evidence atomically.
+V-6 adds an ECU-scoped, optimistic-versioned transfer lifecycle with a 64-KiB image bound,
+256-byte blocks, programming-session and level-1 security policy, byte-counter validation, SHA-256
+verification, firmware-version activation, exact replay, and payload-minimized shared evidence.

@@ -429,6 +429,14 @@ Security Access invalidation, UDS command evidence, diagnostic audit, and diagno
 Hard and key-off/on reset require level-1 authorization; soft reset still requires a non-default
 session. ECU, session, and security versions make concurrent or stale requests explicit.
 
+V-6 adds an ECU-scoped flash-transfer aggregate and UDS `0x34`/`0x36`/`0x37` application services.
+The diagnostic layer owns negotiation, ordered block assembly, digest verification, replay, and
+transfer versions; the ECU aggregate remains the authority for the active firmware/profile and ECU
+version. Programming session plus level-1 Security Access is required throughout. Raw blocks are
+never placed in diagnostic command requests, audit, outbox, or logs, and completed transfers purge
+the assembled bytes after SHA-256 verification. Transfer state, firmware activation, command
+evidence, audit, and outbox share one PostgreSQL transaction.
+
 Each ECU owns one current, optimistic-versioned diagnostic session. Mutating commands have
 ECU-scoped idempotency identities. Exact retry returns stored evidence; changed reuse is rejected.
 DTCs use ECU simulation time, retain bounded snapshots in protected persistence, and exclude those
