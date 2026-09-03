@@ -448,3 +448,131 @@ class DtcClearCommand(BaseModel):
     command_id: CommandId
     expected_version: int = Field(ge=1)
     group: DtcCode = "FFFFFF"
+
+
+class DiagnosticTransport(StrEnum):
+    LOCAL = "local"
+    DOIP = "doip"
+
+
+class DoipEnvelope(BaseModel):
+    """Logical DoIP boundary; socket framing remains outside the domain service."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    protocol_version: int = Field(default=0x03, ge=0x02, le=0x03)
+    source_address: int = Field(ge=0, le=0xFFFF)
+    target_address: int = Field(ge=0, le=0xFFFF)
+    routing_activation_type: int = Field(default=0, ge=0, le=0xFF)
+
+    @model_validator(mode="after")
+    def distinct_logical_addresses(self) -> "DoipEnvelope":
+        if self.source_address == self.target_address:
+            raise ValueError("DoIP source and target logical addresses must differ")
+        return self
+
+
+class ObdPid(IntEnum):
+    ENGINE_COOLANT_TEMPERATURE = 0x05
+    VEHICLE_SPEED = 0x0D
+    CONTROL_MODULE_VOLTAGE = 0x42
+    HYBRID_BATTERY_REMAINING_LIFE = 0x5B
+
+
+class ObdMode01Request(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    pids: list[ObdPid] = Field(min_length=1, max_length=16)
+
+    @field_validator("pids")
+    @classmethod
+    def unique_pids(cls, value: list[ObdPid]) -> list[ObdPid]:
+        if len(value) != len(set(value)):
+            raise ValueError("OBD-II PIDs must be unique")
+        return value
+
+
+class ObdPidValue(BaseModel):
+    pid: int
+    pid_hex: str
+    did_identifier: int
+    name: str
+    value: DidValue
+    unit: str
+    did_version: int
+
+
+class ObdMode01Response(BaseModel):
+    ecu_id: str
+    mode: int = 0x01
+    values: list[ObdPidValue]
+
+
+class ObdMode03Response(BaseModel):
+    ecu_id: str
+    mode: int = 0x03
+    dtcs: list[DtcResponse]
+
+
+class DiagnosticCampaignStepType(StrEnum):
+    OBD_MODE_01 = "obd_mode_01"
+    OBD_MODE_03 = "obd_mode_03"
+    UDS_READ_DIDS = "uds_read_dids"
+
+
+class DiagnosticCampaignStep(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=80)
+    step_type: DiagnosticCampaignStepType
+    pids: list[ObdPid] = Field(default_factory=list, max_length=16)
+    identifiers: list[int] = Field(default_factory=list, max_length=16)
+
+    @model_validator(mode="after")
+    def operation_parameters(self) -> "DiagnosticCampaignStep":
+        if self.step_type == DiagnosticCampaignStepType.OBD_MODE_01:
+            if not self.pids or self.identifiers:
+                raise ValueError("obd_mode_01 requires pids only")
+            if len(self.pids) != len(set(self.pids)):
+                raise ValueError("OBD-II PIDs must be unique")
+        elif self.step_type == DiagnosticCampaignStepType.UDS_READ_DIDS:
+            if not self.identifiers or self.pids:
+                raise ValueError("uds_read_dids requires identifiers only")
+            if len(self.identifiers) != len(set(self.identifiers)):
+                raise ValueError("UDS identifiers must be unique")
+            if any(identifier < 0 or identifier > 0xFFFF for identifier in self.identifiers):
+                raise ValueError("UDS identifiers must fit in 16 bits")
+        elif self.pids or self.identifiers:
+            raise ValueError("obd_mode_03 does not accept pids or identifiers")
+        return self
+
+
+class DiagnosticCampaignCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    command_id: CommandId
+    name: str = Field(min_length=1, max_length=80)
+    transport: DiagnosticTransport = DiagnosticTransport.LOCAL
+    doip: DoipEnvelope | None = None
+    steps: list[DiagnosticCampaignStep] = Field(min_length=1, max_length=32)
+
+    @model_validator(mode="after")
+    def transport_boundary(self) -> "DiagnosticCampaignCommand":
+        if self.transport == DiagnosticTransport.DOIP and self.doip is None:
+            raise ValueError("DoIP transport requires a DoIP envelope")
+        if self.transport == DiagnosticTransport.LOCAL and self.doip is not None:
+            raise ValueError("local transport must not include a DoIP envelope")
+        return self
+
+
+class DiagnosticCampaignResponse(BaseModel):
+    command_id: str
+    ecu_id: str
+    name: str
+    transport: DiagnosticTransport
+    doip: DoipEnvelope | None
+    status: str
+    step_count: int
+    results: list[dict[str, Any]]
+    duplicate: bool
+    created_at: datetime

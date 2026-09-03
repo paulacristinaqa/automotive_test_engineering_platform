@@ -1,6 +1,6 @@
 # ATEP Volume V - Diagnostics Engineering Workbook
 
-**Document status:** Increments V-1 through V-6 implemented
+**Document status:** Volume V baseline complete - increments V-1 through V-7 implemented
 **Language:** English  
 **Last updated:** 2026-09-03
 **Repository:** `paulacristinaqa/automotive_test_engineering_platform`
@@ -15,7 +15,7 @@ evidence, verification strategy, risks, and study exercises for the Diagnostics 
 | Field | Value |
 |---|---|
 | Volume | V - Diagnostics |
-| Baseline | Increments V-1 through V-6 |
+| Baseline | Increments V-1 through V-7 |
 | Architecture style | ECU-scoped diagnostic aggregate and transactional domain service |
 | Primary runtime | Python 3.12, FastAPI, SQLAlchemy, PostgreSQL |
 | Quality gates | pytest, Ruff, strict mypy, Alembic, integration CI, DOCX render and accessibility audit |
@@ -30,6 +30,7 @@ evidence, verification strategy, risks, and study exercises for the Diagnostics 
 | 0.4.0 | 2026-08-28 | Added UDS Security Access `0x27`, deterministic level-1 seed/key exchange, logical-time expiry and lockout, idempotent negative evidence, secret minimization, migration, APIs, and tests. |
 | 0.5.0 | 2026-08-29 | Added UDS ECU Reset `0x11`, cross-volume ECU lifecycle orchestration, reset/session/security version checks, deterministic logical time, exact replay, RBAC, atomic audit/outbox evidence, API, and tests. |
 | 0.6.0 | 2026-09-03 | Added bounded UDS firmware download `0x34`/`0x36`/`0x37`, ordered block transfer, SHA-256 verification, firmware activation, payload minimization, migration, APIs, and tests. |
+| 0.7.0 | 2026-09-03 | Added OBD-II Mode 01/03 compatibility, validated DoIP logical envelopes, persistent idempotent diagnostic campaigns, migration, APIs, end-to-end evidence, and Volume V baseline closure. |
 
 ## 4. Scope and Boundaries
 
@@ -59,13 +60,14 @@ evidence, verification strategy, risks, and study exercises for the Diagnostics 
 - Atomic restoration of default session, security level zero, and empty challenge/lockout state.
 - Reset/session/security optimistic versions, session/security policy, and exact reset replay.
 - ECU-scoped firmware-transfer state and UDS Request Download, Transfer Data, and Request Transfer Exit.
+- OBD-II Mode 01 projections, Mode 03 stored-DTC compatibility, logical DoIP envelopes, and mixed OBD/UDS diagnostic campaigns.
 - Programming-session and level-1 security policy, 64-KiB image and 256-byte block bounds.
 - Ordered block counters, SHA-256 image verification, atomic firmware activation, and exact replay.
 
 ### 4.2 Deferred
 
-- ISO-TP segmentation, CAN transport binding, DoIP, and physical adapters.
-- OBD-II mode/PID compatibility and fleet-scale remote diagnostics.
+- ISO-TP segmentation, CAN transport binding, and physical bus adapters.
+- Wire-level DoIP discovery/framing, ISO-TP, production OBD encoding, and fleet-scale remote diagnostics.
 
 ## 5. Architecture
 
@@ -109,6 +111,10 @@ firmware and ECU version, maximum block length, next sequence counter, received 
 protected transient image bytes, final SHA-256 digest, status, and optimistic version. Completed
 transfers purge raw bytes after verification.
 
+`DiagnosticCampaign` stores ECU-scoped campaign identity, local or DoIP transport metadata, the
+bounded canonical request, ordered results, completion status, actor, and timestamps. It provides
+exact replay without making the diagnostics domain responsible for network sockets.
+
 ## 7. Public API and Security
 
 | Method | Path | Permission | Purpose |
@@ -135,6 +141,10 @@ transfers purge raw bytes after verification.
 | POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/flash/request-download` | `diagnostics:manage` | Negotiate UDS `0x34` firmware transfer. |
 | POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/flash/transfer-data` | `diagnostics:manage` | Submit one ordered UDS `0x36` block. |
 | POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/flash/request-transfer-exit` | `diagnostics:manage` | Verify and activate through UDS `0x37`. |
+| POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/obd/mode-01` | `diagnostics:read` | Read up to 16 supported OBD-II PIDs through typed DIDs. |
+| GET | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/obd/mode-03` | `diagnostics:read` | Read the stored-DTC catalogue through OBD-II Mode 03 semantics. |
+| POST | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/campaigns` | `diagnostics:manage` | Execute and persist a bounded local or DoIP diagnostic campaign. |
+| GET | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics/campaigns/{command_id}` | `diagnostics:read` | Retrieve exact ordered campaign evidence. |
 
 ## 8. UDS Semantics
 
@@ -215,6 +225,20 @@ Request Transfer Exit (`0x77`) requires the exact byte count, matching transfer/
 constant-time SHA-256 verification before changing the ECU profile version and ECU optimistic
 version. Completion purges the assembled image bytes while retaining digest and bounded metadata.
 Every accepted mutation, command record, audit record, and outbox event shares one transaction.
+
+### 8.10 OBD-II, DoIP, and Diagnostic Campaigns
+
+V-7 provides a semantic OBD-II compatibility layer without duplicating diagnostic state. Mode 01
+maps four supported PIDs to typed DIDs: coolant temperature (`0x05` -> `0xF405`), vehicle speed
+(`0x0D` -> `0xF40D`), control-module voltage (`0x42` -> `0xF442`), and hybrid-battery remaining life
+(`0x5B` -> `0xF45B`). Mode 03 projects the existing stored-DTC catalogue.
+
+The DoIP boundary validates protocol version 2 or 3, routing-activation type, and distinct 16-bit
+source/target logical addresses. It is deliberately an envelope rather than a network stack.
+Campaigns contain one to 32 ordered OBD Mode 01, OBD Mode 03, or UDS `0x22` read steps. They run
+locally or with DoIP metadata, persist ordered results, and provide exact ECU-scoped replay.
+Campaign state, audit, and outbox evidence commit atomically; shared evidence contains step types
+and counts but not DID values or DTC snapshots.
 
 ## 9. Error and Consistency Contract
 
@@ -339,6 +363,21 @@ Transfer blocks update only the flash aggregate. The ECU profile/version changes
 Transfer Exit verifies the declared byte count, transfer/ECU versions, and full-image SHA-256.
 Firmware activation, transfer completion, command evidence, audit, and outbox then commit together.
 
+### ADR-DG-017 - Project OBD-II PIDs Through Typed DIDs
+
+Decision: supported Mode 01 PIDs resolve through the DID catalogue rather than creating a second
+store. Rationale: one typed value source prevents OBD and UDS views from drifting.
+
+### ADR-DG-018 - Keep DoIP Transport-Neutral in the Domain
+
+Decision: persist and validate logical routing metadata while leaving network framing to adapters.
+Rationale: campaigns remain deterministic and testable without sockets, host timing, or hardware.
+
+### ADR-DG-019 - Persist Campaign Results as Atomic Evidence
+
+Decision: store ordered campaign results with audit and outbox records in one transaction.
+Rationale: retries reproduce the exact multi-step observation without repeating diagnostic work.
+
 ## 11. Verification Catalogue
 
 | Test | Objective | Level |
@@ -387,8 +426,18 @@ Firmware activation, transfer completion, command evidence, audit, and outbox th
 | Routine replay | Return persisted `0x31` evidence without repeated execution or version change. | Service/integration |
 | Routine evidence minimization | Prove audit and outbox contain neither parameters nor result values. | Service |
 | Routine atomicity | Commit definition/state/control, command, audit, and outbox evidence together. | Integration |
+
+### 11.1 Security Access Verification
+
+| Test | Objective | Level |
+|---|---|---|
 | Security command shape | Require a 16-character masked key only for sendKey and reject extra fields. | Schema/OpenAPI |
 | Security session policy | Reject Security Access in default session with NRC `0x7F`. | Service/API |
+
+### 11.1.1 Security State and Lockout
+
+| Test | Objective | Level |
+|---|---|---|
 | Seed generation | Return a deterministic 16-character seed and 30,000-ms logical expiry. | Service/integration |
 | Seed replay | Return the same protected seed without incrementing challenge or version twice. | Service/integration |
 | Valid key | Unlock level 1, clear challenge state, and increment session/security versions. | Service/integration |
@@ -400,6 +449,11 @@ Firmware activation, transfer completion, command evidence, audit, and outbox th
 | Secret minimization | Prove raw key, seed, and key digest never enter audit or outbox evidence. | Service/security |
 | Safe state query | Expose versions, attempt count, lockout, and challenge presence without secret material. | API/OpenAPI |
 | Security atomicity | Commit failed attempt, command, audit, and outbox before returning the negative response. | Integration |
+
+### 11.2 ECU Reset Verification
+
+| Test | Objective | Level |
+|---|---|---|
 | Reset command shape | Publish subfunctions `0x01`, `0x02`, and `0x03` plus three bounded expected versions. | Schema/OpenAPI |
 | Reset session policy | Reject every reset in default session with NRC `0x7F`. | Service/API |
 | Reset security policy | Reject hard and key-off/on reset below level 1 with NRC `0x33`. | Service/API |
@@ -408,6 +462,11 @@ Firmware activation, transfer completion, command evidence, audit, and outbox th
 | Reset concurrency | Reject stale ECU, session, or security versions with NRC `0x22`. | Service/API |
 | Reset replay | Return stored `0x11` evidence without another boot, time advance, or version increment. | Service/integration |
 | Reset atomicity | Commit ECU mutation, both evidence streams, diagnostic state, audit, and outbox together. | Integration |
+
+### 11.3 Firmware Transfer Verification
+
+| Test | Objective | Level |
+|---|---|---|
 | Download negotiation | Require programming session, level 1, matching versions, 16-bit range, and <=65,536 bytes. | Schema/service/API |
 | Block bounds | Reject empty, malformed, larger-than-256-byte, or overflowing blocks. | Schema/service |
 | Block sequence | Accept only the expected 0-255 byte counter and wrap 255 to 0. | Service/integration |
@@ -419,6 +478,19 @@ Firmware activation, transfer completion, command evidence, audit, and outbox th
 | Payload minimization | Prove raw image/block bytes never enter commands, logs, audit, or outbox. | Service/security |
 | Flash atomicity | Commit transfer, firmware activation, command, audit, and outbox together. | Integration |
 
+### 11.4 OBD-II, DoIP, and Campaign Verification
+
+| Test | Objective | Level |
+|---|---|---|
+| OBD PID mapping | Resolve each supported PID through its typed DID and preserve value/unit/version. | Unit/service |
+| OBD PID bounds | Reject empty, duplicate, unsupported, or more than 16 PIDs. | Contract/API |
+| OBD Mode 03 | Project stored DTCs without creating a second DTC store. | Service/API |
+| DoIP envelope | Reject equal/out-of-range logical addresses and unsupported protocol versions. | Contract |
+| Campaign step validation | Require operation-specific parameters and one to 32 ordered steps. | Contract |
+| Mixed campaign | Execute OBD Mode 01, Mode 03, and UDS DID reads in deterministic order. | Service/end-to-end |
+| Campaign replay/conflict | Replay identical commands and reject changed command reuse. | Service/API |
+| Campaign atomicity | Commit result, minimized audit evidence, and outbox event together. | Integration |
+
 ## 12. Implemented Evidence
 
 - `src/atep/diagnostics/` contains models, schemas, service, and router.
@@ -427,6 +499,7 @@ Firmware activation, transfer completion, command evidence, audit, and outbox th
 - Migration `0033_diagnostic_routines` owns routine definitions and execution states.
 - Migration `0034_diagnostic_security_access` owns the ECU Security Access challenge state.
 - Migration `0035_diagnostic_flash` owns the ECU firmware-transfer state.
+- Migration `0036_diagnostic_campaigns` owns persistent multi-step campaign evidence.
 - Events are `atep.diagnostics.session.changed.v1`, `atep.diagnostics.dtc.reported.v1`, and `atep.diagnostics.dtc.cleared.v1`.
 - Permissions are `diagnostics:read` and `diagnostics:manage`.
 - `tests/test_diagnostics.py` verifies contracts, logical time, versioning, replay, conflicts, evidence minimization, and permissions.
@@ -436,10 +509,11 @@ Firmware activation, transfer completion, command evidence, audit, and outbox th
 - Security Access events use `atep.diagnostics.security.accessed.v1` without seed/key material.
 - UDS ECU Reset reuses `atep.ecu.reset.completed.v1` and adds `atep.diagnostics.ecu.reset.v1` in the same transaction.
 - Flash events are `atep.diagnostics.flash.download.requested.v1`, `atep.diagnostics.flash.block.transferred.v1`, and `atep.diagnostics.flash.completed.v1`; none contains raw firmware bytes.
+- Campaign completion emits `atep.diagnostics.campaign.completed.v1` with minimized step metadata.
 
 ## 13. Risks and Technical Debt
 
-- V-1 through V-6 expose semantic UDS operations but do not yet encode wire PDUs.
+- V-1 through V-7 expose semantic UDS/OBD operations but do not encode wire PDUs.
 - Status-mask meaning is retained as a byte; named bit helpers should be added with richer DTC queries.
 - DTC creation is a controlled simulator boundary; automatic fault-to-DTC mapping is future work.
 - The current clear operation loads at most 200 DTCs, matching the per-ECU V-1 storage bound.
@@ -449,12 +523,14 @@ Firmware activation, transfer completion, command evidence, audit, and outbox th
 - V-4 key derivation is transparent and deterministic for simulation; production security requires OEM algorithms, protected key material, hardware-backed execution, and threat analysis.
 - V-5 returns a completed semantic reset response; transport adapters must later model response timing and ECU communication loss around physical reset execution.
 - V-6 is a bounded simulator pipeline, not a bootloader or production flasher; signing, anti-rollback, erase/program routines, power-loss recovery, and OEM secure-boot policy remain future hardening.
+- V-7 OBD-II is a bounded compatibility projection, not a complete SAE J1979 encoder or emissions certification tool.
+- V-7 DoIP validates logical metadata but does not implement ISO 13400 discovery, sockets, framing, acknowledgements, or timing.
 
 ## 14. Roadmap
 
-V-1 through V-6 are implemented. The recommended next development is V-7: OBD-II compatibility,
-the DoIP transport boundary, diagnostic campaigns, and end-to-end scenarios that connect Digital
-Vehicle, ECU, CAN, Diagnostics, test execution, evidence, and Android Automotive visibility.
+V-1 through V-7 are implemented and the Volume V baseline is complete. The recommended next
+development is Volume VI - Electric Vehicle, beginning with deterministic battery-pack/cell state,
+SOC/SOH, thermal behavior, BMS limits, charging, torque, regeneration, and range estimation.
 
 ## 15. Study Exercises
 
@@ -508,6 +584,14 @@ Vehicle, ECU, CAN, Diagnostics, test execution, evidence, and Android Automotive
 48. Trace a successful flash from negotiation through ECU profile/version activation.
 49. Design negative tests for incomplete images, overflow, digest mismatch, and stale ECU version.
 50. Explain which production concerns remain outside this simulator pipeline.
+51. Trace OBD PID `0x0D` through DID `0xF40D` and the Mode 01 response.
+52. Explain why Mode 03 reuses stored DTCs instead of creating an OBD-specific table.
+53. Design negative tests for duplicate PIDs and a missing mapped DID.
+54. Compare the implemented DoIP logical envelope with a production ISO 13400 adapter.
+55. Trace a mixed OBD/UDS campaign and identify which values remain outside shared evidence.
+56. Prove exact campaign replay does not repeat reads or emit duplicate evidence.
+57. Design a campaign that validates battery temperature, module voltage, and stored DTCs.
+58. Explain why the Volume VI BMS should publish typed DIDs consumed by this layer.
 
 ## 16. V-6 Review Worksheet
 
@@ -518,3 +602,13 @@ Use this worksheet after studying or demonstrating the increment:
 3. Capture one wrong-sequence, one incomplete-image, and one digest-mismatch result with NRC evidence.
 4. Verify that no raw firmware hex appears in logs, diagnostic commands, audit, or outbox records.
 5. Explain whether the observed result is sufficient for a simulator baseline and which production bootloader controls are still absent.
+
+## 17. V-7 Review Worksheet
+
+1. Register the four mapped DIDs and record one successful Mode 01 response for each PID.
+2. Report a simulated battery DTC and prove Mode 03 returns the same persisted record.
+3. Capture one rejected DoIP envelope and one accepted logical-address pair.
+4. Execute a three-step OBD Mode 01, Mode 03, and UDS DID campaign; preserve ordered evidence.
+5. Replay the same command identity, then change one step and capture the stable conflict.
+6. Verify that campaign audit/outbox evidence contains step types and counts but no DID values or DTC snapshots.
+7. Explain which network concerns remain outside the completed Volume V baseline.

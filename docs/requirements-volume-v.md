@@ -33,6 +33,11 @@
 | DG-F-027 | UDS `0x36` shall accept ordered blocks no larger than 256 bytes and reject stale versions, wrong sequence counters, and image overflow. | Implemented in V-6 |
 | DG-F-028 | UDS `0x37` shall activate a firmware version only after the declared image size and SHA-256 digest match. | Implemented in V-6 |
 | DG-F-029 | Flash commands shall provide exact replay and stable changed-reuse conflicts without repeating blocks or activation. | Implemented in V-6 |
+| DG-F-030 | OBD-II Mode 01 shall expose supported current-data PIDs through typed ECU DID definitions. | Implemented in V-7 |
+| DG-F-031 | OBD-II Mode 03 shall expose the ECU stored-DTC catalogue without duplicating DTC persistence. | Implemented in V-7 |
+| DG-F-032 | A diagnostic campaign shall combine one to 32 bounded OBD-II or UDS read steps and persist ordered results. | Implemented in V-7 |
+| DG-F-033 | A campaign shall support local execution or a validated DoIP logical-address envelope. | Implemented in V-7 |
+| DG-F-034 | Campaign command identities shall provide exact replay and stable changed-reuse conflicts. | Implemented in V-7 |
 
 ## Non-Functional Requirements
 
@@ -63,11 +68,17 @@
 | DG-NF-023 | Raw firmware bytes shall remain in protected transient persistence and shall never enter command requests, logs, audit, or outbox payloads. | Implemented in V-6 |
 | DG-NF-024 | Flash state, command evidence, ECU firmware/version mutation, audit, and outbox writes shall commit atomically. | Implemented in V-6 |
 | DG-NF-025 | Completed transfers shall purge raw image bytes and retain only size, version, and SHA-256 evidence. | Implemented in V-6 |
+| DG-NF-026 | OBD-II PID lists shall contain at most 16 unique supported PIDs and reuse typed DID constraints. | Implemented in V-7 |
+| DG-NF-027 | The DoIP boundary shall validate protocol and logical addresses without opening network sockets in the domain layer. | Implemented in V-7 |
+| DG-NF-028 | Campaign result persistence, audit, and outbox evidence shall commit atomically. | Implemented in V-7 |
+| DG-NF-029 | Shared campaign evidence shall expose step types and counts without copying DID values or DTC snapshots. | Implemented in V-7 |
+| DG-NF-030 | The V-7 baseline shall run locally without GPU, cloud services, paid APIs, or vehicle hardware. | Implemented in V-7 |
 
 ## Traceability
 
-V-1 through V-6 evidence is provided by `src/atep/diagnostics`, migrations
+V-1 through V-7 evidence is provided by `src/atep/diagnostics`, migrations
 `0031_diagnostics_foundation`, `0032_diagnostic_data_identifiers`, and
-`0033_diagnostic_routines`, `0034_diagnostic_security_access`, and `0035_diagnostic_flash`, the
+`0033_diagnostic_routines`, `0034_diagnostic_security_access`, `0035_diagnostic_flash`, and
+`0036_diagnostic_campaigns`, the
 existing Volume III ECU reset lifecycle,
 `tests/test_diagnostics.py`, API contract tests, and the separate Volume V engineering workbook.

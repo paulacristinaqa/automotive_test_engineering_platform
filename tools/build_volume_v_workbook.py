@@ -6,8 +6,8 @@ SOURCE = workbook.ROOT / "docs" / "workbook-volume-v.md"
 OUTPUT = workbook.ROOT / "docs" / "ATEP_Volume_V_Diagnostics_Engineering_Workbook.docx"
 VOLUME_NUMBER = "V"
 VOLUME_NAME = "Diagnostics"
-DOCUMENT_VERSION = "0.6.0"
-DOCUMENT_STATUS = "Implemented increments: V-1 through V-6"
+DOCUMENT_VERSION = "0.7.0"
+DOCUMENT_STATUS = "Volume V baseline complete: V-1 through V-7 implemented"
 BASELINE_DATE = "3 September 2026"
 
 

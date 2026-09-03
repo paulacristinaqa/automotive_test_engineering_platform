@@ -538,6 +538,7 @@ def render_body(
                 bullet_num_id = new_numbering_instance(doc, bullet_abstract_id)
             p = doc.add_paragraph(style="List Bullet")
             apply_numbering(p, bullet_num_id)
+            p.paragraph_format.space_after = Pt(4)
             add_inline_markdown(p, line[2:].strip())
             previous_kind = "bullet"
             index += 1
@@ -549,6 +550,7 @@ def render_body(
                 number_num_id = new_numbering_instance(doc, decimal_abstract_id)
             p = doc.add_paragraph(style="List Number")
             apply_numbering(p, number_num_id)
+            p.paragraph_format.space_after = Pt(6)
             add_inline_markdown(p, number_match.group(1))
             previous_kind = "number"
             index += 1
