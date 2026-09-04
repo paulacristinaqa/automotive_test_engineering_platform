@@ -278,3 +278,63 @@ class ChargingSystemResponse(BaseModel):
     version: int
     simulation_time_ms: int
     duplicate: bool = False
+
+
+class ThermalOperatingState(StrEnum):
+    STANDBY = "standby"
+    HEATING = "heating"
+    COOLING = "cooling"
+    MIXED = "mixed"
+    FAULTED = "faulted"
+
+
+class ThermalManagementCreate(BaseModel):
+    max_battery_thermal_power_kw: float = Field(default=8.0, gt=0.0, le=50.0)
+    max_powertrain_thermal_power_kw: float = Field(default=12.0, gt=0.0, le=100.0)
+    max_cabin_thermal_power_kw: float = Field(default=8.0, gt=0.0, le=30.0)
+    battery_target_temperature_c: float = Field(default=25.0, ge=5.0, le=40.0)
+    motor_target_temperature_c: float = Field(default=70.0, ge=30.0, le=120.0)
+    inverter_target_temperature_c: float = Field(default=60.0, ge=30.0, le=90.0)
+    cabin_target_temperature_c: float = Field(default=22.0, ge=16.0, le=30.0)
+    initial_cabin_temperature_c: float = Field(default=25.0, ge=-40.0, le=80.0)
+
+
+class ThermalManagementCommand(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    command_id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._:-]+$")
+    duration_ms: int = Field(ge=1, le=3_600_000)
+    ambient_temperature_c: float = Field(default=25.0, ge=-50.0, le=80.0)
+    cabin_heat_load_kw: float = Field(default=0.0, ge=-10.0, le=20.0)
+    enabled: bool = True
+    fault_code: str | None = Field(
+        default=None, min_length=1, max_length=32, pattern=r"^[A-Z0-9_:-]+$"
+    )
+    expected_version: int = Field(ge=1)
+    expected_battery_version: int = Field(ge=1)
+    expected_motor_version: int = Field(ge=1)
+
+
+class ThermalManagementResponse(BaseModel):
+    vehicle_id: str
+    battery_target_temperature_c: float
+    motor_target_temperature_c: float
+    inverter_target_temperature_c: float
+    cabin_target_temperature_c: float
+    battery_temperature_c: float
+    motor_temperature_c: float
+    inverter_temperature_c: float
+    cabin_temperature_c: float
+    battery_thermal_power_kw: float
+    motor_thermal_power_kw: float
+    inverter_thermal_power_kw: float
+    cabin_thermal_power_kw: float
+    auxiliary_power_kw: float
+    battery_version: int
+    motor_version: int
+    operating_state: ThermalOperatingState
+    limiting_reason: str | None
+    fault_code: str | None
+    version: int
+    simulation_time_ms: int
+    duplicate: bool = False

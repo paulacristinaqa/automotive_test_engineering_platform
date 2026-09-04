@@ -24,6 +24,11 @@ from atep.core.errors import (
     MotorStateVersionConflictError,
     RegenerativeBrakeAlreadyExistsError,
     ResourceNotFoundError,
+    ThermalBatteryVersionConflictError,
+    ThermalCommandConflictError,
+    ThermalManagementAlreadyExistsError,
+    ThermalMotorVersionConflictError,
+    ThermalStateVersionConflictError,
 )
 from atep.electric_vehicle.models import (
     BatteryPackState,
@@ -34,6 +39,8 @@ from atep.electric_vehicle.models import (
     MotorInverterState,
     MotorSimulationStep,
     RegenerativeBrakeState,
+    ThermalManagementState,
+    ThermalManagementStep,
 )
 from atep.electric_vehicle.schemas import (
     BatteryContactorState,
@@ -56,6 +63,10 @@ from atep.electric_vehicle.schemas import (
     PowertrainOperatingState,
     RegenerativeBrakeCreate,
     RegenerativeBrakeResponse,
+    ThermalManagementCommand,
+    ThermalManagementCreate,
+    ThermalManagementResponse,
+    ThermalOperatingState,
 )
 from atep.events.outbox import enqueue_event
 from atep.vehicles.models import Vehicle
@@ -1211,9 +1222,7 @@ async def execute_charging_command(
             energy_room_kwh / duration_hours,
         )
         state.delivered_power_kw = (
-            round(battery_power_kw / efficiency, 3)
-            if battery_power_kw
-            else 0.0
+            round(battery_power_kw / efficiency, 3) if battery_power_kw else 0.0
         )
         charged_energy_kwh = battery_power_kw * duration_hours
         if pack.pack_temperature_c < 0.0 or pack.pack_temperature_c > 50.0:
@@ -1344,6 +1353,355 @@ async def execute_charging_command(
         actor_user_id=actor_user_id,
         action="electric_vehicle.charging_command_completed",
         resource_type="charging_system",
+        resource_id=state.id,
+        correlation_id=correlation_id,
+        details=payload,
+    )
+    return rendered, False
+
+
+def thermal_management_response(
+    state: ThermalManagementState,
+    vehicle: Vehicle,
+    pack: BatteryPackState,
+    motor: MotorInverterState,
+) -> ThermalManagementResponse:
+    return ThermalManagementResponse(
+        vehicle_id=vehicle.identifier,
+        battery_target_temperature_c=state.battery_target_temperature_c,
+        motor_target_temperature_c=state.motor_target_temperature_c,
+        inverter_target_temperature_c=state.inverter_target_temperature_c,
+        cabin_target_temperature_c=state.cabin_target_temperature_c,
+        battery_temperature_c=pack.pack_temperature_c,
+        motor_temperature_c=motor.motor_temperature_c,
+        inverter_temperature_c=motor.inverter_temperature_c,
+        cabin_temperature_c=state.cabin_temperature_c,
+        battery_thermal_power_kw=state.battery_thermal_power_kw,
+        motor_thermal_power_kw=state.motor_thermal_power_kw,
+        inverter_thermal_power_kw=state.inverter_thermal_power_kw,
+        cabin_thermal_power_kw=state.cabin_thermal_power_kw,
+        auxiliary_power_kw=state.auxiliary_power_kw,
+        battery_version=pack.version,
+        motor_version=motor.version,
+        operating_state=state.operating_state,
+        limiting_reason=state.limiting_reason,
+        fault_code=state.fault_code,
+        version=state.version,
+        simulation_time_ms=state.simulation_time_ms,
+    )
+
+
+async def create_thermal_management(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    pack: BatteryPackState,
+    motor: MotorInverterState,
+    command: ThermalManagementCreate,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> ThermalManagementState:
+    existing = await session.scalar(
+        select(ThermalManagementState).where(ThermalManagementState.vehicle_id == vehicle.id)
+    )
+    if existing is not None:
+        raise ThermalManagementAlreadyExistsError()
+    state = ThermalManagementState(
+        vehicle_id=vehicle.id,
+        max_battery_thermal_power_kw=command.max_battery_thermal_power_kw,
+        max_powertrain_thermal_power_kw=command.max_powertrain_thermal_power_kw,
+        max_cabin_thermal_power_kw=command.max_cabin_thermal_power_kw,
+        battery_target_temperature_c=command.battery_target_temperature_c,
+        motor_target_temperature_c=command.motor_target_temperature_c,
+        inverter_target_temperature_c=command.inverter_target_temperature_c,
+        cabin_target_temperature_c=command.cabin_target_temperature_c,
+        cabin_temperature_c=command.initial_cabin_temperature_c,
+        battery_thermal_power_kw=0.0,
+        motor_thermal_power_kw=0.0,
+        inverter_thermal_power_kw=0.0,
+        cabin_thermal_power_kw=0.0,
+        auxiliary_power_kw=0.0,
+        operating_state=ThermalOperatingState.STANDBY.value,
+        limiting_reason=None,
+        fault_code=None,
+        version=1,
+        simulation_time_ms=0,
+    )
+    try:
+        async with session.begin_nested():
+            session.add(state)
+            await session.flush()
+    except IntegrityError as exc:
+        raise ThermalManagementAlreadyExistsError() from exc
+    payload = {
+        "vehicle_id": vehicle.identifier,
+        "battery_target_temperature_c": state.battery_target_temperature_c,
+        "cabin_target_temperature_c": state.cabin_target_temperature_c,
+        "version": state.version,
+    }
+    enqueue_event(
+        session,
+        event_type="atep.electric_vehicle.thermal_management.created.v1",
+        aggregate_type="thermal_management",
+        aggregate_id=state.id,
+        payload=payload,
+        correlation_id=correlation_id,
+    )
+    record_audit(
+        session,
+        actor_user_id=actor_user_id,
+        action="electric_vehicle.thermal_management_created",
+        resource_type="thermal_management",
+        resource_id=state.id,
+        correlation_id=correlation_id,
+        details=payload,
+    )
+    return state
+
+
+async def require_thermal_management(
+    session: AsyncSession, *, vehicle: Vehicle, for_update: bool = False
+) -> ThermalManagementState:
+    query = select(ThermalManagementState).where(ThermalManagementState.vehicle_id == vehicle.id)
+    if for_update:
+        query = query.with_for_update()
+    state = await session.scalar(query)
+    if state is None:
+        raise ResourceNotFoundError("thermal_management")
+    return state
+
+
+def _same_thermal_command(step: ThermalManagementStep, command: ThermalManagementCommand) -> bool:
+    return (
+        step.duration_ms == command.duration_ms
+        and isclose(step.ambient_temperature_c, command.ambient_temperature_c)
+        and isclose(step.cabin_heat_load_kw, command.cabin_heat_load_kw)
+        and step.enabled == command.enabled
+        and step.fault_code == command.fault_code
+        and step.previous_version == command.expected_version
+        and step.previous_battery_version == command.expected_battery_version
+        and step.previous_motor_version == command.expected_motor_version
+    )
+
+
+def _thermal_power(target_c: float, actual_c: float, maximum_kw: float) -> float:
+    return max(-maximum_kw, min(maximum_kw, (target_c - actual_c) * 0.5))
+
+
+async def simulate_thermal_step(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    command: ThermalManagementCommand,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> tuple[ThermalManagementResponse, bool]:
+    existing = await session.scalar(
+        select(ThermalManagementStep).where(
+            ThermalManagementStep.vehicle_id == vehicle.id,
+            ThermalManagementStep.command_id == command.command_id,
+        )
+    )
+    if existing is not None:
+        if not _same_thermal_command(existing, command):
+            raise ThermalCommandConflictError()
+        return ThermalManagementResponse.model_validate(
+            {**existing.result, "duplicate": True}
+        ), True
+
+    pack = await require_battery_pack(session, vehicle=vehicle, for_update=True)
+    motor = await require_motor_inverter(session, vehicle=vehicle, for_update=True)
+    state = await require_thermal_management(session, vehicle=vehicle, for_update=True)
+    if state.version != command.expected_version:
+        raise ThermalStateVersionConflictError(current_version=state.version)
+    if pack.version != command.expected_battery_version:
+        raise ThermalBatteryVersionConflictError(current_version=pack.version)
+    if motor.version != command.expected_motor_version:
+        raise ThermalMotorVersionConflictError(current_version=motor.version)
+
+    previous_version = state.version
+    previous_battery_version = pack.version
+    previous_motor_version = motor.version
+    active = command.enabled and command.fault_code is None
+    if active:
+        battery_power = _thermal_power(
+            state.battery_target_temperature_c,
+            pack.pack_temperature_c,
+            state.max_battery_thermal_power_kw,
+        )
+        motor_budget = state.max_powertrain_thermal_power_kw
+        motor_power = _thermal_power(
+            state.motor_target_temperature_c, motor.motor_temperature_c, motor_budget * 0.6
+        )
+        inverter_power = _thermal_power(
+            state.inverter_target_temperature_c,
+            motor.inverter_temperature_c,
+            motor_budget - abs(motor_power),
+        )
+        cabin_power = _thermal_power(
+            state.cabin_target_temperature_c,
+            state.cabin_temperature_c,
+            state.max_cabin_thermal_power_kw,
+        )
+    else:
+        battery_power = motor_power = inverter_power = cabin_power = 0.0
+
+    duration_s = command.duration_ms / 1000.0
+    pack.pack_temperature_c = round(
+        max(
+            -30.0,
+            min(
+                60.0,
+                pack.pack_temperature_c
+                + (
+                    battery_power * 1000.0
+                    - 25.0 * (pack.pack_temperature_c - command.ambient_temperature_c)
+                )
+                * duration_s
+                / 300_000.0,
+            ),
+        ),
+        3,
+    )
+    motor.motor_temperature_c = round(
+        max(
+            -40.0,
+            min(
+                150.0,
+                motor.motor_temperature_c
+                + (
+                    motor_power * 1000.0
+                    - 45.0 * (motor.motor_temperature_c - command.ambient_temperature_c)
+                )
+                * duration_s
+                / 80_000.0,
+            ),
+        ),
+        3,
+    )
+    motor.inverter_temperature_c = round(
+        max(
+            -40.0,
+            min(
+                110.0,
+                motor.inverter_temperature_c
+                + (
+                    inverter_power * 1000.0
+                    - 30.0 * (motor.inverter_temperature_c - command.ambient_temperature_c)
+                )
+                * duration_s
+                / 50_000.0,
+            ),
+        ),
+        3,
+    )
+    state.cabin_temperature_c = round(
+        max(
+            -40.0,
+            min(
+                80.0,
+                state.cabin_temperature_c
+                + (
+                    cabin_power * 1000.0
+                    + command.cabin_heat_load_kw * 1000.0
+                    - 80.0 * (state.cabin_temperature_c - command.ambient_temperature_c)
+                )
+                * duration_s
+                / 150_000.0,
+            ),
+        ),
+        3,
+    )
+    pack.cells = _cells(
+        count=pack.series_cell_count,
+        soc_pct=pack.soc_pct,
+        temperature_c=pack.pack_temperature_c,
+        nominal_voltage=pack.nominal_cell_voltage_v,
+    )
+    state.battery_thermal_power_kw = round(battery_power, 3)
+    state.motor_thermal_power_kw = round(motor_power, 3)
+    state.inverter_thermal_power_kw = round(inverter_power, 3)
+    state.cabin_thermal_power_kw = round(cabin_power, 3)
+    state.auxiliary_power_kw = round(
+        abs(battery_power) + abs(motor_power) + abs(inverter_power) + abs(cabin_power), 3
+    )
+    state.fault_code = command.fault_code
+    powers = (battery_power, motor_power, inverter_power, cabin_power)
+    if command.fault_code is not None:
+        state.operating_state = ThermalOperatingState.FAULTED.value
+        state.limiting_reason = "thermal_system_fault"
+    elif not command.enabled:
+        state.operating_state = ThermalOperatingState.STANDBY.value
+        state.limiting_reason = "thermal_management_disabled"
+    elif any(power > 0.0 for power in powers) and any(power < 0.0 for power in powers):
+        state.operating_state = ThermalOperatingState.MIXED.value
+        state.limiting_reason = None
+    elif any(power > 0.0 for power in powers):
+        state.operating_state = ThermalOperatingState.HEATING.value
+        state.limiting_reason = None
+    elif any(power < 0.0 for power in powers):
+        state.operating_state = ThermalOperatingState.COOLING.value
+        state.limiting_reason = None
+    else:
+        state.operating_state = ThermalOperatingState.STANDBY.value
+        state.limiting_reason = None
+
+    pack.version += 1
+    motor.version += 1
+    state.version += 1
+    pack.simulation_time_ms += command.duration_ms
+    motor.simulation_time_ms += command.duration_ms
+    state.simulation_time_ms += command.duration_ms
+    rendered = thermal_management_response(state, vehicle, pack, motor)
+    result = rendered.model_dump(mode="json")
+    session.add(
+        ThermalManagementStep(
+            vehicle_id=vehicle.id,
+            command_id=command.command_id,
+            duration_ms=command.duration_ms,
+            ambient_temperature_c=command.ambient_temperature_c,
+            cabin_heat_load_kw=command.cabin_heat_load_kw,
+            enabled=command.enabled,
+            fault_code=command.fault_code,
+            previous_version=previous_version,
+            state_version=state.version,
+            previous_battery_version=previous_battery_version,
+            battery_state_version=pack.version,
+            previous_motor_version=previous_motor_version,
+            motor_state_version=motor.version,
+            result=result,
+            requested_by_user_id=actor_user_id,
+        )
+    )
+    await session.flush()
+    payload = {
+        "vehicle_id": vehicle.identifier,
+        "command_id": command.command_id,
+        "operating_state": state.operating_state,
+        "auxiliary_power_kw": state.auxiliary_power_kw,
+        "battery_temperature_c": pack.pack_temperature_c,
+        "motor_temperature_c": motor.motor_temperature_c,
+        "inverter_temperature_c": motor.inverter_temperature_c,
+        "cabin_temperature_c": state.cabin_temperature_c,
+        "battery_version": pack.version,
+        "motor_version": motor.version,
+        "version": state.version,
+        "simulation_time_ms": state.simulation_time_ms,
+        "fault_code": state.fault_code,
+    }
+    enqueue_event(
+        session,
+        event_type="atep.electric_vehicle.thermal.step.completed.v1",
+        aggregate_type="thermal_management",
+        aggregate_id=state.id,
+        payload=payload,
+        correlation_id=correlation_id,
+    )
+    record_audit(
+        session,
+        actor_user_id=actor_user_id,
+        action="electric_vehicle.thermal_step_completed",
+        resource_type="thermal_management",
         resource_id=state.id,
         correlation_id=correlation_id,
         details=payload,

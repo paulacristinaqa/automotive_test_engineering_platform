@@ -64,6 +64,22 @@
 | EV-F-058 | An identical charging command retry shall return its persisted response without applying energy twice. | Replay test |
 | EV-F-059 | Reusing a charging command identifier with changed input shall return a stable conflict. | Changed-reuse test |
 | EV-F-060 | Charging state, battery state, command evidence, audit, and outbox shall commit atomically. | Atomic-evidence test |
+| EV-F-061 | The platform shall create at most one thermal-management state per battery- and motor-equipped vehicle. | Migration `0041`; creation test |
+| EV-F-062 | Thermal control shall expose independent targets for battery, motor, inverter, and cabin. | Response and OpenAPI contracts |
+| EV-F-063 | Each zone shall use a bounded deterministic heating or cooling request. | Mixed thermal-step test |
+| EV-F-064 | Motor and inverter thermal outputs shall share the configured powertrain actuator budget. | Power-budget test |
+| EV-F-065 | Temperature evolution shall include logical duration, thermal mass, and ambient exchange. | Active and passive thermal tests |
+| EV-F-066 | Cabin evolution shall include a bounded external heat load. | Cabin-load contract and step test |
+| EV-F-067 | Disabled thermal management shall draw zero auxiliary power while passive exchange continues. | Disabled-step test |
+| EV-F-068 | An injected thermal fault shall disable all actuators and publish a stable fault code. | Fault test |
+| EV-F-069 | Auxiliary power shall equal the sum of absolute zone actuator demands. | Energy-demand test |
+| EV-F-070 | A thermal step shall update battery, motor, inverter, cabin, and all versions atomically. | Cross-aggregate step test |
+| EV-F-071 | Thermal commands shall validate thermal, battery, and motor versions independently. | Version-conflict tests |
+| EV-F-072 | An identical thermal command retry shall return stored evidence without applying heat twice. | Exact-replay test |
+| EV-F-073 | Reusing a thermal command identifier with changed input shall return a stable conflict. | Changed-reuse test |
+| EV-F-074 | Thermal creation and steps shall produce audit and transactional outbox evidence. | Service evidence tests |
+| EV-F-075 | Thermal read and mutation operations shall use the Volume VI RBAC permissions. | API dependencies |
+| EV-F-076 | Thermal responses shall publish stable standby, heating, cooling, mixed, and faulted states. | State-classification tests |
 
 ## Non-Functional Requirements
 
@@ -89,6 +105,10 @@
 | EV-NF-018 | Determinism | Charging uses bounded logical durations and an explainable analytic charge curve. |
 | EV-NF-019 | Evidence minimization | Events and audit records exclude the battery cell array. |
 | EV-NF-020 | Local-first operation | VI-4 requires no paid service, external API, cloud account, or GPU. |
+| EV-NF-021 | Cross-aggregate consistency | Thermal mutations lock battery, motor, and thermal rows in a fixed order. |
+| EV-NF-022 | Bounded thermal execution | All targets, ambient inputs, heat loads, durations, and actuator outputs have explicit limits. |
+| EV-NF-023 | Explainability | Zone power, total auxiliary power, state, fault, temperatures, and versions are published together. |
+| EV-NF-024 | Local-first operation | VI-5 requires no paid service, external API, cloud account, or GPU. |
 
 ## API Traceability
 
@@ -106,3 +126,6 @@
 | `POST /api/v1/vehicles/{vehicle_id}/electric/charging` | EV-F-044, EV-F-045, EV-F-060 |
 | `GET /api/v1/vehicles/{vehicle_id}/electric/charging` | EV-F-045 through EV-F-057 |
 | `POST /api/v1/vehicles/{vehicle_id}/electric/charging/commands` | EV-F-046 through EV-F-060 |
+| `POST /api/v1/vehicles/{vehicle_id}/electric/thermal` | EV-F-061, EV-F-062, EV-F-074, EV-F-075 |
+| `GET /api/v1/vehicles/{vehicle_id}/electric/thermal` | EV-F-062, EV-F-069, EV-F-075, EV-F-076 |
+| `POST /api/v1/vehicles/{vehicle_id}/electric/thermal/steps` | EV-F-063 through EV-F-076 |

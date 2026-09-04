@@ -548,6 +548,20 @@ def test_electric_vehicle_charging_contracts_are_published() -> None:
     assert command_schema["properties"]["requested_power_kw"]["maximum"] == 1_000.0
 
 
+def test_electric_vehicle_thermal_contracts_are_published() -> None:
+    schema = core_app.openapi()
+    paths = schema["paths"]
+    thermal = paths["/api/v1/vehicles/{vehicle_id}/electric/thermal"]
+    assert {"get", "post"} <= set(thermal)
+    assert "/api/v1/vehicles/{vehicle_id}/electric/thermal/steps" in paths
+    create_schema = schema["components"]["schemas"]["ThermalManagementCreate"]
+    assert create_schema["properties"]["max_battery_thermal_power_kw"]["maximum"] == 50.0
+    assert create_schema["properties"]["cabin_target_temperature_c"]["minimum"] == 16.0
+    command_schema = schema["components"]["schemas"]["ThermalManagementCommand"]
+    assert command_schema["properties"]["duration_ms"]["maximum"] == 3_600_000
+    assert command_schema["properties"]["cabin_heat_load_kw"]["maximum"] == 20.0
+
+
 def test_test_artifact_contracts_and_safe_pagination_are_published() -> None:
     paths = core_app.openapi()["paths"]
     collection = paths["/api/v1/test-runs/{run_id}/artifacts"]

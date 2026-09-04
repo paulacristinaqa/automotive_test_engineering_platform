@@ -448,6 +448,54 @@ class ChargingTransitionError(ApplicationError):
         )
 
 
+class ThermalManagementAlreadyExistsError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="thermal_management_already_exists",
+            message="The vehicle already has a thermal-management system.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class ThermalStateVersionConflictError(ApplicationError):
+    def __init__(self, *, current_version: int) -> None:
+        super().__init__(
+            code="thermal_state_version_conflict",
+            message="The thermal-management state was changed by another operation.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_version": current_version},
+        )
+
+
+class ThermalBatteryVersionConflictError(ApplicationError):
+    def __init__(self, *, current_version: int) -> None:
+        super().__init__(
+            code="thermal_battery_version_conflict",
+            message="The battery state was changed by another operation.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_version": current_version},
+        )
+
+
+class ThermalMotorVersionConflictError(ApplicationError):
+    def __init__(self, *, current_version: int) -> None:
+        super().__init__(
+            code="thermal_motor_version_conflict",
+            message="The motor state was changed by another operation.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_version": current_version},
+        )
+
+
+class ThermalCommandConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="thermal_command_conflict",
+            message="The thermal-management command identifier was already used differently.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
 class CanDbcCatalogueAlreadyExistsError(ApplicationError):
     def __init__(self) -> None:
         super().__init__(

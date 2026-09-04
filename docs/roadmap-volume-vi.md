@@ -6,7 +6,7 @@
 | VI-2 | Motor torque, inverter efficiency, electrical power, and drive-mode limits | Implemented |
 | VI-3 | Regenerative-braking strategy and blended friction braking | Implemented |
 | VI-4 | AC/DC charging sessions, charge curves, limits, and fault handling | Implemented |
-| VI-5 | Active thermal-management loops for battery, motor, and cabin | Planned |
+| VI-5 | Active thermal-management loops for battery, motor, inverter, and cabin | Implemented |
 | VI-6 | Range and energy-consumption estimation across reproducible drive cycles | Planned |
 | VI-7 | Cross-domain EV scenarios integrating BMS ECU, CAN, UDS, tests, and evidence | Planned |
 
@@ -36,5 +36,10 @@ CCS session start, deterministic energy-transfer steps, pause, resume, stop, inj
 fault clearing. Charging power is constrained by connector capability, battery voltage/current,
 temperature, BMS state, target SOC, remaining energy room, and a taper above 80% SOC.
 
-The recommended next increment is VI-5: active thermal-management loops for the battery, motor,
-inverter, and cabin.
+VI-5 adds one thermal-management aggregate per vehicle. Bounded proportional controllers heat or
+cool the battery, motor, inverter, and cabin toward explicit targets. Each logical step models
+ambient exchange, cabin heat load, actuator capacity, auxiliary electrical demand, disabled
+operation, and injected faults while updating battery and motor temperatures atomically.
+
+The recommended next increment is VI-6: deterministic range and energy-consumption estimation
+across reproducible drive cycles.

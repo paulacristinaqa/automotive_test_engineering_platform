@@ -133,12 +133,34 @@ Charging command
 - Commands support exact replay, changed-reuse rejection, separate charging/battery version
   conflicts, minimized evidence, audit, and transactional outbox publication.
 
-## Deliberate VI-1 through VI-4 Limits
+## VI-5 Active Thermal Management
+
+VI-5 coordinates the existing battery and motor temperature states with a vehicle-scoped thermal
+controller and cabin model.
+
+```text
+Thermal step
+    -> battery, motor, and thermal row locks
+    -> three independent optimistic-version checks
+    -> bounded heating or cooling requests for four thermal zones
+    -> ambient exchange and cabin heat-load integration
+    -> battery, motor, inverter, cabin, replay, audit, and outbox commit
+```
+
+- Positive actuator power heats a zone and negative power cools it.
+- Proportional requests are capped by separate battery, combined powertrain, and cabin ratings.
+- The motor receives at most 60% of the powertrain budget; the inverter uses the remaining budget.
+- Logical temperature changes use explicit thermal masses and ambient-loss coefficients.
+- Disabled or faulted control draws zero auxiliary power while passive ambient exchange continues.
+- Exact replay returns the stored cross-aggregate result. Changed reuse and stale thermal, battery,
+  or motor versions return distinct stable conflicts.
+
+## Deliberate VI-1 through VI-5 Limits
 
 - SOH is persisted but degradation and cycle aging begin in a later increment.
 - Cell balancing, sensor faults, thermal propagation, modules in parallel, and chemistry-specific
   voltage curves are future model refinements.
-- Thermal-control actuators and range estimation remain VI-5 and VI-6 work.
+- Range estimation remains VI-6 work.
 - VI-2 uses an explainable analytic efficiency surface rather than a production calibration map.
 - The motor step reads battery availability but does not yet debit battery SOC; full coupled energy
   flow is introduced with cross-domain drive scenarios.
@@ -147,3 +169,5 @@ Charging command
   time; those dynamics remain future fidelity work.
 - VI-4 uses an explainable charging curve rather than chemistry- or charger-specific calibration
   maps, and does not yet simulate EVSE protocol handshakes or grid behavior.
+- VI-5 uses lumped thermal zones and proportional control rather than coolant-flow, heat-pump,
+  refrigerant, or passenger-comfort calibration maps.

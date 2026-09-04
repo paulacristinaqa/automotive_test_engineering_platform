@@ -17,6 +17,9 @@ from atep.electric_vehicle.schemas import (
     MotorSimulationCommand,
     RegenerativeBrakeCreate,
     RegenerativeBrakeResponse,
+    ThermalManagementCommand,
+    ThermalManagementCreate,
+    ThermalManagementResponse,
 )
 from atep.electric_vehicle.service import (
     battery_response,
@@ -25,6 +28,7 @@ from atep.electric_vehicle.service import (
     create_charging_system,
     create_motor_inverter,
     create_regenerative_brake,
+    create_thermal_management,
     execute_charging_command,
     motor_inverter_response,
     regenerative_brake_response,
@@ -32,9 +36,12 @@ from atep.electric_vehicle.service import (
     require_charging_system,
     require_motor_inverter,
     require_regenerative_brake,
+    require_thermal_management,
     simulate_battery_step,
     simulate_brake_step,
     simulate_motor_step,
+    simulate_thermal_step,
+    thermal_management_response,
 )
 from atep.identity.dependencies import require_permissions
 from atep.identity.models import User
@@ -283,6 +290,73 @@ async def execute_charging_command_endpoint(
 ) -> ChargingSystemResponse:
     vehicle = await require_vehicle(session, vehicle_id)
     result, duplicate = await execute_charging_command(
+        session,
+        vehicle=vehicle,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+    return result
+
+
+@router.post(
+    "/thermal", response_model=ThermalManagementResponse, status_code=status.HTTP_201_CREATED
+)
+async def create_thermal_management_endpoint(
+    vehicle_id: str,
+    command: ThermalManagementCreate,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(electric_vehicle_manage)],
+) -> ThermalManagementResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    pack = await require_battery_pack(session, vehicle=vehicle)
+    motor = await require_motor_inverter(session, vehicle=vehicle)
+    state = await create_thermal_management(
+        session,
+        vehicle=vehicle,
+        pack=pack,
+        motor=motor,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(state, attribute_names=["created_at", "updated_at"])
+    return thermal_management_response(state, vehicle, pack, motor)
+
+
+@router.get("/thermal", response_model=ThermalManagementResponse)
+async def get_thermal_management_endpoint(
+    vehicle_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _actor: Annotated[User, Depends(electric_vehicle_read)],
+) -> ThermalManagementResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    pack = await require_battery_pack(session, vehicle=vehicle)
+    motor = await require_motor_inverter(session, vehicle=vehicle)
+    state = await require_thermal_management(session, vehicle=vehicle)
+    return thermal_management_response(state, vehicle, pack, motor)
+
+
+@router.post(
+    "/thermal/steps",
+    response_model=ThermalManagementResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def simulate_thermal_step_endpoint(
+    vehicle_id: str,
+    command: ThermalManagementCommand,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(electric_vehicle_manage)],
+) -> ThermalManagementResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    result, duplicate = await simulate_thermal_step(
         session,
         vehicle=vehicle,
         command=command,
