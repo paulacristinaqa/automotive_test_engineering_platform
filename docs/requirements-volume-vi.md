@@ -32,6 +32,21 @@
 | EV-F-026 | Motor creation and completed steps shall produce atomic audit and outbox evidence. | Service evidence tests |
 | EV-F-027 | Negative torque shall be rejected until VI-3 defines regenerative braking. | Contract-bound test |
 | EV-F-028 | Powertrain read and mutation operations shall use the Volume VI RBAC permissions. | API dependencies |
+| EV-F-029 | The platform shall create at most one regenerative-braking state for a vehicle with battery and motor/inverter state. | Migration `0039`; creation tests |
+| EV-F-030 | A braking step shall allocate requested deceleration between regenerative and friction braking. | Regenerative and blended tests |
+| EV-F-031 | Regenerative force shall be constrained by motor torque, final-drive ratio, drivetrain efficiency, and wheel radius. | Torque-limit test |
+| EV-F-032 | Battery charge acceptance shall be constrained by voltage, SOC, temperature, contactors, BMS state, and configured regenerative power. | Charge-acceptance tests |
+| EV-F-033 | Regeneration shall be unavailable below 0.5 m/s. | Low-speed fallback test |
+| EV-F-034 | Unavailable regeneration shall fall back to friction braking. | Friction fallback tests |
+| EV-F-035 | Total delivered deceleration shall not exceed regenerative plus configured friction capacity. | Brake-capacity test |
+| EV-F-036 | Recovered electrical power shall include deterministic regeneration efficiency. | Power recovery test |
+| EV-F-037 | Recovered energy shall be integrated over logical duration. | Energy recovery test |
+| EV-F-038 | Accepted recovered energy shall increase battery SOC and battery version atomically with braking evidence. | Cross-aggregate state test |
+| EV-F-039 | Braking commands shall validate both braking and battery expected versions. | Version-conflict tests |
+| EV-F-040 | Braking commands shall support exact replay and reject changed command reuse. | Replay and conflict tests |
+| EV-F-041 | Braking creation and completed steps shall produce atomic audit and outbox evidence. | Service evidence tests |
+| EV-F-042 | Braking responses shall publish stable operating states and limiting reasons. | Strategy and limiting tests |
+| EV-F-043 | Braking read and mutation operations shall use the Volume VI RBAC permissions. | API dependencies |
 
 ## Non-Functional Requirements
 
@@ -49,6 +64,10 @@
 | EV-NF-010 | Explainability | Every derated or protected result publishes a stable limiting reason. |
 | EV-NF-011 | Bounded thermal behavior | Motor and inverter temperature inputs and protection thresholds are explicit. |
 | EV-NF-012 | Local-first operation | VI-2 uses no paid service, external API, cloud account, or GPU. |
+| EV-NF-013 | Cross-aggregate consistency | A braking mutation locks motor, battery, and braking state in a fixed order. |
+| EV-NF-014 | Energy conservation evidence | Recovered power, energy, battery SOC, and versions are published together. |
+| EV-NF-015 | Explainable degradation | Fallback and capacity outcomes use stable limiting reasons. |
+| EV-NF-016 | Local-first operation | VI-3 uses no paid service, external API, cloud account, or GPU. |
 
 ## API Traceability
 
@@ -60,3 +79,6 @@
 | `POST /api/v1/vehicles/{vehicle_id}/electric/powertrain` | EV-F-015, EV-F-016, EV-F-026, EV-F-028 |
 | `GET /api/v1/vehicles/{vehicle_id}/electric/powertrain` | EV-F-016, EV-F-022, EV-F-028 |
 | `POST /api/v1/vehicles/{vehicle_id}/electric/powertrain/steps` | EV-F-017 through EV-F-028 |
+| `POST /api/v1/vehicles/{vehicle_id}/electric/braking` | EV-F-029, EV-F-041, EV-F-043 |
+| `GET /api/v1/vehicles/{vehicle_id}/electric/braking` | EV-F-030 through EV-F-038, EV-F-042, EV-F-043 |
+| `POST /api/v1/vehicles/{vehicle_id}/electric/braking/steps` | EV-F-030 through EV-F-043 |

@@ -8,18 +8,25 @@ from atep.electric_vehicle.schemas import (
     BatteryPackCreate,
     BatteryPackResponse,
     BatterySimulationCommand,
+    BrakeSimulationCommand,
     MotorInverterCreate,
     MotorInverterResponse,
     MotorSimulationCommand,
+    RegenerativeBrakeCreate,
+    RegenerativeBrakeResponse,
 )
 from atep.electric_vehicle.service import (
     battery_response,
     create_battery_pack,
     create_motor_inverter,
+    create_regenerative_brake,
     motor_inverter_response,
+    regenerative_brake_response,
     require_battery_pack,
     require_motor_inverter,
+    require_regenerative_brake,
     simulate_battery_step,
+    simulate_brake_step,
     simulate_motor_step,
 )
 from atep.identity.dependencies import require_permissions
@@ -139,6 +146,72 @@ async def simulate_motor_step_endpoint(
 ) -> MotorInverterResponse:
     vehicle = await require_vehicle(session, vehicle_id)
     result, duplicate = await simulate_motor_step(
+        session,
+        vehicle=vehicle,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+    return result
+
+
+@router.post(
+    "/braking", response_model=RegenerativeBrakeResponse, status_code=status.HTTP_201_CREATED
+)
+async def create_regenerative_brake_endpoint(
+    vehicle_id: str,
+    command: RegenerativeBrakeCreate,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(electric_vehicle_manage)],
+) -> RegenerativeBrakeResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    pack = await require_battery_pack(session, vehicle=vehicle)
+    motor = await require_motor_inverter(session, vehicle=vehicle)
+    state = await create_regenerative_brake(
+        session,
+        vehicle=vehicle,
+        pack=pack,
+        motor=motor,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(state, attribute_names=["created_at", "updated_at"])
+    return regenerative_brake_response(state, vehicle, pack)
+
+
+@router.get("/braking", response_model=RegenerativeBrakeResponse)
+async def get_regenerative_brake_endpoint(
+    vehicle_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _actor: Annotated[User, Depends(electric_vehicle_read)],
+) -> RegenerativeBrakeResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    pack = await require_battery_pack(session, vehicle=vehicle)
+    state = await require_regenerative_brake(session, vehicle=vehicle)
+    return regenerative_brake_response(state, vehicle, pack)
+
+
+@router.post(
+    "/braking/steps",
+    response_model=RegenerativeBrakeResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def simulate_brake_step_endpoint(
+    vehicle_id: str,
+    command: BrakeSimulationCommand,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(electric_vehicle_manage)],
+) -> RegenerativeBrakeResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    result, duplicate = await simulate_brake_step(
         session,
         vehicle=vehicle,
         command=command,

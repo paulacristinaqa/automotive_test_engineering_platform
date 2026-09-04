@@ -362,6 +362,44 @@ class MotorSimulationCommandConflictError(ApplicationError):
         )
 
 
+class RegenerativeBrakeAlreadyExistsError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="regenerative_brake_already_exists",
+            message="The vehicle already has a regenerative-braking state.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class BrakeStateVersionConflictError(ApplicationError):
+    def __init__(self, *, current_version: int) -> None:
+        super().__init__(
+            code="brake_state_version_conflict",
+            message="The regenerative-braking state was changed by another operation.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_version": current_version},
+        )
+
+
+class BrakeBatteryVersionConflictError(ApplicationError):
+    def __init__(self, *, current_version: int) -> None:
+        super().__init__(
+            code="brake_battery_version_conflict",
+            message="The battery state was changed by another operation.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_version": current_version},
+        )
+
+
+class BrakeSimulationCommandConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="brake_simulation_command_conflict",
+            message="The brake simulation command identifier was already used differently.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
 class CanDbcCatalogueAlreadyExistsError(ApplicationError):
     def __init__(self) -> None:
         super().__init__(

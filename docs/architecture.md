@@ -465,3 +465,16 @@ ECU-scoped idempotency identities. Exact retry returns stored evidence; changed 
 DTCs use ECU simulation time, retain bounded snapshots in protected persistence, and exclude those
 measurements from audit and outbox events. State, command/DTC mutation, audit, and outbox writes
 share one PostgreSQL transaction and independent `diagnostics:read`/`diagnostics:manage` RBAC.
+
+# Volume VI Electric Vehicle Boundary
+
+Volume VI owns high-fidelity battery, propulsion, and regenerative-braking state without replacing
+the lightweight whole-vehicle projection in Volume II. Battery, motor/inverter, and braking remain
+separate vehicle-scoped aggregates with explicit ownership and optimistic versions.
+
+VI-3 coordinates the motor, battery, and braking aggregates through an application service. A fixed
+lock order produces a consistent view of recoverable torque and charge acceptance. Requested
+deceleration is allocated between regenerative and friction braking; accepted electrical energy
+updates battery SOC and version atomically with braking state, immutable command evidence, audit,
+and outbox. Exact retries return their persisted cross-aggregate snapshot. Android clients and
+future CAN/ECU adapters use the public API and events rather than database access.

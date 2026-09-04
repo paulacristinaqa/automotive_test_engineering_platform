@@ -144,3 +144,84 @@ class MotorSimulationStep(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     requested_by_user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
     )
+
+
+class RegenerativeBrakeState(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "regenerative_brake_states"
+    __table_args__ = (
+        UniqueConstraint("vehicle_id", name="uq_regenerative_brake_vehicle"),
+        CheckConstraint("vehicle_mass_kg > 0", name="ck_regenerative_brake_mass"),
+        CheckConstraint("wheel_radius_m > 0", name="ck_regenerative_brake_wheel_radius"),
+        CheckConstraint("final_drive_ratio > 0", name="ck_regenerative_brake_drive_ratio"),
+        CheckConstraint(
+            "drivetrain_efficiency_pct > 0 AND drivetrain_efficiency_pct <= 100",
+            name="ck_regenerative_brake_drivetrain_efficiency",
+        ),
+        CheckConstraint("max_regen_torque_nm > 0", name="ck_regenerative_brake_torque"),
+        CheckConstraint("max_regen_power_kw > 0", name="ck_regenerative_brake_power"),
+        CheckConstraint(
+            "regen_efficiency_pct > 0 AND regen_efficiency_pct <= 100",
+            name="ck_regenerative_brake_efficiency",
+        ),
+        CheckConstraint(
+            "max_friction_deceleration_mps2 > 0",
+            name="ck_regenerative_brake_friction",
+        ),
+        CheckConstraint("version >= 1", name="ck_regenerative_brake_version"),
+        CheckConstraint(
+            "operating_state IN ('standby', 'regenerative', 'blended', 'friction', 'limited')",
+            name="ck_regenerative_brake_operating_state",
+        ),
+    )
+
+    vehicle_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("vehicles.id", ondelete="CASCADE"), index=True
+    )
+    vehicle_mass_kg: Mapped[float] = mapped_column(Float)
+    wheel_radius_m: Mapped[float] = mapped_column(Float)
+    final_drive_ratio: Mapped[float] = mapped_column(Float)
+    drivetrain_efficiency_pct: Mapped[float] = mapped_column(Float)
+    max_regen_torque_nm: Mapped[float] = mapped_column(Float)
+    max_regen_power_kw: Mapped[float] = mapped_column(Float)
+    regen_efficiency_pct: Mapped[float] = mapped_column(Float)
+    max_friction_deceleration_mps2: Mapped[float] = mapped_column(Float)
+    requested_deceleration_mps2: Mapped[float] = mapped_column(Float, default=0.0)
+    delivered_deceleration_mps2: Mapped[float] = mapped_column(Float, default=0.0)
+    vehicle_speed_mps: Mapped[float] = mapped_column(Float, default=0.0)
+    regenerative_deceleration_mps2: Mapped[float] = mapped_column(Float, default=0.0)
+    friction_deceleration_mps2: Mapped[float] = mapped_column(Float, default=0.0)
+    regenerative_motor_torque_nm: Mapped[float] = mapped_column(Float, default=0.0)
+    recovered_power_kw: Mapped[float] = mapped_column(Float, default=0.0)
+    recovered_energy_kwh: Mapped[float] = mapped_column(Float, default=0.0)
+    cumulative_recovered_energy_kwh: Mapped[float] = mapped_column(Float, default=0.0)
+    battery_charge_acceptance_kw: Mapped[float] = mapped_column(Float, default=0.0)
+    operating_state: Mapped[str] = mapped_column(String(16), index=True)
+    limiting_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    simulation_time_ms: Mapped[int] = mapped_column(BigInteger, default=0)
+
+
+class BrakeSimulationStep(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "brake_simulation_steps"
+    __table_args__ = (
+        UniqueConstraint("vehicle_id", "command_id", name="uq_brake_step_command"),
+        CheckConstraint(
+            "duration_ms >= 1 AND duration_ms <= 3600000", name="ck_brake_step_duration"
+        ),
+    )
+
+    vehicle_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("vehicles.id", ondelete="CASCADE"), index=True
+    )
+    command_id: Mapped[str] = mapped_column(String(64))
+    duration_ms: Mapped[int] = mapped_column(Integer)
+    requested_deceleration_mps2: Mapped[float] = mapped_column(Float)
+    vehicle_speed_mps: Mapped[float] = mapped_column(Float)
+    previous_version: Mapped[int] = mapped_column(Integer)
+    state_version: Mapped[int] = mapped_column(Integer)
+    previous_battery_version: Mapped[int] = mapped_column(Integer)
+    battery_state_version: Mapped[int] = mapped_column(Integer)
+    result: Mapped[dict[str, Any]] = mapped_column(JSON)
+    requested_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )

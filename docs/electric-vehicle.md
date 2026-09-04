@@ -72,18 +72,48 @@ Motor command
 - Speed above the configured motor limit produces zero delivered torque.
 - Motor temperature at 150 C or inverter temperature at 110 C enters protection and removes
   delivered torque and power.
-- Negative requested torque is rejected because regenerative braking belongs to VI-3.
+- Negative propulsion torque remains rejected; VI-3 represents regeneration through an explicit
+  requested-deceleration contract.
 - Commands preserve the VI-1 logical-time, optimistic-version, exact-replay, audit, and outbox
   patterns.
 
-## Deliberate VI-1 and VI-2 Limits
+## VI-3 Regenerative and Blended Braking
+
+VI-3 adds a separate regenerative-braking aggregate. It locks the motor, battery, and braking rows
+in a fixed order, validates braking and battery versions, and allocates requested deceleration
+between electrical recovery and friction braking.
+
+```text
+Brake command
+    -> motor, battery, and braking row locks
+    -> braking and battery version checks
+    -> motor torque and battery charge-acceptance limits
+    -> regenerative/friction force allocation
+    -> recovered power, energy, and battery SOC update
+    -> brake step + audit + outbox (one transaction)
+```
+
+- Regeneration is disabled below 0.5 m/s, with open contactors, in BMS protection, at or above
+  95% SOC, or outside the 0-50 C battery temperature window.
+- Charge acceptance tapers between 80% and 95% SOC and is reduced near the temperature window
+  edges or while the BMS is in warning. The remaining energy room also caps long steps so one
+  command cannot cross the 95% regenerative ceiling.
+- Regenerative force is limited by motor torque, final drive, drivetrain efficiency, wheel radius,
+  configured regenerative power, and battery acceptance.
+- Friction braking supplies the remaining request up to its configured deceleration capacity.
+- Recovered electrical energy advances battery SOC, battery version, and battery logical time in
+  the same transaction as braking state, command evidence, audit, and outbox.
+- Operating states are `standby`, `regenerative`, `blended`, `friction`, and `limited`.
+
+## Deliberate VI-1 through VI-3 Limits
 
 - SOH is persisted but degradation and cycle aging begin in a later increment.
 - Cell balancing, sensor faults, thermal propagation, modules in parallel, and chemistry-specific
   voltage curves are future model refinements.
-- Regenerative braking, charging, thermal-control actuators, and range estimation remain VI-3
-  through VI-6 work.
+- Charging, thermal-control actuators, and range estimation remain VI-4 through VI-6 work.
 - VI-2 uses an explainable analytic efficiency surface rather than a production calibration map.
 - The motor step reads battery availability but does not yet debit battery SOC; full coupled energy
   flow is introduced with cross-domain drive scenarios.
 - Cross-volume CAN, UDS, ECU, and automated-test orchestration is planned for VI-7.
+- VI-3 uses a quasi-static step and does not integrate vehicle speed or hydraulic pressure over
+  time; those dynamics remain future fidelity work.

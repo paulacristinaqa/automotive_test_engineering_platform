@@ -133,3 +133,62 @@ class MotorInverterResponse(BaseModel):
     version: int
     simulation_time_ms: int
     duplicate: bool = False
+
+
+class BrakeOperatingState(StrEnum):
+    STANDBY = "standby"
+    REGENERATIVE = "regenerative"
+    BLENDED = "blended"
+    FRICTION = "friction"
+    LIMITED = "limited"
+
+
+class RegenerativeBrakeCreate(BaseModel):
+    vehicle_mass_kg: float = Field(default=2_000.0, ge=500.0, le=10_000.0)
+    wheel_radius_m: float = Field(default=0.34, ge=0.15, le=1.0)
+    final_drive_ratio: float = Field(default=9.0, ge=1.0, le=25.0)
+    drivetrain_efficiency_pct: float = Field(default=90.0, ge=50.0, le=99.5)
+    max_regen_torque_nm: float = Field(default=180.0, gt=0.0, le=2_000.0)
+    max_regen_power_kw: float = Field(default=100.0, gt=0.0, le=1_000.0)
+    regen_efficiency_pct: float = Field(default=85.0, ge=50.0, le=99.5)
+    max_friction_deceleration_mps2: float = Field(default=9.0, gt=0.0, le=15.0)
+
+
+class BrakeSimulationCommand(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    command_id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._:-]+$")
+    duration_ms: int = Field(ge=1, le=3_600_000)
+    requested_deceleration_mps2: float = Field(ge=0.0, le=15.0)
+    vehicle_speed_mps: float = Field(ge=0.0, le=100.0)
+    expected_version: int = Field(ge=1)
+    expected_battery_version: int = Field(ge=1)
+
+
+class RegenerativeBrakeResponse(BaseModel):
+    vehicle_id: str
+    vehicle_mass_kg: float
+    wheel_radius_m: float
+    final_drive_ratio: float
+    drivetrain_efficiency_pct: float
+    max_regen_torque_nm: float
+    max_regen_power_kw: float
+    regen_efficiency_pct: float
+    max_friction_deceleration_mps2: float
+    requested_deceleration_mps2: float
+    delivered_deceleration_mps2: float
+    vehicle_speed_mps: float
+    regenerative_deceleration_mps2: float
+    friction_deceleration_mps2: float
+    regenerative_motor_torque_nm: float
+    recovered_power_kw: float
+    recovered_energy_kwh: float
+    cumulative_recovered_energy_kwh: float
+    battery_charge_acceptance_kw: float
+    battery_soc_pct: float
+    battery_version: int
+    operating_state: BrakeOperatingState
+    limiting_reason: str | None
+    version: int
+    simulation_time_ms: int
+    duplicate: bool = False

@@ -5,9 +5,9 @@
 | Field | Value |
 |---|---|
 | Document | ATEP Engineering Workbook - Volume VI: Electric Vehicle |
-| Version | 0.2.0 |
-| Baseline date | 3 September 2026 |
-| Status | VI-1 battery/BMS and VI-2 motor/inverter implemented |
+| Version | 0.3.0 |
+| Baseline date | 4 September 2026 |
+| Status | VI-1 battery/BMS, VI-2 motor/inverter, and VI-3 regenerative braking implemented |
 | Audience | Automotive software, simulation, QA, functional-safety, and platform engineers |
 
 ## 1. Purpose and Scope
@@ -15,7 +15,8 @@
 Volume VI turns the platform's general digital vehicle into a testable electric-energy system.
 VI-1 establishes a persistent battery pack and deterministic BMS behavior. VI-2 adds a persistent
 motor/inverter aggregate, torque delivery, efficiency, power loss, thermal protection, drive-mode
-limits, and battery-derived propulsion availability for repeatable software tests.
+limits, and battery-derived propulsion availability. VI-3 adds requested-deceleration control,
+regenerative energy recovery, battery charge acceptance, and blended friction braking.
 
 ### In Scope for VI-1
 
@@ -38,23 +39,29 @@ limits, and battery-derived propulsion availability for repeatable software test
 - motor and inverter thermal evolution and protection;
 - stable limiting reasons, optimistic concurrency, exact replay, audit, and outbox evidence.
 
+### In Scope for VI-3
+
+- one regenerative-braking state per battery- and motor-equipped vehicle;
+- requested and delivered deceleration with regenerative and friction allocation;
+- motor-torque, drivetrain, wheel, speed, and battery charge-acceptance limits;
+- recovered electrical power, step energy, cumulative energy, and battery SOC update;
+- low-speed and battery-unavailable friction fallback;
+- braking and battery optimistic versions, exact replay, audit, and outbox evidence.
+
 ### Deferred
 
 - chemistry-specific equivalent-circuit and open-circuit-voltage curves;
 - cell balancing, aging, sensor faults, and module topology;
-- regenerative braking, charging, cooling actuators, and range estimation;
+- charging, cooling actuators, and range estimation;
 - BMS ECU, CAN, UDS, dashboard, and test-framework end-to-end orchestration.
 
 ## 2. Architecture
 
-The FastAPI electric-vehicle boundary coordinates these explicit components:
-
-- RBAC through `electric_vehicle:read` and `electric_vehicle:manage`;
-- `BatteryPackState` as the one-per-vehicle electrical, thermal, BMS, contactor, and cell state;
-- `BatterySimulationStep` as the command identity and immutable replay evidence;
-- `MotorInverterState` as the one-per-vehicle propulsion, efficiency, power, and thermal state;
-- `MotorSimulationStep` as the propulsion command identity and immutable replay evidence;
-- `AuditRecord` and `OutboxEvent` in the same database transaction as each accepted mutation.
+The FastAPI electric-vehicle boundary uses `electric_vehicle:read` and
+`electric_vehicle:manage`. `BatteryPackState`, `MotorInverterState`, and
+`RegenerativeBrakeState` own the battery, propulsion, and braking aggregates. Their simulation
+step records preserve immutable replay evidence. `AuditRecord` and `OutboxEvent` commit in the
+same database transaction as each accepted mutation.
 
 ### Cross-Volume Ownership
 
@@ -75,6 +82,8 @@ Volume VI state through explicit integration contracts rather than sharing datab
 | MotorInverterState | Authoritative propulsion state | one per vehicle; version >= 1 |
 | Drive mode | Driver-selectable torque policy | `eco`, `normal`, `sport` |
 | Powertrain state | Propulsion decision | `standby`, `ready`, `derated`, `protection` |
+| RegenerativeBrakeState | Braking strategy and recovered energy | one per vehicle; version >= 1 |
+| Brake state | Current allocation decision | `standby`, `regenerative`, `blended`, `friction`, `limited` |
 
 ### Sign Convention
 
@@ -104,15 +113,27 @@ current rather than extrapolating heating beyond isolation.
 
 ### VI-2 Propulsion Model
 
-- Mode torque ceiling = configured peak torque multiplied by 0.60, 0.85, or 1.00 for eco,
-  normal, or sport.
+- Mode torque ceiling = configured peak torque multiplied by 0.60, 0.85, or 1.00 for eco, normal, or sport.
 - Mechanical power (kW) = delivered torque multiplied by 2 pi multiplied by rpm / 60 / 1,000.
 - Electrical power (kW) = mechanical power divided by deterministic efficiency.
 - Conversion loss (kW) = electrical power minus mechanical power.
-- Available electrical power is the lower of inverter rating and battery voltage multiplied by
-  the BMS-dependent current ceiling.
-- Motor and inverter temperatures integrate their share of conversion loss and passive cooling
-  over logical time. Protection trips at 150 C motor or 110 C inverter temperature.
+- Available power is the lower of inverter rating and battery voltage multiplied by the BMS current ceiling.
+- Motor and inverter temperatures integrate conversion loss and passive cooling over logical time.
+
+### VI-3 Braking Model
+
+- Requested braking force (N) = vehicle mass multiplied by requested deceleration.
+- Regenerative force is bounded by motor torque, final-drive ratio, drivetrain efficiency, and wheel radius.
+- Battery-limited regenerative force is charge acceptance divided by speed and regeneration efficiency.
+- Friction force supplies the remaining request within its configured limit.
+- Recovered power (kW) = regenerative force multiplied by speed and efficiency, divided by 1,000.
+- Step energy (kWh) = recovered power multiplied by duration in hours.
+
+Recovered energy increases SOC using SOH-adjusted pack energy.
+
+Charge acceptance is zero below 0.5 m/s, with open contactors, in BMS protection, at or above 95%
+SOC, or outside 0-50 C. It tapers from 80% to 95% SOC, is reduced near the temperature limits, and
+is capped by the remaining energy room so a long step cannot cross 95% SOC.
 
 ## 5. BMS State Policy
 
@@ -137,6 +158,9 @@ hysteresis, debounce, chemistry, current, voltage, isolation, and sensor-plausib
 | `POST /api/v1/vehicles/{vehicle_id}/electric/powertrain` | Create the motor/inverter baseline | `electric_vehicle:manage` |
 | `GET /api/v1/vehicles/{vehicle_id}/electric/powertrain` | Read torque, power, efficiency, and thermal state | `electric_vehicle:read` |
 | `POST /api/v1/vehicles/{vehicle_id}/electric/powertrain/steps` | Execute a deterministic propulsion step | `electric_vehicle:manage` |
+| `POST /api/v1/vehicles/{vehicle_id}/electric/braking` | Create the regenerative-braking baseline | `electric_vehicle:manage` |
+| `GET /api/v1/vehicles/{vehicle_id}/electric/braking` | Read braking allocation and recovery state | `electric_vehicle:read` |
+| `POST /api/v1/vehicles/{vehicle_id}/electric/braking/steps` | Execute a deterministic braking step | `electric_vehicle:manage` |
 
 ### Stable Errors
 
@@ -150,6 +174,11 @@ hysteresis, debounce, chemistry, current, voltage, isolation, and sensor-plausib
 | `motor_inverter_not_found` | No motor/inverter state exists for the vehicle. |
 | `motor_state_version_conflict` | The powertrain `expected_version` is stale. |
 | `motor_simulation_command_conflict` | A motor command ID was reused differently. |
+| `regenerative_brake_already_exists` | The vehicle already owns braking state. |
+| `regenerative_brake_not_found` | No braking state exists for the vehicle. |
+| `brake_state_version_conflict` | The braking `expected_version` is stale. |
+| `brake_battery_version_conflict` | The battery version supplied to braking is stale. |
+| `brake_simulation_command_conflict` | A braking command ID was reused differently. |
 | `forbidden` | The authenticated user lacks the required permission. |
 | `validation_error` | A request violates a declared bound or format. |
 
@@ -157,7 +186,9 @@ hysteresis, debounce, chemistry, current, voltage, isolation, and sensor-plausib
 
 Migration `0037_battery_bms_foundation` creates `battery_pack_states` and
 `battery_simulation_steps`. Migration `0038_motor_inverter` creates `motor_inverter_states` and
-`motor_simulation_steps`. Database checks reinforce the bounded states, versions, and durations.
+`motor_simulation_steps`. Migration `0039_regenerative_braking` creates
+`regenerative_brake_states` and `brake_simulation_steps`. Database checks reinforce bounded
+states, versions, and durations.
 
 | Event | Purpose | Privacy/minimization rule |
 |---|---|---|
@@ -165,10 +196,12 @@ Migration `0037_battery_bms_foundation` creates `battery_pack_states` and
 | `atep.electric_vehicle.battery.step.completed.v1` | Announce deterministic state evolution | Pack summary and versions; no full cells |
 | `atep.electric_vehicle.motor_inverter.created.v1` | Announce configured propulsion hardware | Bounded configuration only |
 | `atep.electric_vehicle.motor.step.completed.v1` | Announce torque and power outcome | Summary, limit reason, and versions |
+| `atep.electric_vehicle.regenerative_brake.created.v1` | Announce braking configuration | Bounded configuration only |
+| `atep.electric_vehicle.brake.step.completed.v1` | Announce allocation and recovered energy | Summary, SOC, limit reason, and versions |
 
 ## 8. Requirements Baseline
 
-VI-1 and VI-2 implement EV-F-001 through EV-F-028 and EV-NF-001 through EV-NF-012. The authoritative
+VI-1 through VI-3 implement EV-F-001 through EV-F-043 and EV-NF-001 through EV-NF-016. The authoritative
 traceability table is maintained in `docs/requirements-volume-vi.md`.
 
 ## 9. Architecture Decisions
@@ -210,6 +243,23 @@ maps can replace it later behind the same contract.
 
 Decision: reject negative requested torque in VI-2. Rationale: regeneration requires battery
 charge-acceptance and blended-brake policies that belong together in VI-3.
+
+### ADR-EV-008 - Represent Braking as Requested Deceleration
+
+Decision: expose nonnegative requested deceleration rather than negative propulsion torque.
+Rationale: the service can allocate one vehicle-level request across regenerative and friction
+actuators without overloading the propulsion command contract.
+
+### ADR-EV-009 - Update Recovered Battery Energy Atomically
+
+Decision: a regenerative step validates the battery version and commits recovered energy, SOC,
+braking state, replay evidence, audit, and outbox together. Rationale: partial energy evidence would
+make cross-domain test results internally inconsistent.
+
+### ADR-EV-010 - Use Deterministic Charge-Acceptance Tapering
+
+Decision: VI-3 uses explicit SOC, temperature, contactor, BMS, voltage, and current ceilings.
+Rationale: explainable bounds support repeatable QA before chemistry-specific calibration exists.
 
 ## 10. Test Catalogue
 
@@ -259,12 +309,34 @@ charge-acceptance and blended-brake policies that belong together in VI-3.
 | EV-T-042 | Motor atomic evidence | Inspect step, audit, and outbox | All commit or all roll back |
 | EV-T-043 | Powertrain OpenAPI | Inspect routes and physical bounds | Bounded schema published |
 | EV-T-044 | Migration 0038 | Upgrade and downgrade disposable DB | Tables created and removed cleanly |
+| EV-T-045 | Braking creation | Create state after battery and motor | Version 1 and standby |
+| EV-T-046 | Duplicate braking state | Enforce one state per vehicle | Stable 409 conflict |
+| EV-T-047 | Pure regeneration | Request deceleration within regenerative capacity | No friction contribution |
+| EV-T-048 | Blended braking | Exceed regenerative torque capacity | Regen plus friction meets request |
+| EV-T-049 | Low-speed fallback | Brake below 0.5 m/s | Friction only and stable reason |
+| EV-T-050 | High-SOC fallback | Brake at or above 95% SOC | Friction only and no recovered energy |
+| EV-T-051 | Open-contactor fallback | Brake with contactors open | Friction only and stable reason |
+| EV-T-052 | Temperature acceptance | Brake outside charge window | Regeneration unavailable |
+| EV-T-053 | Charge taper | Compare acceptance at 80% and near 95% SOC | Higher SOC has lower acceptance |
+| EV-T-054 | Regen torque limit | Exceed recoverable motor torque | Stable torque-limit reason |
+| EV-T-055 | Battery power limit | Exceed charge acceptance | Stable charge-limit reason |
+| EV-T-056 | Brake capacity | Exceed combined capacity | Limited delivered deceleration |
+| EV-T-057 | Recovered power | Verify force, speed, and efficiency formula | Deterministic electrical power |
+| EV-T-058 | Recovered energy and SOC | Integrate a logical step | Energy and SOC increase atomically |
+| EV-T-059 | Braking exact replay | Retry identical command | Persisted cross-aggregate snapshot |
+| EV-T-060 | Braking changed reuse | Reuse ID with changed input | Stable command conflict |
+| EV-T-061 | Braking version conflict | Submit stale braking version | Current version returned |
+| EV-T-062 | Battery version conflict | Submit stale battery version | Current battery version returned |
+| EV-T-063 | Braking atomic evidence | Inspect state, battery, step, audit, outbox | All commit or all roll back |
+| EV-T-064 | Braking OpenAPI | Inspect routes and numeric bounds | Bounded schema published |
+| EV-T-065 | Migration 0039 | Upgrade and downgrade disposable DB | Tables created and removed cleanly |
+| EV-T-066 | Long-step SOC ceiling | Recover energy near 95% SOC for one hour | SOC stops at 95% and friction supplies the remainder |
 
 ## 11. Verification Evidence
 
-| Gate | VI-1 and VI-2 evidence |
+| Gate | VI-1 through VI-3 evidence |
 |---|---|
-| Domain tests | Battery/BMS plus motor torque, power, efficiency, limits, thermal protection, replay, conflicts |
+| Domain tests | Battery/BMS, propulsion, regenerative allocation, friction fallback, energy recovery, replay, conflicts |
 | API contract | Routes and safe numeric limits published in OpenAPI |
 | Ruff | Required before merge |
 | Strict mypy | Required before merge |
@@ -285,6 +357,9 @@ charge-acceptance and blended-brake policies that belong together in VI-3.
 | Analytic efficiency surface | Lower fidelity than dyno calibration | Add versioned torque-speed-efficiency maps later |
 | Motor step does not debit SOC | Energy domains can diverge across long scenarios | Couple energy flow in VI-6/VI-7 scenarios |
 | Fixed motor thermal constants | Cannot represent every cooling design | Add calibration profiles in VI-5 |
+| Quasi-static braking step | Vehicle speed is not integrated over time | Couple braking to Volume II dynamics in VI-7 |
+| Simplified charge acceptance | Cannot represent chemistry-specific power maps | Add versioned SOC-temperature maps later |
+| No hydraulic pressure model | Cannot test valve or pressure dynamics yet | Add brake-system actuator fidelity in a later volume |
 
 ## 13. Exercises
 
@@ -312,9 +387,17 @@ charge-acceptance and blended-brake policies that belong together in VI-3.
 
 12. Trigger the motor thermal boundary and inspect the stable limiting reason.
 
+13. Request 1 m/s2 at 20 m/s and verify pure regenerative braking and recovered energy.
+
+14. Increase the request until friction braking is blended with regeneration.
+
+15. Compare regenerative availability at 80% and 95% SOC.
+
+16. Repeat a successful braking command and prove that battery SOC does not increase twice.
+
 ## 14. Next Development
 
-VI-3 will add regenerative braking, battery charge-acceptance limits, requested deceleration,
-recoverable motor torque, recovered electrical energy, and blended friction-brake allocation. It
-will retain logical time, explicit sign conventions, optimistic versions, idempotency, RBAC,
-audit, outbox, and bounded evidence.
+VI-4 will add AC and DC charging sessions, connector and charger-power contracts, deterministic
+charge curves, SOC/temperature limits, session lifecycle, interruptions, and fault handling. It
+will retain logical time, optimistic versions, idempotency, RBAC, audit, outbox, and bounded
+evidence.

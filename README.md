@@ -267,6 +267,7 @@ source .venv/bin/activate
 | Diagnostics | `/api/v1/vehicles/{vehicle_id}/ecus/{ecu_id}/diagnostics` | `diagnostics:read`, `diagnostics:manage` |
 | Electric vehicle battery | `/api/v1/vehicles/{vehicle_id}/electric/battery` and `/steps` | `electric_vehicle:read`, `electric_vehicle:manage` |
 | Electric motor and inverter | `/api/v1/vehicles/{vehicle_id}/electric/powertrain` and `/steps` | `electric_vehicle:read`, `electric_vehicle:manage` |
+| Regenerative and blended braking | `/api/v1/vehicles/{vehicle_id}/electric/braking` and `/steps` | `electric_vehicle:read`, `electric_vehicle:manage` |
 | Health | `/health/live`, `/health/ready` | Development probe policy |
 
 All API failures follow a stable correlation-aware error envelope. Passwords, password hashes,
