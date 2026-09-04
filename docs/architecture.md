@@ -484,3 +484,8 @@ before the charging row, validate both optimistic versions, and enforce a state 
 start, energy transfer, pause, resume, stop, injected fault, and fault clearing. AC Type 2 and DC CCS
 use separate power ceilings; both apply BMS, temperature, target-SOC, taper, and remaining-energy
 limits. Battery SOC, contactors, charging state, replay evidence, audit, and outbox commit atomically.
+
+VI-5 adds a thermal-management aggregate that coordinates battery, motor, inverter, and cabin
+temperatures. Thermal steps lock battery, motor, and thermal rows in that order and validate each
+version independently. Bounded actuator outputs, auxiliary demand, passive ambient exchange,
+fault behavior, immutable replay evidence, audit, and outbox commit in one transaction.

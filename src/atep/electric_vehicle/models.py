@@ -296,3 +296,70 @@ class ChargingCommandStep(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     requested_by_user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
     )
+
+
+class ThermalManagementState(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "thermal_management_states"
+    __table_args__ = (
+        UniqueConstraint("vehicle_id", name="uq_thermal_management_vehicle"),
+        CheckConstraint("max_battery_thermal_power_kw > 0", name="ck_thermal_battery_power"),
+        CheckConstraint("max_powertrain_thermal_power_kw > 0", name="ck_thermal_powertrain_power"),
+        CheckConstraint("max_cabin_thermal_power_kw > 0", name="ck_thermal_cabin_power"),
+        CheckConstraint("version >= 1", name="ck_thermal_management_version"),
+        CheckConstraint(
+            "operating_state IN ('standby', 'heating', 'cooling', 'mixed', 'faulted')",
+            name="ck_thermal_management_operating_state",
+        ),
+    )
+
+    vehicle_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("vehicles.id", ondelete="CASCADE"), index=True
+    )
+    max_battery_thermal_power_kw: Mapped[float] = mapped_column(Float)
+    max_powertrain_thermal_power_kw: Mapped[float] = mapped_column(Float)
+    max_cabin_thermal_power_kw: Mapped[float] = mapped_column(Float)
+    battery_target_temperature_c: Mapped[float] = mapped_column(Float)
+    motor_target_temperature_c: Mapped[float] = mapped_column(Float)
+    inverter_target_temperature_c: Mapped[float] = mapped_column(Float)
+    cabin_target_temperature_c: Mapped[float] = mapped_column(Float)
+    cabin_temperature_c: Mapped[float] = mapped_column(Float)
+    battery_thermal_power_kw: Mapped[float] = mapped_column(Float, default=0.0)
+    motor_thermal_power_kw: Mapped[float] = mapped_column(Float, default=0.0)
+    inverter_thermal_power_kw: Mapped[float] = mapped_column(Float, default=0.0)
+    cabin_thermal_power_kw: Mapped[float] = mapped_column(Float, default=0.0)
+    auxiliary_power_kw: Mapped[float] = mapped_column(Float, default=0.0)
+    operating_state: Mapped[str] = mapped_column(String(16), index=True)
+    limiting_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    fault_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    simulation_time_ms: Mapped[int] = mapped_column(BigInteger, default=0)
+
+
+class ThermalManagementStep(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "thermal_management_steps"
+    __table_args__ = (
+        UniqueConstraint("vehicle_id", "command_id", name="uq_thermal_step_command"),
+        CheckConstraint(
+            "duration_ms >= 1 AND duration_ms <= 3600000", name="ck_thermal_step_duration"
+        ),
+    )
+
+    vehicle_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("vehicles.id", ondelete="CASCADE"), index=True
+    )
+    command_id: Mapped[str] = mapped_column(String(64))
+    duration_ms: Mapped[int] = mapped_column(Integer)
+    ambient_temperature_c: Mapped[float] = mapped_column(Float)
+    cabin_heat_load_kw: Mapped[float] = mapped_column(Float)
+    enabled: Mapped[bool] = mapped_column(default=True)
+    fault_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    previous_version: Mapped[int] = mapped_column(Integer)
+    state_version: Mapped[int] = mapped_column(Integer)
+    previous_battery_version: Mapped[int] = mapped_column(Integer)
+    battery_state_version: Mapped[int] = mapped_column(Integer)
+    previous_motor_version: Mapped[int] = mapped_column(Integer)
+    motor_state_version: Mapped[int] = mapped_column(Integer)
+    result: Mapped[dict[str, Any]] = mapped_column(JSON)
+    requested_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
