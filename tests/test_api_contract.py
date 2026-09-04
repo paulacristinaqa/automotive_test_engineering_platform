@@ -534,6 +534,20 @@ def test_electric_vehicle_braking_contracts_are_published() -> None:
     assert step_schema["properties"]["vehicle_speed_mps"]["maximum"] == 100.0
 
 
+def test_electric_vehicle_charging_contracts_are_published() -> None:
+    schema = core_app.openapi()
+    paths = schema["paths"]
+    charging = paths["/api/v1/vehicles/{vehicle_id}/electric/charging"]
+    assert {"get", "post"} <= set(charging)
+    assert "/api/v1/vehicles/{vehicle_id}/electric/charging/commands" in paths
+    create_schema = schema["components"]["schemas"]["ChargingSystemCreate"]
+    assert create_schema["properties"]["max_ac_power_kw"]["maximum"] == 50.0
+    assert create_schema["properties"]["max_dc_power_kw"]["maximum"] == 1_000.0
+    command_schema = schema["components"]["schemas"]["ChargingCommand"]
+    assert command_schema["properties"]["duration_ms"]["maximum"] == 3_600_000
+    assert command_schema["properties"]["requested_power_kw"]["maximum"] == 1_000.0
+
+
 def test_test_artifact_contracts_and_safe_pagination_are_published() -> None:
     paths = core_app.openapi()["paths"]
     collection = paths["/api/v1/test-runs/{run_id}/artifacts"]

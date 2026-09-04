@@ -105,15 +105,45 @@ Brake command
   the same transaction as braking state, command evidence, audit, and outbox.
 - Operating states are `standby`, `regenerative`, `blended`, `friction`, and `limited`.
 
-## Deliberate VI-1 through VI-3 Limits
+## VI-4 AC and DC Charging
+
+VI-4 adds a vehicle-scoped charging-system aggregate and a deterministic command lifecycle for AC
+Type 2 and DC CCS sessions.
+
+```text
+Charging command
+    -> battery and charging row locks
+    -> charging and battery version checks
+    -> session-state transition validation
+    -> connector, BMS, temperature, SOC, and energy-room limits
+    -> battery SOC and contactor update
+    -> command evidence + audit + outbox (one transaction)
+```
+
+- A session starts with a connector, target SOC, and requested input power. Starting closes the
+  battery contactors; pausing, stopping, completion, and faults open them.
+- AC charging is capped by the configured onboard-charger limit. DC charging is capped by the DC
+  inlet limit and the battery current ceiling.
+- Charge acceptance is unavailable in BMS protection, outside 0-50 C, or at the target SOC. Power
+  is reduced near temperature-window edges and tapers above 80% SOC.
+- A charge step cannot cross its target SOC because remaining battery energy room caps accepted
+  power for the requested logical duration.
+- The lifecycle supports `idle`, `charging`, `paused`, `completed`, and `faulted` states. Invalid
+  transitions return a stable conflict.
+- Commands support exact replay, changed-reuse rejection, separate charging/battery version
+  conflicts, minimized evidence, audit, and transactional outbox publication.
+
+## Deliberate VI-1 through VI-4 Limits
 
 - SOH is persisted but degradation and cycle aging begin in a later increment.
 - Cell balancing, sensor faults, thermal propagation, modules in parallel, and chemistry-specific
   voltage curves are future model refinements.
-- Charging, thermal-control actuators, and range estimation remain VI-4 through VI-6 work.
+- Thermal-control actuators and range estimation remain VI-5 and VI-6 work.
 - VI-2 uses an explainable analytic efficiency surface rather than a production calibration map.
 - The motor step reads battery availability but does not yet debit battery SOC; full coupled energy
   flow is introduced with cross-domain drive scenarios.
 - Cross-volume CAN, UDS, ECU, and automated-test orchestration is planned for VI-7.
 - VI-3 uses a quasi-static step and does not integrate vehicle speed or hydraulic pressure over
   time; those dynamics remain future fidelity work.
+- VI-4 uses an explainable charging curve rather than chemistry- or charger-specific calibration
+  maps, and does not yet simulate EVSE protocol handshakes or grid behavior.

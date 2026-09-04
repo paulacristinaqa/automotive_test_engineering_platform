@@ -47,6 +47,23 @@
 | EV-F-041 | Braking creation and completed steps shall produce atomic audit and outbox evidence. | Service evidence tests |
 | EV-F-042 | Braking responses shall publish stable operating states and limiting reasons. | Strategy and limiting tests |
 | EV-F-043 | Braking read and mutation operations shall use the Volume VI RBAC permissions. | API dependencies |
+| EV-F-044 | The platform shall create at most one charging-system state per battery-equipped vehicle. | Migration `0040`; creation tests |
+| EV-F-045 | Charging shall support AC Type 2 and DC CCS connector contracts with separate configured limits. | Connector and power tests |
+| EV-F-046 | A session shall start with a unique session identifier, connector, target SOC, and requested power. | Session-start test |
+| EV-F-047 | Starting or resuming a session shall close battery contactors. | Lifecycle tests |
+| EV-F-048 | Pausing, stopping, completion, or a charging fault shall open battery contactors. | Lifecycle and fault tests |
+| EV-F-049 | A charge command shall advance battery SOC from deterministic accepted energy. | Energy-transfer test |
+| EV-F-050 | A charge command shall not increase SOC beyond the session target. | Target-SOC ceiling test |
+| EV-F-051 | Charging power shall respect connector, battery current, BMS, and configured system limits. | Power-limit tests |
+| EV-F-052 | Charging power shall taper above 80% SOC toward the target SOC. | Charge-curve test |
+| EV-F-053 | Charging shall transfer no energy outside the 0-50 C battery window or in BMS protection. | Safety-limit tests |
+| EV-F-054 | The lifecycle shall support idle, charging, paused, completed, and faulted states. | Transition tests |
+| EV-F-055 | Invalid charging-state transitions shall return `charging_transition_invalid`. | Negative transition test |
+| EV-F-056 | Fault injection shall isolate the battery and preserve a stable fault code until cleared. | Fault lifecycle test |
+| EV-F-057 | Charging commands shall validate charging and battery expected versions independently. | Version-conflict tests |
+| EV-F-058 | An identical charging command retry shall return its persisted response without applying energy twice. | Replay test |
+| EV-F-059 | Reusing a charging command identifier with changed input shall return a stable conflict. | Changed-reuse test |
+| EV-F-060 | Charging state, battery state, command evidence, audit, and outbox shall commit atomically. | Atomic-evidence test |
 
 ## Non-Functional Requirements
 
@@ -68,6 +85,10 @@
 | EV-NF-014 | Energy conservation evidence | Recovered power, energy, battery SOC, and versions are published together. |
 | EV-NF-015 | Explainable degradation | Fallback and capacity outcomes use stable limiting reasons. |
 | EV-NF-016 | Local-first operation | VI-3 uses no paid service, external API, cloud account, or GPU. |
+| EV-NF-017 | Cross-aggregate consistency | Charging mutations lock battery and charging rows in a fixed order. |
+| EV-NF-018 | Determinism | Charging uses bounded logical durations and an explainable analytic charge curve. |
+| EV-NF-019 | Evidence minimization | Events and audit records exclude the battery cell array. |
+| EV-NF-020 | Local-first operation | VI-4 requires no paid service, external API, cloud account, or GPU. |
 
 ## API Traceability
 
@@ -82,3 +103,6 @@
 | `POST /api/v1/vehicles/{vehicle_id}/electric/braking` | EV-F-029, EV-F-041, EV-F-043 |
 | `GET /api/v1/vehicles/{vehicle_id}/electric/braking` | EV-F-030 through EV-F-038, EV-F-042, EV-F-043 |
 | `POST /api/v1/vehicles/{vehicle_id}/electric/braking/steps` | EV-F-030 through EV-F-043 |
+| `POST /api/v1/vehicles/{vehicle_id}/electric/charging` | EV-F-044, EV-F-045, EV-F-060 |
+| `GET /api/v1/vehicles/{vehicle_id}/electric/charging` | EV-F-045 through EV-F-057 |
+| `POST /api/v1/vehicles/{vehicle_id}/electric/charging/commands` | EV-F-046 through EV-F-060 |

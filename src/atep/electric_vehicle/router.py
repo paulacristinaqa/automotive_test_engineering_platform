@@ -9,6 +9,9 @@ from atep.electric_vehicle.schemas import (
     BatteryPackResponse,
     BatterySimulationCommand,
     BrakeSimulationCommand,
+    ChargingCommand,
+    ChargingSystemCreate,
+    ChargingSystemResponse,
     MotorInverterCreate,
     MotorInverterResponse,
     MotorSimulationCommand,
@@ -17,12 +20,16 @@ from atep.electric_vehicle.schemas import (
 )
 from atep.electric_vehicle.service import (
     battery_response,
+    charging_system_response,
     create_battery_pack,
+    create_charging_system,
     create_motor_inverter,
     create_regenerative_brake,
+    execute_charging_command,
     motor_inverter_response,
     regenerative_brake_response,
     require_battery_pack,
+    require_charging_system,
     require_motor_inverter,
     require_regenerative_brake,
     simulate_battery_step,
@@ -212,6 +219,70 @@ async def simulate_brake_step_endpoint(
 ) -> RegenerativeBrakeResponse:
     vehicle = await require_vehicle(session, vehicle_id)
     result, duplicate = await simulate_brake_step(
+        session,
+        vehicle=vehicle,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+    return result
+
+
+@router.post(
+    "/charging", response_model=ChargingSystemResponse, status_code=status.HTTP_201_CREATED
+)
+async def create_charging_system_endpoint(
+    vehicle_id: str,
+    command: ChargingSystemCreate,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(electric_vehicle_manage)],
+) -> ChargingSystemResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    pack = await require_battery_pack(session, vehicle=vehicle)
+    state = await create_charging_system(
+        session,
+        vehicle=vehicle,
+        pack=pack,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(state, attribute_names=["created_at", "updated_at"])
+    return charging_system_response(state, vehicle, pack)
+
+
+@router.get("/charging", response_model=ChargingSystemResponse)
+async def get_charging_system_endpoint(
+    vehicle_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _actor: Annotated[User, Depends(electric_vehicle_read)],
+) -> ChargingSystemResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    pack = await require_battery_pack(session, vehicle=vehicle)
+    state = await require_charging_system(session, vehicle=vehicle)
+    return charging_system_response(state, vehicle, pack)
+
+
+@router.post(
+    "/charging/commands",
+    response_model=ChargingSystemResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def execute_charging_command_endpoint(
+    vehicle_id: str,
+    command: ChargingCommand,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(electric_vehicle_manage)],
+) -> ChargingSystemResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    result, duplicate = await execute_charging_command(
         session,
         vehicle=vehicle,
         command=command,

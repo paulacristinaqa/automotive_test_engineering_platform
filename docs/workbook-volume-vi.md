@@ -5,9 +5,9 @@
 | Field | Value |
 |---|---|
 | Document | ATEP Engineering Workbook - Volume VI: Electric Vehicle |
-| Version | 0.3.0 |
+| Version | 0.4.0 |
 | Baseline date | 4 September 2026 |
-| Status | VI-1 battery/BMS, VI-2 motor/inverter, and VI-3 regenerative braking implemented |
+| Status | VI-1 through VI-4 implemented, including AC/DC charging sessions |
 | Audience | Automotive software, simulation, QA, functional-safety, and platform engineers |
 
 ## 1. Purpose and Scope
@@ -17,6 +17,7 @@ VI-1 establishes a persistent battery pack and deterministic BMS behavior. VI-2 
 motor/inverter aggregate, torque delivery, efficiency, power loss, thermal protection, drive-mode
 limits, and battery-derived propulsion availability. VI-3 adds requested-deceleration control,
 regenerative energy recovery, battery charge acceptance, and blended friction braking.
+VI-4 adds AC/DC charging sessions, deterministic charge curves, lifecycle control, and faults.
 
 ### In Scope for VI-1
 
@@ -42,24 +43,30 @@ regenerative energy recovery, battery charge acceptance, and blended friction br
 ### In Scope for VI-3
 
 - one regenerative-braking state per battery- and motor-equipped vehicle;
-- requested and delivered deceleration with regenerative and friction allocation;
-- motor-torque, drivetrain, wheel, speed, and battery charge-acceptance limits;
-- recovered electrical power, step energy, cumulative energy, and battery SOC update;
-- low-speed and battery-unavailable friction fallback;
+- regenerative and friction allocation with deterministic power and energy recovery;
+- motor, drivetrain, speed, battery-acceptance, and friction limits;
 - braking and battery optimistic versions, exact replay, audit, and outbox evidence.
+
+### In Scope for VI-4
+
+- one charging-system state per battery-equipped vehicle;
+- AC Type 2 and DC CCS connector contracts with separate power limits;
+- deterministic session lifecycle, SOC integration, taper, target, and temperature limits;
+- charging and battery optimistic versions, exact replay, audit, and outbox evidence.
 
 ### Deferred
 
 - chemistry-specific equivalent-circuit and open-circuit-voltage curves;
 - cell balancing, aging, sensor faults, and module topology;
-- charging, cooling actuators, and range estimation;
+- cooling actuators and range estimation;
 - BMS ECU, CAN, UDS, dashboard, and test-framework end-to-end orchestration.
 
 ## 2. Architecture
 
 The FastAPI electric-vehicle boundary uses `electric_vehicle:read` and
-`electric_vehicle:manage`. `BatteryPackState`, `MotorInverterState`, and
-`RegenerativeBrakeState` own the battery, propulsion, and braking aggregates. Their simulation
+`electric_vehicle:manage`. `BatteryPackState`, `MotorInverterState`,
+`RegenerativeBrakeState`, and `ChargingSystemState` own the battery, propulsion, braking, and
+charging aggregates. Their simulation
 step records preserve immutable replay evidence. `AuditRecord` and `OutboxEvent` commit in the
 same database transaction as each accepted mutation.
 
@@ -84,6 +91,9 @@ Volume VI state through explicit integration contracts rather than sharing datab
 | Powertrain state | Propulsion decision | `standby`, `ready`, `derated`, `protection` |
 | RegenerativeBrakeState | Braking strategy and recovered energy | one per vehicle; version >= 1 |
 | Brake state | Current allocation decision | `standby`, `regenerative`, `blended`, `friction`, `limited` |
+| ChargingSystemState | Current charging session and energy transfer | one per vehicle; version >= 1 |
+| Connector type | Physical charging path | `ac_type_2`, `dc_ccs` |
+| Charging state | Session lifecycle | `idle`, `charging`, `paused`, `completed`, `faulted` |
 
 ### Sign Convention
 
@@ -126,14 +136,22 @@ current rather than extrapolating heating beyond isolation.
 - Regenerative force is bounded by motor torque, final-drive ratio, drivetrain efficiency, and wheel radius.
 - Battery-limited regenerative force is charge acceptance divided by speed and regeneration efficiency.
 - Friction force supplies the remaining request within its configured limit.
-- Recovered power (kW) = regenerative force multiplied by speed and efficiency, divided by 1,000.
-- Step energy (kWh) = recovered power multiplied by duration in hours.
-
-Recovered energy increases SOC using SOH-adjusted pack energy.
+- Recovered power uses force, speed, and efficiency; its logical-time integral increases SOC using
+  SOH-adjusted pack energy.
 
 Charge acceptance is zero below 0.5 m/s, with open contactors, in BMS protection, at or above 95%
 SOC, or outside 0-50 C. It tapers from 80% to 95% SOC, is reduced near the temperature limits, and
 is capped by the remaining energy room so a long step cannot cross 95% SOC.
+
+### VI-4 Charging Model
+
+- AC input power is capped by the configured onboard-charger limit.
+- DC input power is capped by the configured DC inlet and battery current ceiling.
+- Battery power equals delivered input power multiplied by charging efficiency.
+- Step energy integrates accepted power over logical time and remaining energy caps the step at its
+  target SOC.
+- Charge acceptance is zero in BMS protection, outside 0-50 C, or at the target SOC.
+- Above 80% SOC, the analytic curve tapers power toward zero at the configured target.
 
 ## 5. BMS State Policy
 
@@ -161,6 +179,9 @@ hysteresis, debounce, chemistry, current, voltage, isolation, and sensor-plausib
 | `POST /api/v1/vehicles/{vehicle_id}/electric/braking` | Create the regenerative-braking baseline | `electric_vehicle:manage` |
 | `GET /api/v1/vehicles/{vehicle_id}/electric/braking` | Read braking allocation and recovery state | `electric_vehicle:read` |
 | `POST /api/v1/vehicles/{vehicle_id}/electric/braking/steps` | Execute a deterministic braking step | `electric_vehicle:manage` |
+| `POST /api/v1/vehicles/{vehicle_id}/electric/charging` | Create the charging-system baseline | `electric_vehicle:manage` |
+| `GET /api/v1/vehicles/{vehicle_id}/electric/charging` | Read the current session and charging state | `electric_vehicle:read` |
+| `POST /api/v1/vehicles/{vehicle_id}/electric/charging/commands` | Execute a versioned lifecycle or energy command | `electric_vehicle:manage` |
 
 ### Stable Errors
 
@@ -179,6 +200,12 @@ hysteresis, debounce, chemistry, current, voltage, isolation, and sensor-plausib
 | `brake_state_version_conflict` | The braking `expected_version` is stale. |
 | `brake_battery_version_conflict` | The battery version supplied to braking is stale. |
 | `brake_simulation_command_conflict` | A braking command ID was reused differently. |
+| `charging_system_already_exists` | The vehicle already owns charging state. |
+| `charging_system_not_found` | No charging state exists for the vehicle. |
+| `charging_state_version_conflict` | The charging `expected_version` is stale. |
+| `charging_battery_version_conflict` | The battery version supplied to charging is stale. |
+| `charging_command_conflict` | A charging command ID was reused differently. |
+| `charging_transition_invalid` | An action is invalid from the current lifecycle state. |
 | `forbidden` | The authenticated user lacks the required permission. |
 | `validation_error` | A request violates a declared bound or format. |
 
@@ -188,7 +215,8 @@ Migration `0037_battery_bms_foundation` creates `battery_pack_states` and
 `battery_simulation_steps`. Migration `0038_motor_inverter` creates `motor_inverter_states` and
 `motor_simulation_steps`. Migration `0039_regenerative_braking` creates
 `regenerative_brake_states` and `brake_simulation_steps`. Database checks reinforce bounded
-states, versions, and durations.
+states, versions, and durations. Migration `0040_charging_sessions` creates
+`charging_system_states` and `charging_command_steps`.
 
 | Event | Purpose | Privacy/minimization rule |
 |---|---|---|
@@ -198,10 +226,12 @@ states, versions, and durations.
 | `atep.electric_vehicle.motor.step.completed.v1` | Announce torque and power outcome | Summary, limit reason, and versions |
 | `atep.electric_vehicle.regenerative_brake.created.v1` | Announce braking configuration | Bounded configuration only |
 | `atep.electric_vehicle.brake.step.completed.v1` | Announce allocation and recovered energy | Summary, SOC, limit reason, and versions |
+| `atep.electric_vehicle.charging_system.created.v1` | Announce charging capability | Bounded AC/DC configuration only |
+| `atep.electric_vehicle.charging.command.completed.v1` | Announce lifecycle and energy outcome | Session summary and versions; no cells |
 
 ## 8. Requirements Baseline
 
-VI-1 through VI-3 implement EV-F-001 through EV-F-043 and EV-NF-001 through EV-NF-016. The authoritative
+VI-1 through VI-4 implement EV-F-001 through EV-F-060 and EV-NF-001 through EV-NF-020. The authoritative
 traceability table is maintained in `docs/requirements-volume-vi.md`.
 
 ## 9. Architecture Decisions
@@ -260,6 +290,18 @@ make cross-domain test results internally inconsistent.
 
 Decision: VI-3 uses explicit SOC, temperature, contactor, BMS, voltage, and current ceilings.
 Rationale: explainable bounds support repeatable QA before chemistry-specific calibration exists.
+
+### ADR-EV-011 - Model Charging as a Versioned State Machine
+
+Decision: express session start, energy transfer, pause, resume, stop, fault injection, and fault
+clearing as explicit actions. Rationale: invalid transitions become stable test evidence rather
+than implicit side effects.
+
+### ADR-EV-012 - Commit Charging and Battery State Together
+
+Decision: charging commands validate both versions and commit battery contactors, SOC, session
+state, replay evidence, audit, and outbox in one transaction. Rationale: a session result cannot
+claim transferred energy without the matching battery state.
 
 ## 10. Test Catalogue
 
@@ -331,12 +373,28 @@ Rationale: explainable bounds support repeatable QA before chemistry-specific ca
 | EV-T-064 | Braking OpenAPI | Inspect routes and numeric bounds | Bounded schema published |
 | EV-T-065 | Migration 0039 | Upgrade and downgrade disposable DB | Tables created and removed cleanly |
 | EV-T-066 | Long-step SOC ceiling | Recover energy near 95% SOC for one hour | SOC stops at 95% and friction supplies the remainder |
+| EV-T-067 | Charging contract bounds | Exceed AC/DC power or omit action fields | Stable validation error |
+| EV-T-068 | Charging-system creation | Create one state for a battery-equipped vehicle | Version 1 and idle |
+| EV-T-069 | Session start | Start with connector, target, and power | Charging and contactors closed |
+| EV-T-070 | AC energy transfer | Charge through AC Type 2 | Energy and SOC increase deterministically |
+| EV-T-071 | DC power limit | Request above DC or battery capacity | Delivered power is capped |
+| EV-T-072 | Charge taper | Compare DC acceptance below and above 80% SOC | Higher SOC has lower acceptance |
+| EV-T-073 | Target-SOC ceiling | Use a long step near the target | Exact target, completed, contactors open |
+| EV-T-074 | Temperature limit | Charge outside 0-50 C | No transferred energy and stable reason |
+| EV-T-075 | Pause and resume | Interrupt and continue a session | Valid state and contactor transitions |
+| EV-T-076 | Manual stop | Stop an active or paused session | Completed and isolated |
+| EV-T-077 | Fault lifecycle | Inject and clear a charging fault | Fault preserved, isolated, then idle |
+| EV-T-078 | Invalid transition | Charge while idle | Stable transition conflict |
+| EV-T-079 | Charging exact replay | Retry an identical command | Persisted snapshot, no duplicate energy |
+| EV-T-080 | Charging changed reuse | Reuse command ID differently | Stable command conflict |
+| EV-T-081 | Dual version conflicts | Submit stale charging or battery version | Distinct current version returned |
+| EV-T-082 | Charging OpenAPI and migration | Inspect routes and revision 0040 | Bounded schema and reversible tables |
 
 ## 11. Verification Evidence
 
-| Gate | VI-1 through VI-3 evidence |
+| Gate | VI-1 through VI-4 evidence |
 |---|---|
-| Domain tests | Battery/BMS, propulsion, regenerative allocation, friction fallback, energy recovery, replay, conflicts |
+| Domain tests | Battery/BMS, propulsion, braking, AC/DC charging, lifecycle, faults, replay, conflicts |
 | API contract | Routes and safe numeric limits published in OpenAPI |
 | Ruff | Required before merge |
 | Strict mypy | Required before merge |
@@ -360,6 +418,8 @@ Rationale: explainable bounds support repeatable QA before chemistry-specific ca
 | Quasi-static braking step | Vehicle speed is not integrated over time | Couple braking to Volume II dynamics in VI-7 |
 | Simplified charge acceptance | Cannot represent chemistry-specific power maps | Add versioned SOC-temperature maps later |
 | No hydraulic pressure model | Cannot test valve or pressure dynamics yet | Add brake-system actuator fidelity in a later volume |
+| Analytic charging curve | Cannot reproduce every chemistry or EVSE calibration | Add versioned SOC-temperature-power maps later |
+| No EVSE protocol model | Cannot test ISO 15118 or PLC handshakes yet | Add protocol adapters after core session behavior stabilizes |
 
 ## 13. Exercises
 
@@ -395,9 +455,18 @@ Rationale: explainable bounds support repeatable QA before chemistry-specific ca
 
 16. Repeat a successful braking command and prove that battery SOC does not increase twice.
 
+17. Start an AC Type 2 session and calculate battery energy after a ten-minute step.
+
+18. Compare DC acceptance at 70% and 90% SOC with the same battery temperature.
+
+19. Pause and resume a session and verify the battery contactor transitions.
+
+20. Inject an EVSE communication fault and prove that no charging current remains.
+
+21. Retry a successful charge command and prove that SOC does not increase twice.
+
 ## 14. Next Development
 
-VI-4 will add AC and DC charging sessions, connector and charger-power contracts, deterministic
-charge curves, SOC/temperature limits, session lifecycle, interruptions, and fault handling. It
-will retain logical time, optimistic versions, idempotency, RBAC, audit, outbox, and bounded
-evidence.
+VI-5 will add active thermal-management loops for the battery, motor, inverter, and cabin. It will
+model cooling and heating requests, actuator limits, thermal targets, protection interactions,
+logical-time energy consumption, replay, audit, and outbox evidence.

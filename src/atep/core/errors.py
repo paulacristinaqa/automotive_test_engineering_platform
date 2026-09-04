@@ -400,6 +400,54 @@ class BrakeSimulationCommandConflictError(ApplicationError):
         )
 
 
+class ChargingSystemAlreadyExistsError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="charging_system_already_exists",
+            message="The vehicle already has a charging system.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class ChargingStateVersionConflictError(ApplicationError):
+    def __init__(self, *, current_version: int) -> None:
+        super().__init__(
+            code="charging_state_version_conflict",
+            message="The charging state was changed by another operation.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_version": current_version},
+        )
+
+
+class ChargingBatteryVersionConflictError(ApplicationError):
+    def __init__(self, *, current_version: int) -> None:
+        super().__init__(
+            code="charging_battery_version_conflict",
+            message="The battery state was changed by another operation.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_version": current_version},
+        )
+
+
+class ChargingCommandConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="charging_command_conflict",
+            message="The charging command identifier was already used differently.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class ChargingTransitionError(ApplicationError):
+    def __init__(self, *, current_state: str, action: str) -> None:
+        super().__init__(
+            code="charging_transition_invalid",
+            message="The charging action is not valid from the current state.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_state": current_state, "action": action},
+        )
+
+
 class CanDbcCatalogueAlreadyExistsError(ApplicationError):
     def __init__(self) -> None:
         super().__init__(
