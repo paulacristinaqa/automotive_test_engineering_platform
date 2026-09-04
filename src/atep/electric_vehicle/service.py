@@ -22,6 +22,11 @@ from atep.core.errors import (
     MotorInverterAlreadyExistsError,
     MotorSimulationCommandConflictError,
     MotorStateVersionConflictError,
+    RangeBatteryVersionConflictError,
+    RangeEstimationCommandConflictError,
+    RangeEstimatorAlreadyExistsError,
+    RangeStateVersionConflictError,
+    RangeThermalVersionConflictError,
     RegenerativeBrakeAlreadyExistsError,
     ResourceNotFoundError,
     ThermalBatteryVersionConflictError,
@@ -38,6 +43,8 @@ from atep.electric_vehicle.models import (
     ChargingSystemState,
     MotorInverterState,
     MotorSimulationStep,
+    RangeEstimationStep,
+    RangeEstimatorState,
     RegenerativeBrakeState,
     ThermalManagementState,
     ThermalManagementStep,
@@ -61,6 +68,9 @@ from atep.electric_vehicle.schemas import (
     MotorInverterResponse,
     MotorSimulationCommand,
     PowertrainOperatingState,
+    RangeEstimationCommand,
+    RangeEstimatorCreate,
+    RangeEstimatorResponse,
     RegenerativeBrakeCreate,
     RegenerativeBrakeResponse,
     ThermalManagementCommand,
@@ -334,6 +344,247 @@ async def simulate_battery_step(
         action="electric_vehicle.battery_step_completed",
         resource_type="battery_pack",
         resource_id=pack.id,
+        correlation_id=correlation_id,
+        details=payload,
+    )
+    return rendered, False
+
+
+def range_estimator_response(
+    state: RangeEstimatorState,
+    vehicle: Vehicle,
+    pack: BatteryPackState,
+    thermal: ThermalManagementState,
+) -> RangeEstimatorResponse:
+    nominal_energy_kwh = (
+        pack.series_cell_count * pack.nominal_cell_voltage_v * pack.nominal_capacity_ah / 1000.0
+    )
+    available_energy_kwh = (
+        nominal_energy_kwh
+        * (pack.soh_pct / 100.0)
+        * max(0.0, pack.soc_pct - state.reserve_soc_pct)
+        / 100.0
+    )
+    return RangeEstimatorResponse(
+        vehicle_id=vehicle.identifier,
+        cycle_id=state.last_cycle_id,
+        distance_km=state.distance_km,
+        duration_ms=state.simulation_time_ms,
+        traction_energy_kwh=state.traction_energy_kwh,
+        auxiliary_energy_kwh=state.auxiliary_energy_kwh,
+        recovered_energy_kwh=state.recovered_energy_kwh,
+        net_energy_kwh=state.net_energy_kwh,
+        consumption_kwh_per_100km=state.consumption_kwh_per_100km,
+        available_energy_kwh=round(available_energy_kwh, 4),
+        estimated_range_km=state.estimated_range_km,
+        battery_soc_pct=pack.soc_pct,
+        battery_version=pack.version,
+        thermal_version=thermal.version,
+        operating_state=state.operating_state,
+        limiting_reason=state.limiting_reason,
+        version=state.version,
+    )
+
+
+async def create_range_estimator(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    pack: BatteryPackState,
+    thermal: ThermalManagementState,
+    command: RangeEstimatorCreate,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> RangeEstimatorState:
+    existing = await session.scalar(
+        select(RangeEstimatorState).where(RangeEstimatorState.vehicle_id == vehicle.id)
+    )
+    if existing is not None:
+        raise RangeEstimatorAlreadyExistsError()
+    state = RangeEstimatorState(
+        vehicle_id=vehicle.id,
+        **command.model_dump(),
+        last_cycle_id=None,
+        distance_km=0.0,
+        traction_energy_kwh=0.0,
+        auxiliary_energy_kwh=0.0,
+        recovered_energy_kwh=0.0,
+        net_energy_kwh=0.0,
+        consumption_kwh_per_100km=0.0,
+        estimated_range_km=0.0,
+        operating_state="ready",
+        limiting_reason=None,
+        version=1,
+        simulation_time_ms=0,
+    )
+    try:
+        async with session.begin_nested():
+            session.add(state)
+            await session.flush()
+    except IntegrityError as exc:
+        raise RangeEstimatorAlreadyExistsError() from exc
+    payload = {
+        "vehicle_id": vehicle.identifier,
+        "reserve_soc_pct": state.reserve_soc_pct,
+        "version": 1,
+    }
+    enqueue_event(
+        session,
+        event_type="atep.electric_vehicle.range_estimator.created.v1",
+        aggregate_type="range_estimator",
+        aggregate_id=state.id,
+        payload=payload,
+        correlation_id=correlation_id,
+    )
+    record_audit(
+        session,
+        actor_user_id=actor_user_id,
+        action="electric_vehicle.range_estimator_created",
+        resource_type="range_estimator",
+        resource_id=state.id,
+        correlation_id=correlation_id,
+        details=payload,
+    )
+    return state
+
+
+async def require_range_estimator(
+    session: AsyncSession, *, vehicle: Vehicle, for_update: bool = False
+) -> RangeEstimatorState:
+    query = select(RangeEstimatorState).where(RangeEstimatorState.vehicle_id == vehicle.id)
+    if for_update:
+        query = query.with_for_update()
+    state = await session.scalar(query)
+    if state is None:
+        raise ResourceNotFoundError("range_estimator")
+    return state
+
+
+def _same_range_command(step: RangeEstimationStep, command: RangeEstimationCommand) -> bool:
+    return (
+        step.cycle_id == command.cycle_id
+        and step.segments == [item.model_dump(mode="json") for item in command.segments]
+        and step.previous_version == command.expected_version
+        and step.previous_battery_version == command.expected_battery_version
+        and step.previous_thermal_version == command.expected_thermal_version
+    )
+
+
+async def simulate_range_cycle(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    command: RangeEstimationCommand,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> tuple[RangeEstimatorResponse, bool]:
+    existing = await session.scalar(
+        select(RangeEstimationStep).where(
+            RangeEstimationStep.vehicle_id == vehicle.id,
+            RangeEstimationStep.command_id == command.command_id,
+        )
+    )
+    if existing is not None:
+        if not _same_range_command(existing, command):
+            raise RangeEstimationCommandConflictError()
+        return RangeEstimatorResponse.model_validate({**existing.result, "duplicate": True}), True
+
+    pack = await require_battery_pack(session, vehicle=vehicle, for_update=True)
+    thermal = await require_thermal_management(session, vehicle=vehicle, for_update=True)
+    state = await require_range_estimator(session, vehicle=vehicle, for_update=True)
+    if state.version != command.expected_version:
+        raise RangeStateVersionConflictError(current_version=state.version)
+    if pack.version != command.expected_battery_version:
+        raise RangeBatteryVersionConflictError(current_version=pack.version)
+    if thermal.version != command.expected_thermal_version:
+        raise RangeThermalVersionConflictError(current_version=thermal.version)
+
+    previous_version = state.version
+    distance_km = traction = recovered = auxiliary = 0.0
+    duration_ms = sum(segment.duration_ms for segment in command.segments)
+    air_density = 1.225
+    gravity = 9.80665
+    for segment in command.segments:
+        duration_h = segment.duration_ms / 3_600_000.0
+        speed_mps = segment.speed_kph / 3.6
+        distance_km += segment.speed_kph * duration_h
+        force_n = (
+            state.vehicle_mass_kg * gravity * state.rolling_resistance_coefficient
+            + 0.5 * air_density * state.drag_coefficient * state.frontal_area_m2 * speed_mps**2
+            + state.vehicle_mass_kg * gravity * segment.road_grade_pct / 100.0
+            + state.vehicle_mass_kg * segment.acceleration_mps2
+        )
+        mechanical_kwh = force_n * speed_mps * (segment.duration_ms / 1000.0) / 3_600_000.0
+        if mechanical_kwh >= 0.0:
+            traction += mechanical_kwh / (state.drivetrain_efficiency_pct / 100.0)
+        else:
+            recovered += -mechanical_kwh * (state.regenerative_efficiency_pct / 100.0)
+        auxiliary += (state.base_auxiliary_power_kw + thermal.auxiliary_power_kw) * duration_h
+
+    net = max(0.0, traction + auxiliary - recovered)
+    consumption = net / distance_km * 100.0 if distance_km >= 0.01 else 0.0
+    nominal = (
+        pack.series_cell_count * pack.nominal_cell_voltage_v * pack.nominal_capacity_ah / 1000.0
+    )
+    available = (
+        nominal * pack.soh_pct / 100.0 * max(0.0, pack.soc_pct - state.reserve_soc_pct) / 100.0
+    )
+    state.last_cycle_id = command.cycle_id
+    state.distance_km = round(distance_km, 4)
+    state.traction_energy_kwh = round(traction, 4)
+    state.auxiliary_energy_kwh = round(auxiliary, 4)
+    state.recovered_energy_kwh = round(recovered, 4)
+    state.net_energy_kwh = round(net, 4)
+    state.consumption_kwh_per_100km = round(consumption, 4)
+    state.estimated_range_km = round(available / consumption * 100.0, 2) if consumption > 0 else 0.0
+    state.operating_state = "completed" if consumption > 0 and available > 0 else "limited"
+    state.limiting_reason = (
+        None
+        if state.operating_state == "completed"
+        else ("reserve_reached" if available <= 0 else "insufficient_distance")
+    )
+    state.version += 1
+    state.simulation_time_ms = duration_ms
+    rendered = range_estimator_response(state, vehicle, pack, thermal)
+    result = rendered.model_dump(mode="json")
+    session.add(
+        RangeEstimationStep(
+            vehicle_id=vehicle.id,
+            command_id=command.command_id,
+            cycle_id=command.cycle_id,
+            segments=[item.model_dump(mode="json") for item in command.segments],
+            duration_ms=duration_ms,
+            previous_version=previous_version,
+            state_version=state.version,
+            previous_battery_version=pack.version,
+            previous_thermal_version=thermal.version,
+            result=result,
+            requested_by_user_id=actor_user_id,
+        )
+    )
+    await session.flush()
+    payload = {
+        "vehicle_id": vehicle.identifier,
+        "command_id": command.command_id,
+        "cycle_id": command.cycle_id,
+        "consumption_kwh_per_100km": state.consumption_kwh_per_100km,
+        "estimated_range_km": state.estimated_range_km,
+        "version": state.version,
+    }
+    enqueue_event(
+        session,
+        event_type="atep.electric_vehicle.range.cycle.completed.v1",
+        aggregate_type="range_estimator",
+        aggregate_id=state.id,
+        payload=payload,
+        correlation_id=correlation_id,
+    )
+    record_audit(
+        session,
+        actor_user_id=actor_user_id,
+        action="electric_vehicle.range_cycle_completed",
+        resource_type="range_estimator",
+        resource_id=state.id,
         correlation_id=correlation_id,
         details=payload,
     )

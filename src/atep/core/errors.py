@@ -496,6 +496,54 @@ class ThermalCommandConflictError(ApplicationError):
         )
 
 
+class RangeEstimatorAlreadyExistsError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="range_estimator_already_exists",
+            message="The vehicle already has a range estimator.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class RangeStateVersionConflictError(ApplicationError):
+    def __init__(self, *, current_version: int) -> None:
+        super().__init__(
+            code="range_state_version_conflict",
+            message="The range-estimator state was changed by another operation.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_version": current_version},
+        )
+
+
+class RangeBatteryVersionConflictError(ApplicationError):
+    def __init__(self, *, current_version: int) -> None:
+        super().__init__(
+            code="range_battery_version_conflict",
+            message="The battery state was changed by another operation.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_version": current_version},
+        )
+
+
+class RangeThermalVersionConflictError(ApplicationError):
+    def __init__(self, *, current_version: int) -> None:
+        super().__init__(
+            code="range_thermal_version_conflict",
+            message="The thermal-management state was changed by another operation.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_version": current_version},
+        )
+
+
+class RangeEstimationCommandConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="range_estimation_command_conflict",
+            message="The range-estimation command identifier was already used differently.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
 class CanDbcCatalogueAlreadyExistsError(ApplicationError):
     def __init__(self) -> None:
         super().__init__(

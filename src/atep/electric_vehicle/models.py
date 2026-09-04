@@ -363,3 +363,65 @@ class ThermalManagementStep(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     requested_by_user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
     )
+
+
+class RangeEstimatorState(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "range_estimator_states"
+    __table_args__ = (
+        UniqueConstraint("vehicle_id", name="uq_range_estimator_vehicle"),
+        CheckConstraint("vehicle_mass_kg > 0", name="ck_range_estimator_mass"),
+        CheckConstraint("reserve_soc_pct >= 0 AND reserve_soc_pct <= 30", name="ck_range_reserve"),
+        CheckConstraint("version >= 1", name="ck_range_estimator_version"),
+        CheckConstraint(
+            "operating_state IN ('ready', 'completed', 'limited')",
+            name="ck_range_estimator_operating_state",
+        ),
+    )
+
+    vehicle_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("vehicles.id", ondelete="CASCADE"), index=True
+    )
+    vehicle_mass_kg: Mapped[float] = mapped_column(Float)
+    drag_coefficient: Mapped[float] = mapped_column(Float)
+    frontal_area_m2: Mapped[float] = mapped_column(Float)
+    rolling_resistance_coefficient: Mapped[float] = mapped_column(Float)
+    drivetrain_efficiency_pct: Mapped[float] = mapped_column(Float)
+    regenerative_efficiency_pct: Mapped[float] = mapped_column(Float)
+    base_auxiliary_power_kw: Mapped[float] = mapped_column(Float)
+    reserve_soc_pct: Mapped[float] = mapped_column(Float)
+    last_cycle_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    distance_km: Mapped[float] = mapped_column(Float, default=0.0)
+    traction_energy_kwh: Mapped[float] = mapped_column(Float, default=0.0)
+    auxiliary_energy_kwh: Mapped[float] = mapped_column(Float, default=0.0)
+    recovered_energy_kwh: Mapped[float] = mapped_column(Float, default=0.0)
+    net_energy_kwh: Mapped[float] = mapped_column(Float, default=0.0)
+    consumption_kwh_per_100km: Mapped[float] = mapped_column(Float, default=0.0)
+    estimated_range_km: Mapped[float] = mapped_column(Float, default=0.0)
+    operating_state: Mapped[str] = mapped_column(String(16), index=True)
+    limiting_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    simulation_time_ms: Mapped[int] = mapped_column(BigInteger, default=0)
+
+
+class RangeEstimationStep(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "range_estimation_steps"
+    __table_args__ = (
+        UniqueConstraint("vehicle_id", "command_id", name="uq_range_step_command"),
+        CheckConstraint("duration_ms >= 1", name="ck_range_step_duration"),
+    )
+
+    vehicle_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("vehicles.id", ondelete="CASCADE"), index=True
+    )
+    command_id: Mapped[str] = mapped_column(String(64))
+    cycle_id: Mapped[str] = mapped_column(String(64))
+    segments: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    duration_ms: Mapped[int] = mapped_column(BigInteger)
+    previous_version: Mapped[int] = mapped_column(Integer)
+    state_version: Mapped[int] = mapped_column(Integer)
+    previous_battery_version: Mapped[int] = mapped_column(Integer)
+    previous_thermal_version: Mapped[int] = mapped_column(Integer)
+    result: Mapped[dict[str, Any]] = mapped_column(JSON)
+    requested_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )

@@ -15,6 +15,9 @@ from atep.electric_vehicle.schemas import (
     MotorInverterCreate,
     MotorInverterResponse,
     MotorSimulationCommand,
+    RangeEstimationCommand,
+    RangeEstimatorCreate,
+    RangeEstimatorResponse,
     RegenerativeBrakeCreate,
     RegenerativeBrakeResponse,
     ThermalManagementCommand,
@@ -27,19 +30,23 @@ from atep.electric_vehicle.service import (
     create_battery_pack,
     create_charging_system,
     create_motor_inverter,
+    create_range_estimator,
     create_regenerative_brake,
     create_thermal_management,
     execute_charging_command,
     motor_inverter_response,
+    range_estimator_response,
     regenerative_brake_response,
     require_battery_pack,
     require_charging_system,
     require_motor_inverter,
+    require_range_estimator,
     require_regenerative_brake,
     require_thermal_management,
     simulate_battery_step,
     simulate_brake_step,
     simulate_motor_step,
+    simulate_range_cycle,
     simulate_thermal_step,
     thermal_management_response,
 )
@@ -98,6 +105,68 @@ async def simulate_battery_step_endpoint(
 ) -> BatteryPackResponse:
     vehicle = await require_vehicle(session, vehicle_id)
     result, duplicate = await simulate_battery_step(
+        session,
+        vehicle=vehicle,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+    return result
+
+
+@router.post("/range", response_model=RangeEstimatorResponse, status_code=status.HTTP_201_CREATED)
+async def create_range_estimator_endpoint(
+    vehicle_id: str,
+    command: RangeEstimatorCreate,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(electric_vehicle_manage)],
+) -> RangeEstimatorResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    pack = await require_battery_pack(session, vehicle=vehicle)
+    thermal = await require_thermal_management(session, vehicle=vehicle)
+    state = await create_range_estimator(
+        session,
+        vehicle=vehicle,
+        pack=pack,
+        thermal=thermal,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    return range_estimator_response(state, vehicle, pack, thermal)
+
+
+@router.get("/range", response_model=RangeEstimatorResponse)
+async def get_range_estimator_endpoint(
+    vehicle_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _actor: Annotated[User, Depends(electric_vehicle_read)],
+) -> RangeEstimatorResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    pack = await require_battery_pack(session, vehicle=vehicle)
+    thermal = await require_thermal_management(session, vehicle=vehicle)
+    state = await require_range_estimator(session, vehicle=vehicle)
+    return range_estimator_response(state, vehicle, pack, thermal)
+
+
+@router.post(
+    "/range/cycles", response_model=RangeEstimatorResponse, status_code=status.HTTP_201_CREATED
+)
+async def simulate_range_cycle_endpoint(
+    vehicle_id: str,
+    command: RangeEstimationCommand,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(electric_vehicle_manage)],
+) -> RangeEstimatorResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    result, duplicate = await simulate_range_cycle(
         session,
         vehicle=vehicle,
         command=command,

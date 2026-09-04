@@ -338,3 +338,53 @@ class ThermalManagementResponse(BaseModel):
     version: int
     simulation_time_ms: int
     duplicate: bool = False
+
+
+class RangeEstimatorCreate(BaseModel):
+    vehicle_mass_kg: float = Field(default=2100.0, ge=500.0, le=5000.0)
+    drag_coefficient: float = Field(default=0.27, ge=0.15, le=0.7)
+    frontal_area_m2: float = Field(default=2.4, ge=1.0, le=5.0)
+    rolling_resistance_coefficient: float = Field(default=0.011, ge=0.005, le=0.04)
+    drivetrain_efficiency_pct: float = Field(default=92.0, ge=50.0, le=100.0)
+    regenerative_efficiency_pct: float = Field(default=70.0, ge=0.0, le=95.0)
+    base_auxiliary_power_kw: float = Field(default=0.5, ge=0.0, le=20.0)
+    reserve_soc_pct: float = Field(default=5.0, ge=0.0, le=30.0)
+
+
+class DriveCycleSegment(BaseModel):
+    duration_ms: int = Field(ge=1_000, le=3_600_000)
+    speed_kph: float = Field(ge=0.0, le=250.0)
+    acceleration_mps2: float = Field(default=0.0, ge=-10.0, le=10.0)
+    road_grade_pct: float = Field(default=0.0, ge=-20.0, le=20.0)
+
+
+class RangeEstimationCommand(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    command_id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._:-]+$")
+    cycle_id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._:-]+$")
+    segments: list[DriveCycleSegment] = Field(min_length=1, max_length=120)
+    expected_version: int = Field(ge=1)
+    expected_battery_version: int = Field(ge=1)
+    expected_thermal_version: int = Field(ge=1)
+
+
+class RangeEstimatorResponse(BaseModel):
+    vehicle_id: str
+    cycle_id: str | None
+    distance_km: float
+    duration_ms: int
+    traction_energy_kwh: float
+    auxiliary_energy_kwh: float
+    recovered_energy_kwh: float
+    net_energy_kwh: float
+    consumption_kwh_per_100km: float
+    available_energy_kwh: float
+    estimated_range_km: float
+    battery_soc_pct: float
+    battery_version: int
+    thermal_version: int
+    operating_state: str
+    limiting_reason: str | None
+    version: int
+    duplicate: bool = False

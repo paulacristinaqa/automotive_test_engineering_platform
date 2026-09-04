@@ -7,7 +7,7 @@
 | VI-3 | Regenerative-braking strategy and blended friction braking | Implemented |
 | VI-4 | AC/DC charging sessions, charge curves, limits, and fault handling | Implemented |
 | VI-5 | Active thermal-management loops for battery, motor, inverter, and cabin | Implemented |
-| VI-6 | Range and energy-consumption estimation across reproducible drive cycles | Planned |
+| VI-6 | Range and energy-consumption estimation across reproducible drive cycles | Implemented |
 | VI-7 | Cross-domain EV scenarios integrating BMS ECU, CAN, UDS, tests, and evidence | Planned |
 
 VI-1 creates a vehicle-scoped battery aggregate without replacing the lighter battery projection
@@ -41,5 +41,13 @@ cool the battery, motor, inverter, and cabin toward explicit targets. Each logic
 ambient exchange, cabin heat load, actuator capacity, auxiliary electrical demand, disabled
 operation, and injected faults while updating battery and motor temperatures atomically.
 
-The recommended next increment is VI-6: deterministic range and energy-consumption estimation
-across reproducible drive cycles.
+VI-6 adds one calibrated range estimator per vehicle and accepts bounded, reproducible drive-cycle
+segments. The deterministic model combines rolling resistance, aerodynamic drag, road grade,
+acceleration, drivetrain efficiency, regenerative recovery, battery SOC/SOH and reserve, plus the
+current thermal and baseline auxiliary demand. It reports cycle energy, consumption per 100 km,
+available energy, and estimated remaining range without map APIs, cloud services, or wall-clock
+loops. Command snapshots provide exact replay, changed-reuse protection, and optimistic checks
+against range, battery, and thermal versions.
+
+The recommended next increment is VI-7: cross-domain EV scenarios integrating the BMS ECU, CAN,
+UDS, automated tests, and evidence.
