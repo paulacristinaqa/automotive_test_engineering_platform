@@ -5,9 +5,9 @@
 | Field | Value |
 |---|---|
 | Document | ATEP Engineering Workbook - Volume VI: Electric Vehicle |
-| Version | 0.5.0 |
+| Version | 0.6.0 |
 | Baseline date | 4 September 2026 |
-| Status | VI-1 through VI-5 implemented, including active thermal management |
+| Status | VI-1 through VI-6 implemented, including deterministic range estimation |
 | Audience | Automotive software, simulation, QA, functional-safety, and platform engineers |
 
 ## 1. Purpose and Scope
@@ -19,6 +19,7 @@ limits, and battery-derived propulsion availability. VI-3 adds requested-deceler
 regenerative energy recovery, battery charge acceptance, and blended friction braking.
 VI-4 adds AC/DC charging sessions, deterministic charge curves, lifecycle control, and faults.
 VI-5 adds coordinated heating and cooling for the battery, motor, inverter, and cabin.
+VI-6 adds deterministic energy-consumption and remaining-range estimates for bounded drive cycles.
 
 ### In Scope for VI-1
 
@@ -61,17 +62,25 @@ VI-5 adds coordinated heating and cooling for the battery, motor, inverter, and 
 - bounded actuators, ambient exchange, cabin heat load, logical-time integration, and auxiliary demand;
 - disabled and faulted operation with triple versioning, exact replay, audit, and outbox evidence.
 
+### In Scope for VI-6
+
+- one calibrated range estimator per battery- and thermal-equipped vehicle;
+- bounded drive-cycle segments containing duration, speed, acceleration, and road grade;
+- traction, auxiliary, regenerative, net-energy, consumption, and remaining-range evidence;
+- range, battery, and thermal optimistic versions, exact replay, audit, and outbox evidence.
+
 ### Deferred
 
 - chemistry-specific circuits, cell balancing, aging, sensor faults, and module topology;
-- range estimation, calibrated thermal circuits, and BMS ECU, CAN, UDS, dashboard, and test orchestration.
+- calibrated thermal circuits and BMS ECU, CAN, UDS, dashboard, and test orchestration.
 
 ## 2. Architecture
 
 The FastAPI electric-vehicle boundary uses `electric_vehicle:read` and
 `electric_vehicle:manage`. `BatteryPackState`, `MotorInverterState`,
-`RegenerativeBrakeState`, `ChargingSystemState`, and `ThermalManagementState` own the battery,
-propulsion, braking, charging, and thermal aggregates. Their simulation
+`RegenerativeBrakeState`, `ChargingSystemState`, `ThermalManagementState`, and
+`RangeEstimatorState` own the battery, propulsion, braking, charging, thermal, and range
+aggregates. Their simulation
 step records preserve immutable replay evidence. `AuditRecord` and `OutboxEvent` commit in the
 same database transaction as each accepted mutation.
 
@@ -101,6 +110,8 @@ Volume VI state through explicit integration contracts rather than sharing datab
 | Charging state | Session lifecycle | `idle`, `charging`, `paused`, `completed`, `faulted` |
 | ThermalManagementState | Zone targets, cabin state, and actuator demand | one per vehicle; version >= 1 |
 | Thermal state | Current controller outcome | `standby`, `heating`, `cooling`, `mixed`, `faulted` |
+| RangeEstimatorState | Drive-cycle energy and remaining range | one per vehicle; version >= 1 |
+| DriveCycleSegment | Reproducible route assumption | 1-3,600 s; 0-250 km/h; bounded acceleration and grade |
 
 ### Sign Convention
 
@@ -170,6 +181,18 @@ is capped by the remaining energy room so a long step cannot cross 95% SOC.
 - Cabin temperature also integrates a bounded passenger, solar, or equipment heat load.
 - Auxiliary demand is the sum of absolute zone powers. Disabled or faulted control draws zero.
 
+### VI-6 Range Model
+
+- Segment force combines rolling resistance, aerodynamic drag, road grade, and acceleration.
+- Positive mechanical work is divided by drivetrain efficiency to obtain traction energy.
+- Negative mechanical work is multiplied by regenerative efficiency to obtain recovered energy.
+- Auxiliary energy integrates baseline demand plus the current thermal-system demand.
+- Net energy equals traction plus auxiliary energy minus recovered energy, with a zero floor.
+- Consumption is net energy per distance, expressed in kWh/100 km.
+- Available energy uses nominal pack energy, SOH, SOC, and the configured reserve SOC.
+- Estimated range equals available energy divided by consumption. Stationary cycles return an
+  explicit limited result.
+
 ## 5. BMS State Policy
 
 | Condition | State | Contactors | Delivered current |
@@ -202,6 +225,9 @@ hysteresis, debounce, chemistry, current, voltage, isolation, and sensor-plausib
 | `POST /api/v1/vehicles/{vehicle_id}/electric/thermal` | Create thermal targets and actuator capacities | `electric_vehicle:manage` |
 | `GET /api/v1/vehicles/{vehicle_id}/electric/thermal` | Read zone temperatures, output, and state | `electric_vehicle:read` |
 | `POST /api/v1/vehicles/{vehicle_id}/electric/thermal/steps` | Execute one deterministic thermal-control step | `electric_vehicle:manage` |
+| `POST /api/v1/vehicles/{vehicle_id}/electric/range` | Create range calibration | `electric_vehicle:manage` |
+| `GET /api/v1/vehicles/{vehicle_id}/electric/range` | Read the latest estimate | `electric_vehicle:read` |
+| `POST /api/v1/vehicles/{vehicle_id}/electric/range/cycles` | Evaluate one reproducible drive cycle | `electric_vehicle:manage` |
 
 ### Stable Errors
 
@@ -232,6 +258,12 @@ hysteresis, debounce, chemistry, current, voltage, isolation, and sensor-plausib
 | `thermal_battery_version_conflict` | The battery version supplied to thermal control is stale. |
 | `thermal_motor_version_conflict` | The motor version supplied to thermal control is stale. |
 | `thermal_command_conflict` | A thermal command ID was reused differently. |
+| `range_estimator_already_exists` | The vehicle already owns range-estimator state. |
+| `range_estimator_not_found` | No range estimator exists for the vehicle. |
+| `range_state_version_conflict` | The range estimator version is stale. |
+| `range_battery_version_conflict` | The battery version supplied to the estimate is stale. |
+| `range_thermal_version_conflict` | The thermal version supplied to the estimate is stale. |
+| `range_estimation_command_conflict` | A range command ID was reused differently. |
 | `forbidden` | The authenticated user lacks the required permission. |
 | `validation_error` | A request violates a declared bound or format. |
 
@@ -244,6 +276,8 @@ Migration `0037_battery_bms_foundation` creates `battery_pack_states` and
 states, versions, and durations. Migration `0040_charging_sessions` creates
 `charging_system_states` and `charging_command_steps`. Migration `0041_thermal_management` creates
 `thermal_management_states` and `thermal_management_steps`.
+Migration `0042_range_estimation` creates `range_estimator_states` and
+`range_estimation_steps`.
 
 | Event | Purpose | Privacy/minimization rule |
 |---|---|---|
@@ -257,10 +291,12 @@ states, versions, and durations. Migration `0040_charging_sessions` creates
 | `atep.electric_vehicle.charging.command.completed.v1` | Announce lifecycle and energy outcome | Session summary and versions; no cells |
 | `atep.electric_vehicle.thermal_management.created.v1` | Announce thermal targets and capacities | Bounded configuration only |
 | `atep.electric_vehicle.thermal.step.completed.v1` | Announce temperatures and actuator demand | Zone summary and versions; no cells |
+| `atep.electric_vehicle.range_estimator.created.v1` | Announce calibrated range estimation | Bounded calibration only |
+| `atep.electric_vehicle.range.cycle.completed.v1` | Announce drive-cycle outcome | Consumption, range, cycle ID, and version |
 
 ## 8. Requirements Baseline
 
-VI-1 through VI-5 implement EV-F-001 through EV-F-076 and EV-NF-001 through EV-NF-024. The authoritative
+VI-1 through VI-6 implement EV-F-001 through EV-F-089 and EV-NF-001 through EV-NF-029. The authoritative
 traceability table is maintained in `docs/requirements-volume-vi.md`.
 
 ## 9. Architecture Decisions
@@ -346,6 +382,18 @@ Rationale: thermal evidence cannot describe cooling that is absent from componen
 
 Decision: set actuator output to zero but continue ambient exchange during disabled and faulted
 operation. Rationale: stopping the controller must not freeze physical temperature state.
+
+### ADR-EV-016 - Use Reproducible Drive-Cycle Segments
+
+Decision: represent a route as bounded duration, speed, acceleration, and grade segments rather
+than querying a map provider. Rationale: the same input remains deterministic, local, free, and
+usable in regression tests.
+
+### ADR-EV-017 - Estimate Without Mutating Battery Energy
+
+Decision: VI-6 reads versioned battery and thermal state but treats a drive cycle as an analytical
+estimate. Rationale: repeated scenario execution must not silently debit SOC before VI-7 defines a
+cross-domain trip transaction.
 
 ## 10. Test Catalogue
 
@@ -447,12 +495,26 @@ operation. Rationale: stopping the controller must not freeze physical temperatu
 | EV-T-094 | Triple version conflicts | Submit stale thermal, battery, or motor version | Distinct current version returned |
 | EV-T-095 | Thermal atomic evidence | Inspect states, step, audit, and outbox | All commit or all roll back |
 | EV-T-096 | Thermal OpenAPI and migration | Inspect routes and revision 0041 | Bounded schema and reversible tables |
+| EV-T-097 | Range contract bounds | Exceed calibration, segment, or collection limits | Stable validation error |
+| EV-T-098 | Range-estimator creation | Create one estimator after battery and thermal setup | Version 1 and ready |
+| EV-T-099 | Constant-speed cycle | Execute a reproducible level-road profile | Deterministic distance and energy |
+| EV-T-100 | Aerodynamic sensitivity | Compare equal cycles at different speeds | Higher speed raises consumption |
+| EV-T-101 | Auxiliary sensitivity | Compare equal cycles with different thermal demand | Higher load reduces range |
+| EV-T-102 | Road-grade sensitivity | Compare level and uphill segments | Uphill demand raises traction energy |
+| EV-T-103 | Regenerative recovery | Include a negative-acceleration segment | Recovered energy is positive and bounded |
+| EV-T-104 | Battery reserve | Estimate at or below configured reserve SOC | Limited state and zero available energy |
+| EV-T-105 | Insufficient distance | Execute a stationary cycle | Stable limited reason and no division by zero |
+| EV-T-106 | Range exact replay | Retry an identical cycle command | Persisted snapshot and duplicate true |
+| EV-T-107 | Range changed reuse | Reuse command ID with different input | Stable command conflict |
+| EV-T-108 | Triple version conflicts | Submit stale range, battery, or thermal version | Distinct current version returned |
+| EV-T-109 | Range atomic evidence | Inspect estimator, step, audit, and outbox | All commit or all roll back |
+| EV-T-110 | Range OpenAPI and migration | Inspect routes and revision 0042 | Bounded schema and reversible tables |
 
 ## 11. Verification Evidence
 
-| Gate | VI-1 through VI-5 evidence |
+| Gate | VI-1 through VI-6 evidence |
 |---|---|
-| Domain tests | Battery/BMS, propulsion, braking, charging, thermal zones, faults, replay, conflicts |
+| Domain tests | Battery/BMS, propulsion, braking, charging, thermal zones, drive-cycle range, faults, replay, conflicts |
 | API contract | Routes and safe numeric limits published in OpenAPI |
 | Ruff | Required before merge |
 | Strict mypy | Required before merge |
@@ -471,13 +533,16 @@ operation. Rationale: stopping the controller must not freeze physical temperatu
 | No current derating | Warning state remains simplistic | Add temperature/SOC-dependent charge and discharge limits |
 | Separate Volume II battery projection | Possible divergence | Add an explicit projection/synchronization contract in VI-7 |
 | Analytic efficiency surface | Lower fidelity than dyno calibration | Add versioned torque-speed-efficiency maps later |
-| Motor step does not debit SOC | Energy domains can diverge across long scenarios | Couple energy flow in VI-6/VI-7 scenarios |
+| Motor step does not debit SOC | Energy domains can diverge across long scenarios | Couple energy flow in VI-7 scenarios |
 | Fixed thermal masses and controller gain | Cannot represent every cooling design | Add versioned calibration profiles later |
 | Quasi-static braking step | Vehicle speed is not integrated over time | Couple braking to Volume II dynamics in VI-7 |
 | Simplified charge acceptance | Cannot represent chemistry-specific power maps | Add versioned SOC-temperature maps later |
 | No hydraulic pressure model | Cannot test valve or pressure dynamics yet | Add brake-system actuator fidelity in a later volume |
 | Analytic charging curve | Cannot reproduce every chemistry or EVSE calibration | Add versioned SOC-temperature-power maps later |
 | No EVSE protocol model | Cannot test ISO 15118 or PLC handshakes yet | Add protocol adapters after core session behavior stabilizes |
+| Quasi-static drive-cycle segments | Transient chassis dynamics are simplified | Couple range estimation to Volume II dynamics in VI-7 |
+| Fixed air density and calibration | Weather and vehicle variants are approximate | Add versioned environment and vehicle calibration profiles |
+| Range cycle does not debit battery SOC | Repeated estimates are analytical rather than stateful trips | Apply energy through cross-domain scenarios in VI-7 |
 
 ## 13. Exercises
 
@@ -531,8 +596,40 @@ operation. Rationale: stopping the controller must not freeze physical temperatu
 
 25. Retry a thermal step and prove that component temperatures do not integrate twice.
 
-## 14. Next Development
+26. Run equal urban and highway cycles and explain the aerodynamic consumption difference.
 
-VI-6 will add deterministic range and energy-consumption estimation across reproducible drive
-cycles. It will combine traction demand, auxiliary thermal load, charging history, battery state,
-ambient conditions, and stable route assumptions without paid map or cloud services.
+27. Increase thermal auxiliary demand and verify that estimated range decreases.
+
+28. Add a downhill deceleration segment and inspect recovered energy.
+
+29. Move battery SOC to the reserve boundary and verify the stable limited result.
+
+30. Retry a range command and prove that the persisted cycle is not integrated twice.
+
+## 14. VI-6 Range and Energy Consumption
+
+VI-6 implements a vehicle-scoped range estimator with bounded physical calibration and reproducible
+drive-cycle segments. Each segment supplies duration, speed, longitudinal acceleration, and road
+grade. The service calculates rolling, aerodynamic, grade, and acceleration forces; converts
+positive mechanical work through drivetrain efficiency; captures bounded regenerative recovery;
+and adds baseline plus active thermal auxiliary energy.
+
+Available energy is derived from nominal pack energy, SOH, current SOC, and a configurable reserve.
+The response reports distance, duration, traction energy, auxiliary energy, recovered energy, net
+energy, consumption per 100 km, and remaining range. Stationary cycles and depleted reserve produce
+explicit limited results instead of unstable division or misleading estimates.
+
+The public contract consists of `POST /range`, `GET /range`, and `POST /range/cycles` under the
+vehicle electric API. Mutations require electric-vehicle management permission. Every accepted
+operation records audit and transactional-outbox evidence. Cycle commands use exact replay,
+changed-reuse rejection, and version checks against the estimator, battery, and thermal aggregate.
+
+The model is local and free to run. It requires no commercial map, routing, weather, LLM, or cloud
+API. Charging history influences the result through the authoritative battery SOC and SOH rather
+than a second derived energy ledger.
+
+## 15. Next Development
+
+VI-7 will add cross-domain EV scenarios that coordinate battery, powertrain, regenerative braking,
+charging, thermal management, and range through BMS ECU, CAN, UDS, automated tests, and correlated
+evidence.

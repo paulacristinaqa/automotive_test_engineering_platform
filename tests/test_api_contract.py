@@ -562,6 +562,21 @@ def test_electric_vehicle_thermal_contracts_are_published() -> None:
     assert command_schema["properties"]["cabin_heat_load_kw"]["maximum"] == 20.0
 
 
+def test_electric_vehicle_range_contracts_are_published() -> None:
+    schema = core_app.openapi()
+    paths = schema["paths"]
+    range_path = paths["/api/v1/vehicles/{vehicle_id}/electric/range"]
+    assert {"get", "post"} <= set(range_path)
+    assert "/api/v1/vehicles/{vehicle_id}/electric/range/cycles" in paths
+    create_schema = schema["components"]["schemas"]["RangeEstimatorCreate"]
+    assert create_schema["properties"]["vehicle_mass_kg"]["maximum"] == 5_000.0
+    assert create_schema["properties"]["reserve_soc_pct"]["maximum"] == 30.0
+    segment_schema = schema["components"]["schemas"]["DriveCycleSegment"]
+    assert segment_schema["properties"]["speed_kph"]["maximum"] == 250.0
+    command_schema = schema["components"]["schemas"]["RangeEstimationCommand"]
+    assert command_schema["properties"]["segments"]["maxItems"] == 120
+
+
 def test_test_artifact_contracts_and_safe_pagination_are_published() -> None:
     paths = core_app.openapi()["paths"]
     collection = paths["/api/v1/test-runs/{run_id}/artifacts"]

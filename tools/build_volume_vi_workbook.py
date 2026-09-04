@@ -6,8 +6,8 @@ SOURCE = workbook.ROOT / "docs" / "workbook-volume-vi.md"
 OUTPUT = workbook.ROOT / "docs" / "ATEP_Volume_VI_Electric_Vehicle_Engineering_Workbook.docx"
 VOLUME_NUMBER = "VI"
 VOLUME_NAME = "Electric Vehicle"
-DOCUMENT_VERSION = "0.5.0"
-DOCUMENT_STATUS = "VI-1 through VI-5 implemented, including active thermal management"
+DOCUMENT_VERSION = "0.6.0"
+DOCUMENT_STATUS = "VI-1 through VI-6 implemented, including deterministic range estimation"
 BASELINE_DATE = "4 September 2026"
 
 

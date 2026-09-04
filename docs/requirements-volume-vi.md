@@ -80,6 +80,19 @@
 | EV-F-074 | Thermal creation and steps shall produce audit and transactional outbox evidence. | Service evidence tests |
 | EV-F-075 | Thermal read and mutation operations shall use the Volume VI RBAC permissions. | API dependencies |
 | EV-F-076 | Thermal responses shall publish stable standby, heating, cooling, mixed, and faulted states. | State-classification tests |
+| EV-F-077 | The platform shall create at most one range estimator per battery- and thermal-equipped vehicle. | Migration `0042`; creation test |
+| EV-F-078 | Range calibration shall bound mass, drag, frontal area, rolling resistance, efficiencies, auxiliary load, and reserve SOC. | Contract tests |
+| EV-F-079 | A drive cycle shall contain one to 120 bounded duration, speed, acceleration, and road-grade segments. | Pydantic contract |
+| EV-F-080 | Segment force shall include rolling, aerodynamic, grade, and acceleration terms. | Deterministic cycle tests |
+| EV-F-081 | Traction energy shall apply drivetrain efficiency and recovered energy shall apply regenerative efficiency. | Energy tests |
+| EV-F-082 | Auxiliary energy shall include baseline and active thermal demand over logical duration. | Auxiliary-load comparison test |
+| EV-F-083 | Available energy shall derive from pack capacity, SOH, SOC, and reserve SOC. | Range-response test |
+| EV-F-084 | A completed cycle shall report distance, energy components, consumption per 100 km, and remaining range. | Response contract |
+| EV-F-085 | A stationary cycle or exhausted reserve shall return a stable limited result. | Boundary tests |
+| EV-F-086 | Range commands shall validate estimator, battery, and thermal versions independently. | Version-conflict tests |
+| EV-F-087 | An identical range command retry shall return stored evidence without recalculation. | Exact-replay test |
+| EV-F-088 | Reusing a range command identifier with changed input shall return a stable conflict. | Changed-reuse test |
+| EV-F-089 | Range creation and cycles shall produce audit and transactional outbox evidence. | Service evidence tests |
 
 ## Non-Functional Requirements
 
@@ -109,6 +122,11 @@
 | EV-NF-022 | Bounded thermal execution | All targets, ambient inputs, heat loads, durations, and actuator outputs have explicit limits. |
 | EV-NF-023 | Explainability | Zone power, total auxiliary power, state, fault, temperatures, and versions are published together. |
 | EV-NF-024 | Local-first operation | VI-5 requires no paid service, external API, cloud account, or GPU. |
+| EV-NF-025 | Determinism | Equal calibration, states, and cycle segments produce equal results. |
+| EV-NF-026 | Bounded execution | Segment count and every physical input have explicit limits. |
+| EV-NF-027 | Cross-aggregate consistency | Range evaluation locks and validates battery, thermal, and estimator state. |
+| EV-NF-028 | Explainability | Responses expose each energy component and stable limiting reasons. |
+| EV-NF-029 | Local-first operation | VI-6 requires no paid map, weather, cloud, LLM, or GPU service. |
 
 ## API Traceability
 
@@ -129,3 +147,6 @@
 | `POST /api/v1/vehicles/{vehicle_id}/electric/thermal` | EV-F-061, EV-F-062, EV-F-074, EV-F-075 |
 | `GET /api/v1/vehicles/{vehicle_id}/electric/thermal` | EV-F-062, EV-F-069, EV-F-075, EV-F-076 |
 | `POST /api/v1/vehicles/{vehicle_id}/electric/thermal/steps` | EV-F-063 through EV-F-076 |
+| `POST /api/v1/vehicles/{vehicle_id}/electric/range` | EV-F-077, EV-F-078, EV-F-089 |
+| `GET /api/v1/vehicles/{vehicle_id}/electric/range` | EV-F-083 through EV-F-085 |
+| `POST /api/v1/vehicles/{vehicle_id}/electric/range/cycles` | EV-F-079 through EV-F-089 |

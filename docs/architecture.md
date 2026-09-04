@@ -489,3 +489,8 @@ VI-5 adds a thermal-management aggregate that coordinates battery, motor, invert
 temperatures. Thermal steps lock battery, motor, and thermal rows in that order and validate each
 version independently. Bounded actuator outputs, auxiliary demand, passive ambient exchange,
 fault behavior, immutable replay evidence, audit, and outbox commit in one transaction.
+
+VI-6 adds a range-estimator aggregate that reads the authoritative battery and thermal states in a
+fixed lock order. Reproducible drive-cycle segments produce explainable traction, auxiliary,
+regenerative, net-energy, consumption, and remaining-range evidence. Estimates are analytical and
+do not mutate battery SOC; VI-7 will own the cross-domain trip transaction.

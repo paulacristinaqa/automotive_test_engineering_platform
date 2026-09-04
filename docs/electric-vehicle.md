@@ -155,12 +155,20 @@ Thermal step
 - Exact replay returns the stored cross-aggregate result. Changed reuse and stale thermal, battery,
   or motor versions return distinct stable conflicts.
 
-## Deliberate VI-1 through VI-5 Limits
+## VI-6 Deterministic Range Estimation
+
+VI-6 evaluates bounded drive-cycle segments using local physical calibration. Rolling resistance,
+aerodynamic drag, grade, acceleration, drivetrain loss, regenerative recovery, battery SOC/SOH and
+reserve, plus thermal auxiliary demand produce an explainable consumption and range result.
+Commands support exact replay and independent range, battery, and thermal version checks. No map,
+weather, cloud, LLM, or paid API is required.
+
+## Deliberate VI-1 through VI-6 Limits
 
 - SOH is persisted but degradation and cycle aging begin in a later increment.
 - Cell balancing, sensor faults, thermal propagation, modules in parallel, and chemistry-specific
   voltage curves are future model refinements.
-- Range estimation remains VI-6 work.
+- Range evaluation is analytical and does not debit battery SOC until VI-7 defines cross-domain trips.
 - VI-2 uses an explainable analytic efficiency surface rather than a production calibration map.
 - The motor step reads battery availability but does not yet debit battery SOC; full coupled energy
   flow is introduced with cross-domain drive scenarios.
