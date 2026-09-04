@@ -520,6 +520,20 @@ def test_electric_vehicle_powertrain_contracts_are_published() -> None:
     assert step_schema["properties"]["duration_ms"]["maximum"] == 3_600_000
 
 
+def test_electric_vehicle_braking_contracts_are_published() -> None:
+    schema = core_app.openapi()
+    paths = schema["paths"]
+    braking = paths["/api/v1/vehicles/{vehicle_id}/electric/braking"]
+    assert {"get", "post"} <= set(braking)
+    assert "/api/v1/vehicles/{vehicle_id}/electric/braking/steps" in paths
+    create_schema = schema["components"]["schemas"]["RegenerativeBrakeCreate"]
+    assert create_schema["properties"]["vehicle_mass_kg"]["minimum"] == 500.0
+    assert create_schema["properties"]["regen_efficiency_pct"]["maximum"] == 99.5
+    step_schema = schema["components"]["schemas"]["BrakeSimulationCommand"]
+    assert step_schema["properties"]["requested_deceleration_mps2"]["maximum"] == 15.0
+    assert step_schema["properties"]["vehicle_speed_mps"]["maximum"] == 100.0
+
+
 def test_test_artifact_contracts_and_safe_pagination_are_published() -> None:
     paths = core_app.openapi()["paths"]
     collection = paths["/api/v1/test-runs/{run_id}/artifacts"]

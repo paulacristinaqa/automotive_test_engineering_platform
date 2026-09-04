@@ -6,9 +6,9 @@ SOURCE = workbook.ROOT / "docs" / "workbook-volume-vi.md"
 OUTPUT = workbook.ROOT / "docs" / "ATEP_Volume_VI_Electric_Vehicle_Engineering_Workbook.docx"
 VOLUME_NUMBER = "VI"
 VOLUME_NAME = "Electric Vehicle"
-DOCUMENT_VERSION = "0.2.0"
-DOCUMENT_STATUS = "VI-1 battery/BMS and VI-2 motor/inverter implemented"
-BASELINE_DATE = "3 September 2026"
+DOCUMENT_VERSION = "0.3.0"
+DOCUMENT_STATUS = "VI-1 battery/BMS, VI-2 motor/inverter, and VI-3 braking implemented"
+BASELINE_DATE = "4 September 2026"
 
 
 def build() -> Path:
