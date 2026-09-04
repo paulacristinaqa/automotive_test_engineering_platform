@@ -192,3 +192,89 @@ class RegenerativeBrakeResponse(BaseModel):
     version: int
     simulation_time_ms: int
     duplicate: bool = False
+
+
+class ChargingConnectorType(StrEnum):
+    AC_TYPE_2 = "ac_type_2"
+    DC_CCS = "dc_ccs"
+
+
+class ChargingAction(StrEnum):
+    START = "start"
+    CHARGE = "charge"
+    PAUSE = "pause"
+    RESUME = "resume"
+    STOP = "stop"
+    INJECT_FAULT = "inject_fault"
+    CLEAR_FAULT = "clear_fault"
+
+
+class ChargingOperatingState(StrEnum):
+    IDLE = "idle"
+    CHARGING = "charging"
+    PAUSED = "paused"
+    COMPLETED = "completed"
+    FAULTED = "faulted"
+
+
+class ChargingSystemCreate(BaseModel):
+    max_ac_power_kw: float = Field(default=22.0, gt=0.0, le=50.0)
+    max_dc_power_kw: float = Field(default=180.0, gt=0.0, le=1_000.0)
+    charging_efficiency_pct: float = Field(default=92.0, ge=50.0, le=99.5)
+
+
+class ChargingCommand(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    command_id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._:-]+$")
+    action: ChargingAction
+    session_id: str | None = Field(
+        default=None, min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._:-]+$"
+    )
+    connector_type: ChargingConnectorType | None = None
+    duration_ms: int = Field(default=0, ge=0, le=3_600_000)
+    requested_power_kw: float = Field(default=0.0, ge=0.0, le=1_000.0)
+    target_soc_pct: float | None = Field(default=None, ge=1.0, le=100.0)
+    fault_code: str | None = Field(
+        default=None, min_length=1, max_length=32, pattern=r"^[A-Z0-9_:-]+$"
+    )
+    expected_version: int = Field(ge=1)
+    expected_battery_version: int = Field(ge=1)
+
+    @model_validator(mode="after")
+    def validate_action_fields(self) -> "ChargingCommand":
+        if self.action == ChargingAction.START:
+            if (
+                self.session_id is None
+                or self.connector_type is None
+                or self.target_soc_pct is None
+            ):
+                raise ValueError("start requires session_id, connector_type, and target_soc_pct")
+        if self.action == ChargingAction.CHARGE and self.duration_ms == 0:
+            raise ValueError("charge requires a positive duration_ms")
+        if self.action == ChargingAction.INJECT_FAULT and self.fault_code is None:
+            raise ValueError("inject_fault requires fault_code")
+        return self
+
+
+class ChargingSystemResponse(BaseModel):
+    vehicle_id: str
+    max_ac_power_kw: float
+    max_dc_power_kw: float
+    charging_efficiency_pct: float
+    session_id: str | None
+    connector_type: ChargingConnectorType | None
+    target_soc_pct: float
+    requested_power_kw: float
+    delivered_power_kw: float
+    charged_energy_kwh: float
+    session_energy_kwh: float
+    battery_charge_acceptance_kw: float
+    battery_soc_pct: float
+    battery_version: int
+    operating_state: ChargingOperatingState
+    limiting_reason: str | None
+    fault_code: str | None
+    version: int
+    simulation_time_ms: int
+    duplicate: bool = False

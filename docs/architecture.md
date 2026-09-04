@@ -478,3 +478,9 @@ deceleration is allocated between regenerative and friction braking; accepted el
 updates battery SOC and version atomically with braking state, immutable command evidence, audit,
 and outbox. Exact retries return their persisted cross-aggregate snapshot. Android clients and
 future CAN/ECU adapters use the public API and events rather than database access.
+
+VI-4 adds a charging-system aggregate alongside the battery. Charging commands lock the battery
+before the charging row, validate both optimistic versions, and enforce a state machine for session
+start, energy transfer, pause, resume, stop, injected fault, and fault clearing. AC Type 2 and DC CCS
+use separate power ceilings; both apply BMS, temperature, target-SOC, taper, and remaining-energy
+limits. Battery SOC, contactors, charging state, replay evidence, audit, and outbox commit atomically.

@@ -14,6 +14,11 @@ from atep.core.errors import (
     BrakeBatteryVersionConflictError,
     BrakeSimulationCommandConflictError,
     BrakeStateVersionConflictError,
+    ChargingBatteryVersionConflictError,
+    ChargingCommandConflictError,
+    ChargingStateVersionConflictError,
+    ChargingSystemAlreadyExistsError,
+    ChargingTransitionError,
     MotorInverterAlreadyExistsError,
     MotorSimulationCommandConflictError,
     MotorStateVersionConflictError,
@@ -24,6 +29,8 @@ from atep.electric_vehicle.models import (
     BatteryPackState,
     BatterySimulationStep,
     BrakeSimulationStep,
+    ChargingCommandStep,
+    ChargingSystemState,
     MotorInverterState,
     MotorSimulationStep,
     RegenerativeBrakeState,
@@ -36,6 +43,12 @@ from atep.electric_vehicle.schemas import (
     BatterySimulationCommand,
     BrakeOperatingState,
     BrakeSimulationCommand,
+    ChargingAction,
+    ChargingCommand,
+    ChargingConnectorType,
+    ChargingOperatingState,
+    ChargingSystemCreate,
+    ChargingSystemResponse,
     DriveMode,
     MotorInverterCreate,
     MotorInverterResponse,
@@ -613,9 +626,7 @@ async def simulate_motor_step(
     return rendered, False
 
 
-def _battery_charge_acceptance_kw(
-    pack: BatteryPackState, maximum_regen_power_kw: float
-) -> float:
+def _battery_charge_acceptance_kw(pack: BatteryPackState, maximum_regen_power_kw: float) -> float:
     if pack.contactor_state != BatteryContactorState.CLOSED.value:
         return 0.0
     if pack.operating_state == BatteryOperatingState.PROTECTION.value:
@@ -804,10 +815,7 @@ async def simulate_brake_step(
     regen_efficiency = state.regen_efficiency_pct / 100.0
     charge_acceptance_kw = _battery_charge_acceptance_kw(pack, state.max_regen_power_kw)
     nominal_energy_kwh = (
-        pack.series_cell_count
-        * pack.nominal_cell_voltage_v
-        * pack.nominal_capacity_ah
-        / 1000.0
+        pack.series_cell_count * pack.nominal_cell_voltage_v * pack.nominal_capacity_ah / 1000.0
     )
     usable_energy_kwh = nominal_energy_kwh * pack.soh_pct / 100.0
     duration_hours = command.duration_ms / 3_600_000.0
@@ -825,8 +833,8 @@ async def simulate_brake_step(
         regen_force_n = 0.0
         limiting_reason = "battery_charge_unavailable"
     else:
-        power_force_cap_n = charge_acceptance_kw * 1000.0 / (
-            command.vehicle_speed_mps * regen_efficiency
+        power_force_cap_n = (
+            charge_acceptance_kw * 1000.0 / (command.vehicle_speed_mps * regen_efficiency)
         )
         regen_force_n = min(requested_force_n, torque_force_cap_n, power_force_cap_n)
         if regen_force_n < requested_force_n:
@@ -849,9 +857,7 @@ async def simulate_brake_step(
     regenerative_motor_torque = (
         regen_force_n * state.wheel_radius_m / (state.final_drive_ratio * drivetrain_efficiency)
     )
-    recovered_power_kw = (
-        regen_force_n * command.vehicle_speed_mps * regen_efficiency / 1000.0
-    )
+    recovered_power_kw = regen_force_n * command.vehicle_speed_mps * regen_efficiency / 1000.0
     recovered_energy_kwh = recovered_power_kw * command.duration_ms / 3_600_000.0
 
     previous_battery_version = pack.version
@@ -945,6 +951,399 @@ async def simulate_brake_step(
         actor_user_id=actor_user_id,
         action="electric_vehicle.brake_step_completed",
         resource_type="regenerative_brake",
+        resource_id=state.id,
+        correlation_id=correlation_id,
+        details=payload,
+    )
+    return rendered, False
+
+
+def charging_system_response(
+    state: ChargingSystemState,
+    vehicle: Vehicle,
+    pack: BatteryPackState,
+    *,
+    duplicate: bool = False,
+) -> ChargingSystemResponse:
+    return ChargingSystemResponse(
+        vehicle_id=vehicle.identifier,
+        max_ac_power_kw=state.max_ac_power_kw,
+        max_dc_power_kw=state.max_dc_power_kw,
+        charging_efficiency_pct=state.charging_efficiency_pct,
+        session_id=state.session_id,
+        connector_type=state.connector_type,
+        target_soc_pct=state.target_soc_pct,
+        requested_power_kw=state.requested_power_kw,
+        delivered_power_kw=state.delivered_power_kw,
+        charged_energy_kwh=state.charged_energy_kwh,
+        session_energy_kwh=state.session_energy_kwh,
+        battery_charge_acceptance_kw=state.battery_charge_acceptance_kw,
+        battery_soc_pct=pack.soc_pct,
+        battery_version=pack.version,
+        operating_state=state.operating_state,
+        limiting_reason=state.limiting_reason,
+        fault_code=state.fault_code,
+        version=state.version,
+        simulation_time_ms=state.simulation_time_ms,
+        duplicate=duplicate,
+    )
+
+
+async def create_charging_system(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    pack: BatteryPackState,
+    command: ChargingSystemCreate,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> ChargingSystemState:
+    existing = await session.scalar(
+        select(ChargingSystemState).where(ChargingSystemState.vehicle_id == vehicle.id)
+    )
+    if existing is not None:
+        raise ChargingSystemAlreadyExistsError()
+    state = ChargingSystemState(
+        vehicle_id=vehicle.id,
+        max_ac_power_kw=command.max_ac_power_kw,
+        max_dc_power_kw=command.max_dc_power_kw,
+        charging_efficiency_pct=command.charging_efficiency_pct,
+        session_id=None,
+        connector_type=None,
+        target_soc_pct=80.0,
+        requested_power_kw=0.0,
+        delivered_power_kw=0.0,
+        charged_energy_kwh=0.0,
+        session_energy_kwh=0.0,
+        battery_charge_acceptance_kw=0.0,
+        operating_state=ChargingOperatingState.IDLE.value,
+        limiting_reason=None,
+        fault_code=None,
+        version=1,
+        simulation_time_ms=0,
+    )
+    try:
+        async with session.begin_nested():
+            session.add(state)
+            await session.flush()
+    except IntegrityError as exc:
+        raise ChargingSystemAlreadyExistsError() from exc
+    payload = {
+        "vehicle_id": vehicle.identifier,
+        "max_ac_power_kw": state.max_ac_power_kw,
+        "max_dc_power_kw": state.max_dc_power_kw,
+        "version": state.version,
+    }
+    enqueue_event(
+        session,
+        event_type="atep.electric_vehicle.charging_system.created.v1",
+        aggregate_type="charging_system",
+        aggregate_id=state.id,
+        payload=payload,
+        correlation_id=correlation_id,
+    )
+    record_audit(
+        session,
+        actor_user_id=actor_user_id,
+        action="electric_vehicle.charging_system_created",
+        resource_type="charging_system",
+        resource_id=state.id,
+        correlation_id=correlation_id,
+        details=payload,
+    )
+    return state
+
+
+async def require_charging_system(
+    session: AsyncSession, *, vehicle: Vehicle, for_update: bool = False
+) -> ChargingSystemState:
+    query = select(ChargingSystemState).where(ChargingSystemState.vehicle_id == vehicle.id)
+    if for_update:
+        query = query.with_for_update()
+    state = await session.scalar(query)
+    if state is None:
+        raise ResourceNotFoundError("charging_system")
+    return state
+
+
+def _charging_acceptance_kw(
+    pack: BatteryPackState,
+    state: ChargingSystemState,
+    connector_type: str,
+) -> float:
+    if pack.contactor_state != BatteryContactorState.CLOSED.value:
+        return 0.0
+    if pack.operating_state == BatteryOperatingState.PROTECTION.value:
+        return 0.0
+    if pack.soc_pct >= state.target_soc_pct or not 0.0 <= pack.pack_temperature_c <= 50.0:
+        return 0.0
+    connector_limit = (
+        state.max_ac_power_kw
+        if connector_type == ChargingConnectorType.AC_TYPE_2.value
+        else state.max_dc_power_kw
+    )
+    current_limit_a = (
+        150.0 if pack.operating_state == BatteryOperatingState.WARNING.value else 300.0
+    )
+    electrical_limit_kw = pack.pack_voltage_v * current_limit_a / 1000.0
+    if pack.soc_pct <= 80.0 or state.target_soc_pct <= 80.0:
+        soc_factor = 1.0
+    else:
+        soc_factor = max(0.0, (state.target_soc_pct - pack.soc_pct) / (state.target_soc_pct - 80.0))
+    temperature_factor = 0.5 if pack.pack_temperature_c < 10.0 else 1.0
+    if pack.pack_temperature_c > 45.0:
+        temperature_factor = 0.5
+    return round(
+        max(0.0, min(connector_limit, electrical_limit_kw * soc_factor * temperature_factor)), 3
+    )
+
+
+def _same_charging_command(step: ChargingCommandStep, command: ChargingCommand) -> bool:
+    return (
+        step.action == command.action.value
+        and step.session_id == command.session_id
+        and step.connector_type
+        == (command.connector_type.value if command.connector_type else None)
+        and step.duration_ms == command.duration_ms
+        and isclose(step.requested_power_kw, command.requested_power_kw)
+        and step.target_soc_pct == command.target_soc_pct
+        and step.fault_code == command.fault_code
+        and step.previous_version == command.expected_version
+        and step.previous_battery_version == command.expected_battery_version
+    )
+
+
+def _validate_charging_transition(state: ChargingSystemState, command: ChargingCommand) -> None:
+    allowed = {
+        ChargingAction.START: {
+            ChargingOperatingState.IDLE.value,
+            ChargingOperatingState.COMPLETED.value,
+        },
+        ChargingAction.CHARGE: {ChargingOperatingState.CHARGING.value},
+        ChargingAction.PAUSE: {ChargingOperatingState.CHARGING.value},
+        ChargingAction.RESUME: {ChargingOperatingState.PAUSED.value},
+        ChargingAction.STOP: {
+            ChargingOperatingState.CHARGING.value,
+            ChargingOperatingState.PAUSED.value,
+        },
+        ChargingAction.INJECT_FAULT: {
+            ChargingOperatingState.CHARGING.value,
+            ChargingOperatingState.PAUSED.value,
+        },
+        ChargingAction.CLEAR_FAULT: {ChargingOperatingState.FAULTED.value},
+    }
+    if state.operating_state not in allowed[command.action]:
+        raise ChargingTransitionError(
+            current_state=state.operating_state, action=command.action.value
+        )
+
+
+async def execute_charging_command(
+    session: AsyncSession,
+    *,
+    vehicle: Vehicle,
+    command: ChargingCommand,
+    actor_user_id: UUID,
+    correlation_id: UUID | None,
+) -> tuple[ChargingSystemResponse, bool]:
+    existing = await session.scalar(
+        select(ChargingCommandStep).where(
+            ChargingCommandStep.vehicle_id == vehicle.id,
+            ChargingCommandStep.command_id == command.command_id,
+        )
+    )
+    if existing is not None:
+        if not _same_charging_command(existing, command):
+            raise ChargingCommandConflictError()
+        return ChargingSystemResponse.model_validate({**existing.result, "duplicate": True}), True
+
+    pack = await require_battery_pack(session, vehicle=vehicle, for_update=True)
+    state = await require_charging_system(session, vehicle=vehicle, for_update=True)
+    if state.version != command.expected_version:
+        raise ChargingStateVersionConflictError(current_version=state.version)
+    if pack.version != command.expected_battery_version:
+        raise ChargingBatteryVersionConflictError(current_version=pack.version)
+    _validate_charging_transition(state, command)
+
+    previous_version = state.version
+    previous_battery_version = pack.version
+    pack_changed = False
+    charged_energy_kwh = 0.0
+    limiting_reason: str | None = None
+
+    if command.action == ChargingAction.START:
+        assert command.target_soc_pct is not None
+        state.session_id = command.session_id
+        state.connector_type = command.connector_type.value if command.connector_type else None
+        state.target_soc_pct = float(command.target_soc_pct)
+        state.requested_power_kw = command.requested_power_kw
+        state.delivered_power_kw = 0.0
+        state.charged_energy_kwh = 0.0
+        state.session_energy_kwh = 0.0
+        state.fault_code = None
+        state.operating_state = ChargingOperatingState.CHARGING.value
+        if pack.contactor_state != BatteryContactorState.CLOSED.value:
+            pack.contactor_state = BatteryContactorState.CLOSED.value
+            pack_changed = True
+    elif command.action == ChargingAction.CHARGE:
+        connector = state.connector_type or ChargingConnectorType.AC_TYPE_2.value
+        acceptance_kw = _charging_acceptance_kw(pack, state, connector)
+        requested_power_kw = command.requested_power_kw or state.requested_power_kw
+        if requested_power_kw == 0.0:
+            requested_power_kw = (
+                state.max_ac_power_kw
+                if connector == ChargingConnectorType.AC_TYPE_2.value
+                else state.max_dc_power_kw
+            )
+        state.requested_power_kw = requested_power_kw
+        duration_hours = command.duration_ms / 3_600_000.0
+        nominal_energy_kwh = (
+            pack.series_cell_count * pack.nominal_cell_voltage_v * pack.nominal_capacity_ah / 1000.0
+        )
+        usable_energy_kwh = nominal_energy_kwh * pack.soh_pct / 100.0
+        energy_room_kwh = max(
+            0.0, (state.target_soc_pct - pack.soc_pct) / 100.0 * usable_energy_kwh
+        )
+        efficiency = state.charging_efficiency_pct / 100.0
+        battery_power_kw = min(
+            requested_power_kw * efficiency,
+            acceptance_kw,
+            energy_room_kwh / duration_hours,
+        )
+        state.delivered_power_kw = (
+            round(battery_power_kw / efficiency, 3)
+            if battery_power_kw
+            else 0.0
+        )
+        charged_energy_kwh = battery_power_kw * duration_hours
+        if pack.pack_temperature_c < 0.0 or pack.pack_temperature_c > 50.0:
+            limiting_reason = "battery_temperature_limit"
+        elif pack.operating_state == BatteryOperatingState.PROTECTION.value:
+            limiting_reason = "battery_protection"
+        elif pack.soc_pct >= state.target_soc_pct:
+            limiting_reason = "target_soc_reached"
+        elif state.delivered_power_kw + 1e-6 < requested_power_kw:
+            limiting_reason = "charge_power_limited"
+        if charged_energy_kwh > 0.0:
+            pack.soc_pct = round(
+                min(
+                    state.target_soc_pct,
+                    pack.soc_pct + charged_energy_kwh / usable_energy_kwh * 100.0,
+                ),
+                4,
+            )
+            pack.cells = _cells(
+                count=pack.series_cell_count,
+                soc_pct=pack.soc_pct,
+                temperature_c=pack.pack_temperature_c,
+                nominal_voltage=pack.nominal_cell_voltage_v,
+            )
+            pack.pack_voltage_v = round(sum(float(cell["voltage_v"]) for cell in pack.cells), 3)
+            pack.pack_current_a = round(-battery_power_kw * 1000.0 / pack.pack_voltage_v, 3)
+        else:
+            pack.pack_current_a = 0.0
+        pack.simulation_time_ms += command.duration_ms
+        pack_changed = True
+        state.charged_energy_kwh = round(charged_energy_kwh, 6)
+        state.session_energy_kwh = round(state.session_energy_kwh + charged_energy_kwh, 6)
+        state.simulation_time_ms += command.duration_ms
+        if pack.soc_pct >= state.target_soc_pct:
+            state.operating_state = ChargingOperatingState.COMPLETED.value
+            limiting_reason = "target_soc_reached"
+            pack.contactor_state = BatteryContactorState.OPEN.value
+    elif command.action == ChargingAction.PAUSE:
+        state.operating_state = ChargingOperatingState.PAUSED.value
+        state.delivered_power_kw = 0.0
+        pack.pack_current_a = 0.0
+        pack.contactor_state = BatteryContactorState.OPEN.value
+        pack_changed = True
+    elif command.action == ChargingAction.RESUME:
+        state.operating_state = ChargingOperatingState.CHARGING.value
+        state.delivered_power_kw = 0.0
+        pack.contactor_state = BatteryContactorState.CLOSED.value
+        pack_changed = True
+    elif command.action == ChargingAction.STOP:
+        state.operating_state = ChargingOperatingState.COMPLETED.value
+        state.delivered_power_kw = 0.0
+        pack.pack_current_a = 0.0
+        pack.contactor_state = BatteryContactorState.OPEN.value
+        pack_changed = True
+    elif command.action == ChargingAction.INJECT_FAULT:
+        state.operating_state = ChargingOperatingState.FAULTED.value
+        state.fault_code = command.fault_code
+        state.delivered_power_kw = 0.0
+        pack.pack_current_a = 0.0
+        pack.contactor_state = BatteryContactorState.OPEN.value
+        pack_changed = True
+    else:
+        state.operating_state = ChargingOperatingState.IDLE.value
+        state.fault_code = None
+        state.delivered_power_kw = 0.0
+
+    state.battery_charge_acceptance_kw = (
+        _charging_acceptance_kw(pack, state, state.connector_type)
+        if state.connector_type is not None
+        and state.operating_state == ChargingOperatingState.CHARGING.value
+        else 0.0
+    )
+    if command.action == ChargingAction.CHARGE:
+        state.limiting_reason = limiting_reason
+    elif command.action != ChargingAction.CLEAR_FAULT:
+        state.limiting_reason = None
+    if pack_changed:
+        pack.version += 1
+    state.version += 1
+
+    rendered = charging_system_response(state, vehicle, pack)
+    result = rendered.model_dump(mode="json")
+    step = ChargingCommandStep(
+        vehicle_id=vehicle.id,
+        command_id=command.command_id,
+        action=command.action.value,
+        session_id=command.session_id,
+        connector_type=command.connector_type.value if command.connector_type else None,
+        duration_ms=command.duration_ms,
+        requested_power_kw=command.requested_power_kw,
+        target_soc_pct=command.target_soc_pct,
+        fault_code=command.fault_code,
+        previous_version=previous_version,
+        state_version=state.version,
+        previous_battery_version=previous_battery_version,
+        battery_state_version=pack.version,
+        result=result,
+        requested_by_user_id=actor_user_id,
+    )
+    session.add(step)
+    await session.flush()
+    payload = {
+        "vehicle_id": vehicle.identifier,
+        "command_id": command.command_id,
+        "action": command.action.value,
+        "session_id": state.session_id,
+        "connector_type": state.connector_type,
+        "charged_energy_kwh": state.charged_energy_kwh,
+        "session_energy_kwh": state.session_energy_kwh,
+        "battery_soc_pct": pack.soc_pct,
+        "battery_version": pack.version,
+        "operating_state": state.operating_state,
+        "limiting_reason": state.limiting_reason,
+        "fault_code": state.fault_code,
+        "version": state.version,
+        "simulation_time_ms": state.simulation_time_ms,
+    }
+    enqueue_event(
+        session,
+        event_type="atep.electric_vehicle.charging.command.completed.v1",
+        aggregate_type="charging_system",
+        aggregate_id=state.id,
+        payload=payload,
+        correlation_id=correlation_id,
+    )
+    record_audit(
+        session,
+        actor_user_id=actor_user_id,
+        action="electric_vehicle.charging_command_completed",
+        resource_type="charging_system",
         resource_id=state.id,
         correlation_id=correlation_id,
         details=payload,

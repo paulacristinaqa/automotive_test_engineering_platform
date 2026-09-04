@@ -5,7 +5,7 @@
 | VI-1 | Persistent battery pack, bounded cell model, SOC/SOH, deterministic thermal behavior, BMS protection, RBAC, audit, and outbox | Implemented |
 | VI-2 | Motor torque, inverter efficiency, electrical power, and drive-mode limits | Implemented |
 | VI-3 | Regenerative-braking strategy and blended friction braking | Implemented |
-| VI-4 | AC/DC charging sessions, charge curves, limits, and fault handling | Planned |
+| VI-4 | AC/DC charging sessions, charge curves, limits, and fault handling | Implemented |
 | VI-5 | Active thermal-management loops for battery, motor, and cabin | Planned |
 | VI-6 | Range and energy-consumption estimation across reproducible drive cycles | Planned |
 | VI-7 | Cross-domain EV scenarios integrating BMS ECU, CAN, UDS, tests, and evidence | Planned |
@@ -31,5 +31,10 @@ battery charge acceptance, regenerative and friction deceleration, recovered pow
 and the resulting battery SOC transition. Low speed, high SOC, unsafe battery temperature,
 protection, or open contactors disable regeneration while preserving bounded friction braking.
 
-The recommended next increment is VI-4: AC/DC charging sessions, charge curves, limits, and
-fault handling.
+VI-4 adds one charging-system aggregate per vehicle. Versioned commands control AC Type 2 and DC
+CCS session start, deterministic energy-transfer steps, pause, resume, stop, injected faults, and
+fault clearing. Charging power is constrained by connector capability, battery voltage/current,
+temperature, BMS state, target SOC, remaining energy room, and a taper above 80% SOC.
+
+The recommended next increment is VI-5: active thermal-management loops for the battery, motor,
+inverter, and cabin.

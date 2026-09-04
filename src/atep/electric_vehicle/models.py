@@ -225,3 +225,74 @@ class BrakeSimulationStep(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     requested_by_user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
     )
+
+
+class ChargingSystemState(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "charging_system_states"
+    __table_args__ = (
+        UniqueConstraint("vehicle_id", name="uq_charging_system_vehicle"),
+        CheckConstraint("max_ac_power_kw > 0", name="ck_charging_system_ac_power"),
+        CheckConstraint("max_dc_power_kw > 0", name="ck_charging_system_dc_power"),
+        CheckConstraint(
+            "charging_efficiency_pct > 0 AND charging_efficiency_pct <= 100",
+            name="ck_charging_system_efficiency",
+        ),
+        CheckConstraint(
+            "target_soc_pct >= 1 AND target_soc_pct <= 100", name="ck_charging_target_soc"
+        ),
+        CheckConstraint("version >= 1", name="ck_charging_system_version"),
+        CheckConstraint(
+            "operating_state IN ('idle', 'charging', 'paused', 'completed', 'faulted')",
+            name="ck_charging_system_operating_state",
+        ),
+    )
+
+    vehicle_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("vehicles.id", ondelete="CASCADE"), index=True
+    )
+    max_ac_power_kw: Mapped[float] = mapped_column(Float)
+    max_dc_power_kw: Mapped[float] = mapped_column(Float)
+    charging_efficiency_pct: Mapped[float] = mapped_column(Float)
+    session_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    connector_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    target_soc_pct: Mapped[float] = mapped_column(Float, default=80.0)
+    requested_power_kw: Mapped[float] = mapped_column(Float, default=0.0)
+    delivered_power_kw: Mapped[float] = mapped_column(Float, default=0.0)
+    charged_energy_kwh: Mapped[float] = mapped_column(Float, default=0.0)
+    session_energy_kwh: Mapped[float] = mapped_column(Float, default=0.0)
+    battery_charge_acceptance_kw: Mapped[float] = mapped_column(Float, default=0.0)
+    operating_state: Mapped[str] = mapped_column(String(16), index=True)
+    limiting_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    fault_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    simulation_time_ms: Mapped[int] = mapped_column(BigInteger, default=0)
+
+
+class ChargingCommandStep(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "charging_command_steps"
+    __table_args__ = (
+        UniqueConstraint("vehicle_id", "command_id", name="uq_charging_step_command"),
+        CheckConstraint(
+            "duration_ms >= 0 AND duration_ms <= 3600000", name="ck_charging_step_duration"
+        ),
+    )
+
+    vehicle_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("vehicles.id", ondelete="CASCADE"), index=True
+    )
+    command_id: Mapped[str] = mapped_column(String(64))
+    action: Mapped[str] = mapped_column(String(16))
+    session_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    connector_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    duration_ms: Mapped[int] = mapped_column(Integer)
+    requested_power_kw: Mapped[float] = mapped_column(Float)
+    target_soc_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fault_code: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    previous_version: Mapped[int] = mapped_column(Integer)
+    state_version: Mapped[int] = mapped_column(Integer)
+    previous_battery_version: Mapped[int] = mapped_column(Integer)
+    battery_state_version: Mapped[int] = mapped_column(Integer)
+    result: Mapped[dict[str, Any]] = mapped_column(JSON)
+    requested_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
