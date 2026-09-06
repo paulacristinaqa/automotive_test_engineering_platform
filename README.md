@@ -352,6 +352,8 @@ companion project also passes 27 unit tests, Android lint, and debug APK assembl
 - [Volume II — Digital Vehicle formatted workbook](docs/ATEP_Volume_II_Digital_Vehicle_Engineering_Workbook.docx)
 - [Volume V — Diagnostics editable source](docs/workbook-volume-v.md)
 - [Volume V — Diagnostics formatted workbook](docs/ATEP_Volume_V_Diagnostics_Engineering_Workbook.docx)
+- [Volume VI — Electric Vehicle editable source](docs/workbook-volume-vi.md)
+- [Volume VI — Electric Vehicle formatted workbook](docs/ATEP_Volume_VI_Electric_Vehicle_Engineering_Workbook.docx)
 
 The workbook is a living English-language engineering record containing requirements,
 architecture decisions, implementation evidence, test objectives, risks, technical debt,
@@ -366,7 +368,7 @@ operational guidance, and review worksheets.
 | III | ECU Simulator | Baseline complete — increments III-1 through III-7 implemented |
 | IV | CAN Network | Implemented — increments IV-1 through IV-7 |
 | V | Diagnostics | Baseline complete — increments V-1 through V-7 implemented |
-| VI | Electric Vehicle | In progress - VI-1 battery/BMS and VI-2 motor/inverter implemented |
+| VI | Electric Vehicle | Baseline complete — increments VI-1 through VI-7 implemented |
 | VII | ADAS | Planned |
 | VIII | Test Framework | Planned |
 | IX | AI Test Engineer | Planned |

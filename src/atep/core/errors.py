@@ -544,6 +544,35 @@ class RangeEstimationCommandConflictError(ApplicationError):
         )
 
 
+class ElectricVehicleScenarioConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="electric_vehicle_scenario_conflict",
+            message="The scenario execution identifier was already used differently.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class ElectricVehicleScenarioVersionConflictError(ApplicationError):
+    def __init__(self, *, resource: str, current_version: int) -> None:
+        super().__init__(
+            code="electric_vehicle_scenario_version_conflict",
+            message="A scenario resource was changed by another operation.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"resource": resource, "current_version": current_version},
+        )
+
+
+class ElectricVehicleScenarioContractError(ApplicationError):
+    def __init__(self, *, reason: str) -> None:
+        super().__init__(
+            code="electric_vehicle_scenario_contract_error",
+            message="The scenario cannot use the requested integration contract.",
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            details={"reason": reason},
+        )
+
+
 class CanDbcCatalogueAlreadyExistsError(ApplicationError):
     def __init__(self) -> None:
         super().__init__(

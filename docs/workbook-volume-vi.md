@@ -5,9 +5,9 @@
 | Field | Value |
 |---|---|
 | Document | ATEP Engineering Workbook - Volume VI: Electric Vehicle |
-| Version | 0.6.0 |
+| Version | 0.7.0 |
 | Baseline date | 4 September 2026 |
-| Status | VI-1 through VI-6 implemented, including deterministic range estimation |
+| Status | Volume VI complete through VI-7, including cross-domain EV safety scenarios |
 | Audience | Automotive software, simulation, QA, functional-safety, and platform engineers |
 
 ## 1. Purpose and Scope
@@ -20,6 +20,8 @@ regenerative energy recovery, battery charge acceptance, and blended friction br
 VI-4 adds AC/DC charging sessions, deterministic charge curves, lifecycle control, and faults.
 VI-5 adds coordinated heating and cooling for the battery, motor, inverter, and cabin.
 VI-6 adds deterministic energy-consumption and remaining-range estimates for bounded drive cycles.
+VI-7 adds an atomic battery-overtemperature scenario with BMS ECU, CAN, UDS, state assertions,
+and correlated evidence across every Volume VI aggregate.
 
 ### In Scope for VI-1
 
@@ -69,10 +71,19 @@ VI-6 adds deterministic energy-consumption and remaining-range estimates for bou
 - traction, auxiliary, regenerative, net-energy, consumption, and remaining-range evidence;
 - range, battery, and thermal optimistic versions, exact replay, audit, and outbox evidence.
 
+### In Scope for VI-7
+
+- one persisted battery-overtemperature safety scenario;
+- coordinated battery, motor, braking, charging, thermal, and range reactions;
+- battery ECU signal and confirmed fault state;
+- contracted CAN transmission and UDS-readable DTC evidence;
+- eight-resource optimistic concurrency, exact replay, stable conflicts, audit, and outbox;
+- bounded scenario listing and retrieval APIs.
+
 ### Deferred
 
 - chemistry-specific circuits, cell balancing, aging, sensor faults, and module topology;
-- calibrated thermal circuits and BMS ECU, CAN, UDS, dashboard, and test orchestration.
+- calibrated thermal circuits, stateful drive trips, dashboard integration, and test scheduling.
 
 ## 2. Architecture
 
@@ -81,8 +92,9 @@ The FastAPI electric-vehicle boundary uses `electric_vehicle:read` and
 `RegenerativeBrakeState`, `ChargingSystemState`, `ThermalManagementState`, and
 `RangeEstimatorState` own the battery, propulsion, braking, charging, thermal, and range
 aggregates. Their simulation
-step records preserve immutable replay evidence. `AuditRecord` and `OutboxEvent` commit in the
-same database transaction as each accepted mutation.
+step records preserve immutable replay evidence. `ElectricVehicleScenarioExecution` correlates
+the six EV aggregates with the BMS ECU, CAN transmission, UDS DTC, assertions, and versions.
+`AuditRecord` and `OutboxEvent` commit in the same transaction as each accepted mutation.
 
 ### Cross-Volume Ownership
 
@@ -112,6 +124,8 @@ Volume VI state through explicit integration contracts rather than sharing datab
 | Thermal state | Current controller outcome | `standby`, `heating`, `cooling`, `mixed`, `faulted` |
 | RangeEstimatorState | Drive-cycle energy and remaining range | one per vehicle; version >= 1 |
 | DriveCycleSegment | Reproducible route assumption | 1-3,600 s; 0-250 km/h; bounded acceleration and grade |
+| ElectricVehicleScenarioExecution | Immutable cross-domain evidence and replay identity | one row per vehicle and execution ID |
+| Scenario assertion | Machine-readable safety expectation | observed value, expected value, pass or fail |
 
 ### Sign Convention
 
@@ -228,6 +242,9 @@ hysteresis, debounce, chemistry, current, voltage, isolation, and sensor-plausib
 | `POST /api/v1/vehicles/{vehicle_id}/electric/range` | Create range calibration | `electric_vehicle:manage` |
 | `GET /api/v1/vehicles/{vehicle_id}/electric/range` | Read the latest estimate | `electric_vehicle:read` |
 | `POST /api/v1/vehicles/{vehicle_id}/electric/range/cycles` | Evaluate one reproducible drive cycle | `electric_vehicle:manage` |
+| `POST /api/v1/vehicles/{vehicle_id}/electric/scenarios` | Execute an atomic cross-domain safety scenario | `electric_vehicle:manage` |
+| `GET /api/v1/vehicles/{vehicle_id}/electric/scenarios` | List persisted scenario evidence | `electric_vehicle:read` |
+| `GET /api/v1/vehicles/{vehicle_id}/electric/scenarios/{execution_id}` | Read one immutable scenario result | `electric_vehicle:read` |
 
 ### Stable Errors
 
@@ -264,6 +281,10 @@ hysteresis, debounce, chemistry, current, voltage, isolation, and sensor-plausib
 | `range_battery_version_conflict` | The battery version supplied to the estimate is stale. |
 | `range_thermal_version_conflict` | The thermal version supplied to the estimate is stale. |
 | `range_estimation_command_conflict` | A range command ID was reused differently. |
+| `electric_vehicle_scenario_conflict` | A scenario execution ID was reused differently. |
+| `electric_vehicle_scenario_version_conflict` | One expected resource version is stale. |
+| `electric_vehicle_scenario_contract_error` | The BMS ECU or CAN contract is incompatible. |
+| `electric_vehicle_scenario_not_found` | No matching scenario evidence exists. |
 | `forbidden` | The authenticated user lacks the required permission. |
 | `validation_error` | A request violates a declared bound or format. |
 
@@ -277,7 +298,8 @@ states, versions, and durations. Migration `0040_charging_sessions` creates
 `charging_system_states` and `charging_command_steps`. Migration `0041_thermal_management` creates
 `thermal_management_states` and `thermal_management_steps`.
 Migration `0042_range_estimation` creates `range_estimator_states` and
-`range_estimation_steps`.
+`range_estimation_steps`. Migration `0043_electric_vehicle_scenarios` creates the persisted
+cross-domain scenario evidence table.
 
 | Event | Purpose | Privacy/minimization rule |
 |---|---|---|
@@ -293,10 +315,11 @@ Migration `0042_range_estimation` creates `range_estimator_states` and
 | `atep.electric_vehicle.thermal.step.completed.v1` | Announce temperatures and actuator demand | Zone summary and versions; no cells |
 | `atep.electric_vehicle.range_estimator.created.v1` | Announce calibrated range estimation | Bounded calibration only |
 | `atep.electric_vehicle.range.cycle.completed.v1` | Announce drive-cycle outcome | Consumption, range, cycle ID, and version |
+| `atep.electric_vehicle.scenario.completed.v1` | Announce a completed cross-domain safety scenario | IDs, status, contract, and DTC only |
 
 ## 8. Requirements Baseline
 
-VI-1 through VI-6 implement EV-F-001 through EV-F-089 and EV-NF-001 through EV-NF-029. The authoritative
+VI-1 through VI-7 implement EV-F-001 through EV-F-101 and EV-NF-001 through EV-NF-035. The authoritative
 traceability table is maintained in `docs/requirements-volume-vi.md`.
 
 ## 9. Architecture Decisions
@@ -394,6 +417,24 @@ usable in regression tests.
 Decision: VI-6 reads versioned battery and thermal state but treats a drive cycle as an analytical
 estimate. Rationale: repeated scenario execution must not silently debit SOC before VI-7 defines a
 cross-domain trip transaction.
+
+### ADR-EV-018 - Use One Transaction for Cross-Domain Safety Evidence
+
+Decision: lock the six EV aggregates, battery ECU, and CAN network before applying the scenario.
+Validate every expected version before the first mutation. Rationale: a safety result is valid only
+when all domain and protocol observations describe the same logical event.
+
+### ADR-EV-019 - Require a BMS-Owned CAN Contract
+
+Decision: the selected CAN frame contract must name the selected battery ECU as producer and must
+provide at least three payload bytes. Rationale: this prevents a scenario from attributing BMS
+evidence to an unrelated ECU or an incompatible frame.
+
+### ADR-EV-020 - Persist Assertions with Observations
+
+Decision: store each assertion name, observed value, expected value, and result in the scenario
+snapshot. Rationale: test automation and the future dashboard can explain a result without
+reconstructing mutable state.
 
 ## 10. Test Catalogue
 
@@ -509,12 +550,24 @@ cross-domain trip transaction.
 | EV-T-108 | Triple version conflicts | Submit stale range, battery, or thermal version | Distinct current version returned |
 | EV-T-109 | Range atomic evidence | Inspect estimator, step, audit, and outbox | All commit or all roll back |
 | EV-T-110 | Range OpenAPI and migration | Inspect routes and revision 0042 | Bounded schema and reversible tables |
+| EV-T-111 | Scenario contract bounds | Submit unsafe temperature, duration, or identifier | Stable validation error |
+| EV-T-112 | Cross-domain protection | Execute battery overtemperature | Six EV aggregates enter their defined safety reactions |
+| EV-T-113 | BMS ECU evidence | Inspect ECU after the scenario | Temperature signal and confirmed latched fault |
+| EV-T-114 | CAN evidence | Inspect the transmitted BMS frame | Contract, sequence, encoded temperature, and protection flag |
+| EV-T-115 | UDS DTC evidence | Read DTC `0A7E00` | Critical status and freeze-frame values |
+| EV-T-116 | Eight-resource version conflict | Submit one stale expected version | No resource is mutated and current version is returned |
+| EV-T-117 | Exact scenario replay | Retry the identical execution | Persisted evidence and no second state transition |
+| EV-T-118 | Changed scenario reuse | Reuse execution ID with changed input | Stable scenario conflict |
+| EV-T-119 | CAN ownership contract | Select a frame produced by another ECU | Stable contract error |
+| EV-T-120 | Atomic correlated evidence | Inspect scenario, state, frame, DTC, audit, and outbox | All records commit or all roll back |
+| EV-T-121 | Scenario RBAC | Exercise read and mutation without permission | HTTP 403 |
+| EV-T-122 | Scenario pagination and migration | Inspect OpenAPI and revision 0043 | Safe limits and reversible evidence table |
 
 ## 11. Verification Evidence
 
-| Gate | VI-1 through VI-6 evidence |
+| Gate | VI-1 through VI-7 evidence |
 |---|---|
-| Domain tests | Battery/BMS, propulsion, braking, charging, thermal zones, drive-cycle range, faults, replay, conflicts |
+| Domain tests | Battery/BMS, propulsion, braking, charging, thermal, range, cross-domain protection, CAN, UDS, replay, conflicts |
 | API contract | Routes and safe numeric limits published in OpenAPI |
 | Ruff | Required before merge |
 | Strict mypy | Required before merge |
@@ -531,18 +584,20 @@ cross-domain trip transaction.
 | Fixed thermal constants | Limited pack-design fidelity | Introduce versioned calibration profiles |
 | SOH does not age | Cannot test degradation yet | Add cycle/calendar aging after charge and drive behavior stabilizes |
 | No current derating | Warning state remains simplistic | Add temperature/SOC-dependent charge and discharge limits |
-| Separate Volume II battery projection | Possible divergence | Add an explicit projection/synchronization contract in VI-7 |
+| Separate Volume II battery projection | Possible divergence | Add an explicit projection/synchronization contract when stateful trip scenarios are introduced |
 | Analytic efficiency surface | Lower fidelity than dyno calibration | Add versioned torque-speed-efficiency maps later |
-| Motor step does not debit SOC | Energy domains can diverge across long scenarios | Couple energy flow in VI-7 scenarios |
+| Motor step does not debit SOC | Energy domains can diverge across long scenarios | Add a stateful drive-trip scenario after the safety baseline |
 | Fixed thermal masses and controller gain | Cannot represent every cooling design | Add versioned calibration profiles later |
-| Quasi-static braking step | Vehicle speed is not integrated over time | Couple braking to Volume II dynamics in VI-7 |
+| Quasi-static braking step | Vehicle speed is not integrated over time | Couple braking to Volume II dynamics in a stateful trip scenario |
 | Simplified charge acceptance | Cannot represent chemistry-specific power maps | Add versioned SOC-temperature maps later |
 | No hydraulic pressure model | Cannot test valve or pressure dynamics yet | Add brake-system actuator fidelity in a later volume |
 | Analytic charging curve | Cannot reproduce every chemistry or EVSE calibration | Add versioned SOC-temperature-power maps later |
 | No EVSE protocol model | Cannot test ISO 15118 or PLC handshakes yet | Add protocol adapters after core session behavior stabilizes |
-| Quasi-static drive-cycle segments | Transient chassis dynamics are simplified | Couple range estimation to Volume II dynamics in VI-7 |
+| Quasi-static drive-cycle segments | Transient chassis dynamics are simplified | Couple range estimation to Volume II dynamics in a future trip scenario |
 | Fixed air density and calibration | Weather and vehicle variants are approximate | Add versioned environment and vehicle calibration profiles |
-| Range cycle does not debit battery SOC | Repeated estimates are analytical rather than stateful trips | Apply energy through cross-domain scenarios in VI-7 |
+| Range cycle does not debit battery SOC | Repeated estimates are analytical rather than stateful trips | Add a separate stateful drive execution contract |
+| First scenario covers one hazard | Drive and charging hazards are not yet orchestrated | Extend the template catalogue without weakening replay guarantees |
+| Simplified DTC code mapping | Not an OEM-specific diagnostic definition | Introduce versioned diagnostic catalogues and fault mappings |
 
 ## 13. Exercises
 
@@ -606,6 +661,16 @@ cross-domain trip transaction.
 
 30. Retry a range command and prove that the persisted cycle is not integrated twice.
 
+31. Configure a battery ECU and a BMS-owned CAN frame contract, then execute the overtemperature scenario.
+
+32. Decode the first two CAN payload bytes and verify the temperature in tenths of a degree Celsius.
+
+33. Read DTC `0A7E00` and compare its freeze frame with the scenario state evidence.
+
+34. Retry the execution and prove that no aggregate version advances twice.
+
+35. Change one expected version and prove that no domain or protocol record is mutated.
+
 ## 14. VI-6 Range and Energy Consumption
 
 VI-6 implements a vehicle-scoped range estimator with bounded physical calibration and reproducible
@@ -628,8 +693,27 @@ The model is local and free to run. It requires no commercial map, routing, weat
 API. Charging history influences the result through the authoritative battery SOC and SOH rather
 than a second derived energy ledger.
 
-## 15. Next Development
+## 15. VI-7 Cross-Domain EV Safety Scenario
 
-VI-7 will add cross-domain EV scenarios that coordinate battery, powertrain, regenerative braking,
-charging, thermal management, and range through BMS ECU, CAN, UDS, automated tests, and correlated
-evidence.
+VI-7 implements the battery-overtemperature flow described in the project vision. A single API
+operation applies the thermal stimulus and records the safety response across battery, propulsion,
+regenerative braking, charging, thermal management, and range. It also updates the selected BMS
+ECU, transmits a BMS-owned CAN frame, and stores UDS DTC `0A7E00` with freeze-frame data.
+
+The transaction validates eight expected versions before the first mutation. Its result contains
+before and after versions, domain observations, CAN and UDS evidence, and explicit assertions.
+An exact retry returns the immutable result without advancing logical time or versions. Changed
+reuse and incompatible CAN ownership produce stable error codes.
+
+The public contract consists of `POST /scenarios`, `GET /scenarios`, and
+`GET /scenarios/{execution_id}` under the vehicle electric API. List pagination is bounded at 100
+items per request. Read and mutation operations use the existing Volume VI permissions.
+
+The scenario runs entirely on the local ATEP stack. It requires no paid API, cloud account, LLM,
+or GPU.
+
+## 16. Next Development
+
+Volume VI is complete. VII-1 should establish the ADAS world model: coordinate frames, road and
+lane geometry, actors, sensor-independent ground truth, deterministic logical time, bounded API
+contracts, and the first automated world-state tests.

@@ -93,6 +93,18 @@
 | EV-F-087 | An identical range command retry shall return stored evidence without recalculation. | Exact-replay test |
 | EV-F-088 | Reusing a range command identifier with changed input shall return a stable conflict. | Changed-reuse test |
 | EV-F-089 | Range creation and cycles shall produce audit and transactional outbox evidence. | Service evidence tests |
+| EV-F-090 | The platform shall execute a bounded battery-overtemperature scenario across battery, motor, braking, charging, thermal, and range state. | Cross-domain scenario test |
+| EV-F-091 | A scenario shall require an existing battery ECU and a CAN frame contract produced by that ECU. | Contract-negative tests |
+| EV-F-092 | The scenario shall validate optimistic versions for all six EV aggregates, the BMS ECU, and the CAN network before mutation. | Stale-version test |
+| EV-F-093 | Battery overtemperature shall open contactors, inhibit propulsion and regeneration, fault charging, activate maximum battery cooling, and limit range. | State assertion test |
+| EV-F-094 | The BMS ECU shall publish battery temperature and store a confirmed, latched critical fault. | ECU evidence test |
+| EV-F-095 | The CAN network shall persist a contracted BMS status frame containing temperature and protection state. | CAN transmission test |
+| EV-F-096 | Diagnostics shall persist DTC `0A7E00` with status, severity, occurrence count, and freeze-frame data. | UDS DTC test |
+| EV-F-097 | Scenario evidence shall correlate before and after versions, domain states, CAN transmission, UDS DTC, and machine-readable assertions. | Response evidence test |
+| EV-F-098 | An identical execution retry shall return persisted evidence without changing any state twice. | Exact-replay test |
+| EV-F-099 | Reusing an execution identifier with changed input shall return a stable conflict. | Changed-reuse test |
+| EV-F-100 | Scenario state, protocol evidence, audit, and completion event shall commit atomically. | Transactional evidence test |
+| EV-F-101 | Scenario reads shall support bounded pagination and dedicated read permission. | OpenAPI and RBAC tests |
 
 ## Non-Functional Requirements
 
@@ -127,6 +139,12 @@
 | EV-NF-027 | Cross-aggregate consistency | Range evaluation locks and validates battery, thermal, and estimator state. |
 | EV-NF-028 | Explainability | Responses expose each energy component and stable limiting reasons. |
 | EV-NF-029 | Local-first operation | VI-6 requires no paid map, weather, cloud, LLM, or GPU service. |
+| EV-NF-030 | Atomic orchestration | All scenario mutations and evidence share one database transaction. |
+| EV-NF-031 | Lock ordering | The orchestrator locks EV aggregates, BMS ECU, and CAN network in a fixed order. |
+| EV-NF-032 | Replay safety | A successful scenario result is immutable evidence for exact retries. |
+| EV-NF-033 | Explainability | Every affected domain and protocol exposes its observed safety reaction. |
+| EV-NF-034 | Bounded execution | Duration, temperature, identifiers, versions, and pagination have explicit limits. |
+| EV-NF-035 | Local-first operation | VI-7 requires no paid service, external API, cloud account, LLM, or GPU. |
 
 ## API Traceability
 
@@ -150,3 +168,6 @@
 | `POST /api/v1/vehicles/{vehicle_id}/electric/range` | EV-F-077, EV-F-078, EV-F-089 |
 | `GET /api/v1/vehicles/{vehicle_id}/electric/range` | EV-F-083 through EV-F-085 |
 | `POST /api/v1/vehicles/{vehicle_id}/electric/range/cycles` | EV-F-079 through EV-F-089 |
+| `POST /api/v1/vehicles/{vehicle_id}/electric/scenarios` | EV-F-090 through EV-F-100 |
+| `GET /api/v1/vehicles/{vehicle_id}/electric/scenarios` | EV-F-097, EV-F-101 |
+| `GET /api/v1/vehicles/{vehicle_id}/electric/scenarios/{execution_id}` | EV-F-097, EV-F-101 |

@@ -163,16 +163,43 @@ reserve, plus thermal auxiliary demand produce an explainable consumption and ra
 Commands support exact replay and independent range, battery, and thermal version checks. No map,
 weather, cloud, LLM, or paid API is required.
 
-## Deliberate VI-1 through VI-6 Limits
+## VI-7 Cross-Domain Safety Scenario
+
+VI-7 provides the first atomic scenario that crosses the EV domain and the protocol simulators.
+The battery-overtemperature flow locks all six EV aggregates, the selected battery ECU, and the
+CAN network in a fixed order. It validates every supplied version before applying the stimulus.
+
+```text
+Battery temperature >= 60 C
+    -> BMS protection and open contactors
+    -> propulsion and regenerative recovery inhibited
+    -> charging faulted and battery cooling commanded
+    -> remaining range limited
+    -> BMS ECU signal and confirmed fault
+    -> contracted CAN status frame and UDS DTC 0A7E00
+    -> assertions + audit + outbox + scenario snapshot
+```
+
+The API accepts an execution identifier, BMS ECU identifier, CAN frame contract, logical duration,
+target temperature, and eight expected versions. The selected CAN contract must name the BMS ECU
+as its producer and provide at least three payload bytes. The first two bytes contain temperature
+in tenths of a degree Celsius; the third byte carries the protection flag. Remaining bytes are
+zero-filled to the declared DLC.
+
+The scenario result stores before and after versions, state evidence from every EV aggregate,
+CAN frame metadata, UDS DTC metadata, and explicit pass or fail assertions. An exact retry returns
+the persisted result. Changed reuse of the execution identifier returns a stable conflict.
+
+## Deliberate Volume VI Limits
 
 - SOH is persisted but degradation and cycle aging begin in a later increment.
 - Cell balancing, sensor faults, thermal propagation, modules in parallel, and chemistry-specific
   voltage curves are future model refinements.
-- Range evaluation is analytical and does not debit battery SOC until VI-7 defines cross-domain trips.
+- Range evaluation remains analytical; VI-7 adds a safety scenario rather than a stateful drive trip.
 - VI-2 uses an explainable analytic efficiency surface rather than a production calibration map.
-- The motor step reads battery availability but does not yet debit battery SOC; full coupled energy
-  flow is introduced with cross-domain drive scenarios.
-- Cross-volume CAN, UDS, ECU, and automated-test orchestration is planned for VI-7.
+- The motor step reads battery availability but does not yet debit SOC during ordinary propulsion.
+- VI-7 covers battery-overtemperature orchestration. Additional drive, charge, and recovery
+  scenarios can reuse the same persisted evidence pattern.
 - VI-3 uses a quasi-static step and does not integrate vehicle speed or hydraulic pressure over
   time; those dynamics remain future fidelity work.
 - VI-4 uses an explainable charging curve rather than chemistry- or charger-specific calibration

@@ -8,7 +8,7 @@
 | VI-4 | AC/DC charging sessions, charge curves, limits, and fault handling | Implemented |
 | VI-5 | Active thermal-management loops for battery, motor, inverter, and cabin | Implemented |
 | VI-6 | Range and energy-consumption estimation across reproducible drive cycles | Implemented |
-| VI-7 | Cross-domain EV scenarios integrating BMS ECU, CAN, UDS, tests, and evidence | Planned |
+| VI-7 | Cross-domain EV scenarios integrating BMS ECU, CAN, UDS, tests, and evidence | Implemented |
 
 VI-1 creates a vehicle-scoped battery aggregate without replacing the lighter battery projection
 owned by Volume II. A pack contains 4 to 192 deterministic cell states, LFP or NMC chemistry,
@@ -49,5 +49,12 @@ available energy, and estimated remaining range without map APIs, cloud services
 loops. Command snapshots provide exact replay, changed-reuse protection, and optimistic checks
 against range, battery, and thermal versions.
 
-The recommended next increment is VI-7: cross-domain EV scenarios integrating the BMS ECU, CAN,
-UDS, automated tests, and evidence.
+VI-7 adds an atomic battery-overtemperature scenario across every Volume VI aggregate. The
+orchestrator validates eight optimistic versions, applies BMS protection, inhibits propulsion and
+regeneration, faults charging, activates battery cooling, limits range, updates the BMS ECU, sends
+a contracted CAN frame, and stores a UDS-readable DTC. The persisted scenario contains before and
+after versions, domain state, CAN and UDS evidence, and machine-readable assertions. Exact retries
+return that evidence without applying the scenario twice.
+
+Volume VI is complete. The recommended next increment is VII-1: define the ADAS world model,
+coordinate frames, road and lane geometry, actors, and deterministic simulation clock.

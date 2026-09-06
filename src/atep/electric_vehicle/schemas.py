@@ -1,4 +1,7 @@
+from datetime import datetime
 from enum import StrEnum
+from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -388,3 +391,56 @@ class RangeEstimatorResponse(BaseModel):
     limiting_reason: str | None
     version: int
     duplicate: bool = False
+
+
+class ElectricVehicleScenarioType(StrEnum):
+    BATTERY_OVERTEMPERATURE = "battery_overtemperature"
+
+
+class ElectricVehicleScenarioCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    execution_id: str = Field(min_length=8, max_length=40, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]+$")
+    scenario_type: ElectricVehicleScenarioType = ElectricVehicleScenarioType.BATTERY_OVERTEMPERATURE
+    bms_ecu_id: str = Field(min_length=3, max_length=80, pattern=r"^[a-z0-9][a-z0-9-]+$")
+    can_contract_id: str = Field(min_length=2, max_length=80, pattern=r"^[a-z][a-z0-9_-]+$")
+    duration_ms: int = Field(default=60_000, ge=1_000, le=3_600_000)
+    target_temperature_c: float = Field(default=65.0, ge=60.0, le=80.0)
+    expected_battery_version: int = Field(ge=1)
+    expected_motor_version: int = Field(ge=1)
+    expected_brake_version: int = Field(ge=1)
+    expected_charging_version: int = Field(ge=1)
+    expected_thermal_version: int = Field(ge=1)
+    expected_range_version: int = Field(ge=1)
+    expected_bms_ecu_version: int = Field(ge=1)
+    expected_can_version: int = Field(ge=1)
+
+
+class ScenarioAssertion(BaseModel):
+    name: str
+    passed: bool
+    observed: Any
+    expected: Any
+
+
+class ElectricVehicleScenarioResponse(BaseModel):
+    id: UUID
+    execution_id: str
+    vehicle_id: str
+    scenario_type: ElectricVehicleScenarioType
+    status: str
+    duplicate: bool = False
+    versions_before: dict[str, int]
+    versions_after: dict[str, int]
+    state_evidence: dict[str, Any]
+    can_evidence: dict[str, Any]
+    uds_evidence: dict[str, Any]
+    assertions: list[ScenarioAssertion]
+    created_at: datetime
+
+
+class ElectricVehicleScenarioPage(BaseModel):
+    items: list[ElectricVehicleScenarioResponse]
+    total: int
+    limit: int
+    offset: int
