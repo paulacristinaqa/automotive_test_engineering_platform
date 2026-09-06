@@ -32,6 +32,8 @@ class AdasWorldScene(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     coordinate_frame: Mapped[dict[str, Any]] = mapped_column(JSON)
     roads: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
     actors: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    environment: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    traffic_controls: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     revision: Mapped[int] = mapped_column(Integer, default=1)
     simulation_time_ms: Mapped[int] = mapped_column(BigInteger, default=0)
     created_by_user_id: Mapped[UUID] = mapped_column(

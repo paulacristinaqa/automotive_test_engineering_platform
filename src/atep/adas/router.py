@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from atep.adas.schemas import (
     WorldSceneAdvance,
+    WorldSceneContextUpdate,
     WorldSceneCreate,
     WorldScenePage,
     WorldSceneResponse,
@@ -15,6 +16,7 @@ from atep.adas.service import (
     list_scenes,
     require_scene,
     scene_response,
+    update_scene_context,
 )
 from atep.db.session import get_session
 from atep.identity.dependencies import require_permissions
@@ -92,6 +94,29 @@ async def advance_scene_endpoint(
     vehicle = await require_vehicle(session, vehicle_id)
     scene = await require_scene(session, vehicle_id=vehicle.id, scene_id=scene_id)
     await advance_scene(
+        session,
+        scene=scene,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(scene, attribute_names=["updated_at"])
+    return scene_response(scene, vehicle)
+
+
+@router.patch("/{scene_id}/context", response_model=WorldSceneResponse)
+async def update_scene_context_endpoint(
+    vehicle_id: str,
+    scene_id: str,
+    command: WorldSceneContextUpdate,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(adas_manage)],
+) -> WorldSceneResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    scene = await require_scene(session, vehicle_id=vehicle.id, scene_id=scene_id)
+    await update_scene_context(
         session,
         scene=scene,
         command=command,

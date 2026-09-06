@@ -68,7 +68,7 @@ def main() -> None:
     title.add_run("ATEP Volume VII ADAS Engineering Workbook")
     subtitle = doc.add_paragraph()
     subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    subtitle.add_run("Version 0.1.0   VII 1 Deterministic World Model").bold = True
+    subtitle.add_run("Version 0.2.0   VII 1 and VII 2 Implemented").bold = True
     doc.add_paragraph(
         "This workbook records the first engineering baseline for the ATEP ADAS volume. "
         "The world model provides deterministic sensor independent ground truth, so later "
@@ -78,10 +78,10 @@ def main() -> None:
         doc,
         ["Field", "Value"],
         [
-            ["Status", "VII-1 implemented and verified"],
+            ["Status", "VII-1 and VII-2 implemented and verified"],
             ["Technology", "FastAPI, PostgreSQL, SQLAlchemy, Alembic, Pydantic"],
             ["Cost", "Local first with no paid cloud or AI dependency"],
-            ["Next", "VII-2 environment conditions and actor trajectories"],
+            ["Next", "VII-3 camera radar and LiDAR sensor simulation"],
         ],
         [1.5, 5.4],
     )
@@ -154,6 +154,12 @@ def main() -> None:
                 "adas:manage",
                 "Advance time",
             ],
+            [
+                "PATCH",
+                "/vehicles/{vehicle_id}/adas/scenes/{scene_id}/context",
+                "adas:manage",
+                "Update environment and traffic controls",
+            ],
         ],
         [0.65, 3.35, 1.2, 1.25],
     )
@@ -220,7 +226,7 @@ def main() -> None:
             "Focused ADAS and API contract tests pass in one process.",
             "Ruff formatting and static checks pass for the new module.",
             "mypy passes for the module and application composition.",
-            "Migration 0044 follows the Volume VI migration head.",
+            "Migrations 0044 and 0045 form one linear ADAS migration history.",
             "The implementation uses no GPU and no paid external service.",
         ],
     )
@@ -243,19 +249,86 @@ def main() -> None:
             ["Concurrent mutation", "Expected revision conflict", "Add idempotent command IDs"],
             [
                 "Simplified motion",
-                "Document constant velocity baseline",
-                "Add trajectories in VII-2",
+                "Constant velocity plus deterministic waypoint trajectories",
+                "Add acceleration profiles after VII-3",
             ],
         ],
         [1.65, 2.8, 2.1],
     )
-    doc.add_heading("9 Next Development", level=1)
+    doc.add_page_break()
+    doc.add_heading("9 Environment Traffic and Trajectories", level=1)
     doc.add_paragraph(
-        "VII-2 will add deterministic weather, illumination, visibility, road friction, "
-        "traffic signs, traffic lights, and actor trajectories without mixing sensor output "
-        "into ground truth."
+        "VII-2 extends scene ground truth with bounded weather, precipitation, visibility, "
+        "illumination, temperature, wind, and road friction. Traffic controls reference known "
+        "lanes and carry type-specific state. Actor trajectories use ordered absolute logical-time "
+        "waypoints and deterministic linear interpolation."
     )
-    doc.add_heading("10 Study Exercises", level=1)
+    add_table(
+        doc,
+        ["Contract", "Control", "Test objective"],
+        [
+            [
+                "Weather",
+                "Cross-field precipitation and fog validation",
+                "Reject inconsistent conditions",
+            ],
+            [
+                "Road friction",
+                "Coefficient from 0.05 through 1.5",
+                "Represent low and high grip safely",
+            ],
+            [
+                "Traffic control",
+                "Unique ID and references to existing lanes",
+                "Prevent ambiguous map truth",
+            ],
+            [
+                "Trajectory",
+                "Starts at zero with strictly increasing times",
+                "Guarantee a valid timeline",
+            ],
+            [
+                "Context update",
+                "Expected revision and atomic evidence",
+                "Prevent lost concurrent updates",
+            ],
+        ],
+        [1.55, 2.75, 2.55],
+    )
+    doc.add_heading("10 VII 2 Verification Addendum", level=1)
+    add_table(
+        doc,
+        ["ID range", "Coverage", "Objective"],
+        [
+            [
+                "ADAS-T-013 to 014",
+                "Weather consistency",
+                "Validate precipitation and visibility rules",
+            ],
+            [
+                "ADAS-T-015 to 017",
+                "Traffic control contracts",
+                "Validate lane references, fields, and identity",
+            ],
+            [
+                "ADAS-T-018 to 020",
+                "Trajectory timeline",
+                "Validate ordering, interpolation, and terminal motion",
+            ],
+            [
+                "ADAS-T-021 to 022",
+                "Context mutation",
+                "Validate concurrency, audit, and event evidence",
+            ],
+        ],
+        [1.55, 2.55, 2.75],
+    )
+    doc.add_heading("11 Next Development", level=1)
+    doc.add_paragraph(
+        "VII-3 will add camera, radar, and LiDAR observation models with deterministic noise, "
+        "latency, range, field of view, and occlusion without changing scene ground truth."
+    )
+    doc.add_heading("12 Study Exercises", level=1)
     bullets(
         doc,
         [
