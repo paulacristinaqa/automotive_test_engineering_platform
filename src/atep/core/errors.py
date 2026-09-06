@@ -39,6 +39,25 @@ class ApplicationError(Exception):
         self.headers = headers
 
 
+class AdasSceneConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="adas_scene_conflict",
+            message="An ADAS world scene with this identifier already exists for the vehicle.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class AdasSceneVersionConflictError(ApplicationError):
+    def __init__(self, *, expected: int, actual: int) -> None:
+        super().__init__(
+            code="adas_scene_version_conflict",
+            message="The ADAS world scene revision does not match the expected revision.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"expected_revision": expected, "actual_revision": actual},
+        )
+
+
 class DuplicateEmailError(ApplicationError):
     def __init__(self) -> None:
         super().__init__(

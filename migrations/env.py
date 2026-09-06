@@ -5,6 +5,7 @@ from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+from atep.adas import models as adas_models  # noqa: F401
 from atep.artifacts import models as artifact_models  # noqa: F401
 from atep.audit import models as audit_models  # noqa: F401
 from atep.can_network import models as can_network_models  # noqa: F401

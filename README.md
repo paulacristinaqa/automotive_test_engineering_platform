@@ -354,6 +354,8 @@ companion project also passes 27 unit tests, Android lint, and debug APK assembl
 - [Volume V — Diagnostics formatted workbook](docs/ATEP_Volume_V_Diagnostics_Engineering_Workbook.docx)
 - [Volume VI — Electric Vehicle editable source](docs/workbook-volume-vi.md)
 - [Volume VI — Electric Vehicle formatted workbook](docs/ATEP_Volume_VI_Electric_Vehicle_Engineering_Workbook.docx)
+- [Volume VII — ADAS editable source](docs/workbook-volume-vii.md)
+- [Volume VII — ADAS formatted workbook](docs/ATEP_Volume_VII_ADAS_Engineering_Workbook.docx)
 
 The workbook is a living English-language engineering record containing requirements,
 architecture decisions, implementation evidence, test objectives, risks, technical debt,
@@ -369,6 +371,7 @@ operational guidance, and review worksheets.
 | IV | CAN Network | Implemented — increments IV-1 through IV-7 |
 | V | Diagnostics | Baseline complete — increments V-1 through V-7 implemented |
 | VI | Electric Vehicle | Baseline complete — increments VI-1 through VI-7 implemented |
+| VII | ADAS | VII-1 deterministic world model implemented |
 | VII | ADAS | Planned |
 | VIII | Test Framework | Planned |
 | IX | AI Test Engineer | Planned |
