@@ -58,6 +58,15 @@ class AdasSceneVersionConflictError(ApplicationError):
         )
 
 
+class AdasSceneContractError(ApplicationError):
+    def __init__(self, message: str) -> None:
+        super().__init__(
+            code="adas_scene_contract_error",
+            message=message,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        )
+
+
 class DuplicateEmailError(ApplicationError):
     def __init__(self) -> None:
         super().__init__(

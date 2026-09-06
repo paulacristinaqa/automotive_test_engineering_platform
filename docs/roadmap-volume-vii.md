@@ -1,7 +1,7 @@
 # Volume VII ADAS Roadmap
 
 - [x] **VII-1 World model** - ENU coordinates, roads, lanes, ground-truth actors, logical time, revision control, APIs, audit, and events.
-- [ ] **VII-2 Environment and traffic controls** - weather, visibility, friction, traffic lights, signs, and actor trajectories.
+- [x] **VII-2 Environment and traffic controls** - weather, visibility, friction, traffic lights, signs, and actor trajectories.
 - [ ] **VII-3 Sensor simulation** - camera, radar, and LiDAR observations with noise, latency, range, and occlusion.
 - [ ] **VII-4 Perception** - object, lane, sign, signal, and pedestrian detections measured against ground truth.
 - [ ] **VII-5 Planning and alerts** - collision risk, lane departure, following distance, maneuvers, and warnings.
@@ -10,4 +10,4 @@
 
 ## Next recommended increment
 
-VII-2 introduces deterministic environment conditions and actor trajectories while retaining the VII-1 scene as sensor-independent truth at each revision.
+VII-3 introduces camera, radar, and LiDAR observations with deterministic noise, latency, range, field of view, and occlusion while retaining the VII-1 and VII-2 scene as sensor-independent truth.

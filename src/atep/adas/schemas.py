@@ -13,6 +13,29 @@ class ActorType(StrEnum):
     STATIC_OBSTACLE = "static_obstacle"
 
 
+class WeatherType(StrEnum):
+    CLEAR = "clear"
+    CLOUDY = "cloudy"
+    RAIN = "rain"
+    FOG = "fog"
+    SNOW = "snow"
+
+
+class TrafficLightState(StrEnum):
+    RED = "red"
+    YELLOW = "yellow"
+    GREEN = "green"
+    FLASHING = "flashing"
+    OFF = "off"
+
+
+class TrafficControlType(StrEnum):
+    TRAFFIC_LIGHT = "traffic_light"
+    STOP_SIGN = "stop_sign"
+    YIELD_SIGN = "yield_sign"
+    SPEED_LIMIT_SIGN = "speed_limit_sign"
+
+
 class Vector3(BaseModel):
     x: float = Field(ge=-1_000_000, le=1_000_000)
     y: float = Field(ge=-1_000_000, le=1_000_000)
@@ -38,6 +61,55 @@ class Road(BaseModel):
     lanes: list[Lane] = Field(min_length=1, max_length=32)
 
 
+class EnvironmentConditions(BaseModel):
+    weather: WeatherType = WeatherType.CLEAR
+    precipitation_mm_per_h: float = Field(default=0, ge=0, le=500)
+    visibility_m: float = Field(default=10_000, ge=1, le=100_000)
+    ambient_light_lux: float = Field(default=10_000, ge=0, le=150_000)
+    road_friction_coefficient: float = Field(default=0.9, ge=0.05, le=1.5)
+    temperature_c: float = Field(default=20, ge=-60, le=70)
+    wind_speed_mps: float = Field(default=0, ge=0, le=100)
+
+    @model_validator(mode="after")
+    def weather_is_consistent(self) -> "EnvironmentConditions":
+        if (
+            self.weather in {WeatherType.RAIN, WeatherType.SNOW}
+            and self.precipitation_mm_per_h == 0
+        ):
+            raise ValueError("rain and snow require positive precipitation")
+        if self.weather == WeatherType.FOG and self.visibility_m > 2_000:
+            raise ValueError("fog visibility cannot exceed 2000 metres")
+        return self
+
+
+class TrafficControl(BaseModel):
+    control_id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    control_type: TrafficControlType
+    position_m: Vector3
+    lane_ids: list[str] = Field(min_length=1, max_length=32)
+    light_state: TrafficLightState | None = None
+    speed_limit_kph: float | None = Field(default=None, gt=0, le=400)
+
+    @model_validator(mode="after")
+    def type_specific_value(self) -> "TrafficControl":
+        if self.control_type == TrafficControlType.TRAFFIC_LIGHT and self.light_state is None:
+            raise ValueError("traffic lights require light_state")
+        if (
+            self.control_type == TrafficControlType.SPEED_LIMIT_SIGN
+            and self.speed_limit_kph is None
+        ):
+            raise ValueError("speed limit signs require speed_limit_kph")
+        if self.control_type != TrafficControlType.TRAFFIC_LIGHT and self.light_state is not None:
+            raise ValueError("light_state is only valid for traffic lights")
+        return self
+
+
+class TrajectoryWaypoint(BaseModel):
+    time_offset_ms: int = Field(ge=0, le=86_400_000)
+    position_m: Vector3
+    velocity_mps: Vector3 | None = None
+
+
 class WorldActor(BaseModel):
     actor_id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
     actor_type: ActorType
@@ -47,6 +119,16 @@ class WorldActor(BaseModel):
     length_m: float = Field(gt=0, le=100)
     width_m: float = Field(gt=0, le=20)
     height_m: float = Field(gt=0, le=20)
+    trajectory: list[TrajectoryWaypoint] = Field(default_factory=list, max_length=10_000)
+
+    @model_validator(mode="after")
+    def trajectory_time_is_strictly_increasing(self) -> "WorldActor":
+        times = [waypoint.time_offset_ms for waypoint in self.trajectory]
+        if times and times[0] != 0:
+            raise ValueError("a trajectory must start at time offset zero")
+        if any(current >= following for current, following in zip(times, times[1:], strict=False)):
+            raise ValueError("trajectory waypoint times must be strictly increasing")
+        return self
 
 
 class WorldSceneCreate(BaseModel):
@@ -55,16 +137,24 @@ class WorldSceneCreate(BaseModel):
     coordinate_frame: CoordinateFrame
     roads: list[Road] = Field(min_length=1, max_length=100)
     actors: list[WorldActor] = Field(min_length=1, max_length=1_000)
+    environment: EnvironmentConditions = Field(default_factory=EnvironmentConditions)
+    traffic_controls: list[TrafficControl] = Field(default_factory=list, max_length=1_000)
 
     @model_validator(mode="after")
     def unique_identifiers_and_single_ego(self) -> "WorldSceneCreate":
         road_ids = [road.road_id for road in self.roads]
         lane_ids = [lane.lane_id for road in self.roads for lane in road.lanes]
         actor_ids = [actor.actor_id for actor in self.actors]
+        control_ids = [control.control_id for control in self.traffic_controls]
         if len(set(road_ids)) != len(road_ids) or len(set(lane_ids)) != len(lane_ids):
             raise ValueError("road and lane identifiers must be unique")
         if len(set(actor_ids)) != len(actor_ids):
             raise ValueError("actor identifiers must be unique")
+        if len(set(control_ids)) != len(control_ids):
+            raise ValueError("traffic control identifiers must be unique")
+        known_lanes = set(lane_ids)
+        if any(set(control.lane_ids) - known_lanes for control in self.traffic_controls):
+            raise ValueError("traffic controls must reference lanes in the scene")
         if sum(actor.actor_type == ActorType.EGO_VEHICLE for actor in self.actors) != 1:
             raise ValueError("a scene must contain exactly one ego_vehicle")
         return self
@@ -75,6 +165,12 @@ class WorldSceneAdvance(BaseModel):
     expected_revision: int = Field(ge=1)
 
 
+class WorldSceneContextUpdate(BaseModel):
+    expected_revision: int = Field(ge=1)
+    environment: EnvironmentConditions
+    traffic_controls: list[TrafficControl] = Field(default_factory=list, max_length=1_000)
+
+
 class WorldSceneResponse(BaseModel):
     id: UUID
     vehicle_id: str
@@ -83,6 +179,8 @@ class WorldSceneResponse(BaseModel):
     coordinate_frame: CoordinateFrame
     roads: list[Road]
     actors: list[WorldActor]
+    environment: EnvironmentConditions
+    traffic_controls: list[TrafficControl]
     revision: int
     simulation_time_ms: int
     created_by_user_id: UUID
