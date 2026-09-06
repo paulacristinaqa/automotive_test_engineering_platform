@@ -425,3 +425,23 @@ class RangeEstimationStep(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     requested_by_user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
     )
+
+
+class ElectricVehicleScenarioExecution(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "electric_vehicle_scenario_executions"
+    __table_args__ = (
+        UniqueConstraint("vehicle_id", "execution_id", name="uq_electric_vehicle_scenario"),
+    )
+
+    vehicle_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("vehicles.id", ondelete="CASCADE"), index=True
+    )
+    execution_id: Mapped[str] = mapped_column(String(40))
+    scenario_type: Mapped[str] = mapped_column(String(40), index=True)
+    request_hash: Mapped[str] = mapped_column(String(64))
+    request: Mapped[dict[str, Any]] = mapped_column(JSON)
+    result: Mapped[dict[str, Any]] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String(16), index=True)
+    requested_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )

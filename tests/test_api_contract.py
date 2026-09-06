@@ -577,6 +577,28 @@ def test_electric_vehicle_range_contracts_are_published() -> None:
     assert command_schema["properties"]["segments"]["maxItems"] == 120
 
 
+def test_cross_domain_ev_scenario_contracts_and_safe_pagination_are_published() -> None:
+    schema = core_app.openapi()
+    paths = schema["paths"]
+    collection = paths["/api/v1/vehicles/{vehicle_id}/electric/scenarios"]
+    assert {"get", "post"} <= set(collection)
+    assert "/api/v1/vehicles/{vehicle_id}/electric/scenarios/{execution_id}" in paths
+    parameters = {item["name"]: item["schema"] for item in collection["get"]["parameters"]}
+    assert parameters["limit"]["minimum"] == 1
+    assert parameters["limit"]["maximum"] == 100
+    assert parameters["offset"]["minimum"] == 0
+    assert parameters["offset"]["maximum"] == 1_000_000
+    command = schema["components"]["schemas"]["ElectricVehicleScenarioCommand"]
+    assert set(command["required"]) >= {
+        "execution_id",
+        "bms_ecu_id",
+        "can_contract_id",
+        "expected_battery_version",
+        "expected_bms_ecu_version",
+        "expected_can_version",
+    }
+
+
 def test_test_artifact_contracts_and_safe_pagination_are_published() -> None:
     paths = core_app.openapi()["paths"]
     collection = paths["/api/v1/test-runs/{run_id}/artifacts"]

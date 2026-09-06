@@ -493,4 +493,10 @@ fault behavior, immutable replay evidence, audit, and outbox commit in one trans
 VI-6 adds a range-estimator aggregate that reads the authoritative battery and thermal states in a
 fixed lock order. Reproducible drive-cycle segments produce explainable traction, auxiliary,
 regenerative, net-energy, consumption, and remaining-range evidence. Estimates are analytical and
-do not mutate battery SOC; VI-7 will own the cross-domain trip transaction.
+do not mutate battery SOC.
+
+VI-7 adds a cross-domain safety orchestrator. The battery-overtemperature scenario locks the six
+EV aggregates, selected battery ECU, and CAN network in a fixed order, then validates all eight
+versions before mutation. One transaction applies the domain safety responses, updates the BMS ECU,
+persists a contracted CAN frame and UDS DTC, stores machine-readable assertions, and appends audit
+and outbox evidence. Exact retries return the immutable scenario snapshot.

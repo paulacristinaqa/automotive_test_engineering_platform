@@ -1,9 +1,15 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atep.db.session import get_session
+from atep.electric_vehicle.scenario_service import (
+    electric_vehicle_scenario_response,
+    execute_electric_vehicle_scenario,
+    list_electric_vehicle_scenarios,
+    require_electric_vehicle_scenario,
+)
 from atep.electric_vehicle.schemas import (
     BatteryPackCreate,
     BatteryPackResponse,
@@ -12,6 +18,9 @@ from atep.electric_vehicle.schemas import (
     ChargingCommand,
     ChargingSystemCreate,
     ChargingSystemResponse,
+    ElectricVehicleScenarioCommand,
+    ElectricVehicleScenarioPage,
+    ElectricVehicleScenarioResponse,
     MotorInverterCreate,
     MotorInverterResponse,
     MotorSimulationCommand,
@@ -436,3 +445,66 @@ async def simulate_thermal_step_endpoint(
     if duplicate:
         response.status_code = status.HTTP_200_OK
     return result
+
+
+@router.post(
+    "/scenarios",
+    response_model=ElectricVehicleScenarioResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def execute_electric_vehicle_scenario_endpoint(
+    vehicle_id: str,
+    command: ElectricVehicleScenarioCommand,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(electric_vehicle_manage)],
+) -> ElectricVehicleScenarioResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    scenario, duplicate = await execute_electric_vehicle_scenario(
+        session,
+        vehicle=vehicle,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+    else:
+        await session.refresh(scenario, attribute_names=["created_at", "updated_at"])
+    return electric_vehicle_scenario_response(scenario, vehicle=vehicle, duplicate=duplicate)
+
+
+@router.get("/scenarios", response_model=ElectricVehicleScenarioPage)
+async def list_electric_vehicle_scenarios_endpoint(
+    vehicle_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _actor: Annotated[User, Depends(electric_vehicle_read)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
+) -> ElectricVehicleScenarioPage:
+    vehicle = await require_vehicle(session, vehicle_id)
+    items, total = await list_electric_vehicle_scenarios(
+        session, vehicle=vehicle, limit=limit, offset=offset
+    )
+    return ElectricVehicleScenarioPage(
+        items=[electric_vehicle_scenario_response(item, vehicle=vehicle) for item in items],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/scenarios/{execution_id}", response_model=ElectricVehicleScenarioResponse)
+async def get_electric_vehicle_scenario_endpoint(
+    vehicle_id: str,
+    execution_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _actor: Annotated[User, Depends(electric_vehicle_read)],
+) -> ElectricVehicleScenarioResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    scenario = await require_electric_vehicle_scenario(
+        session, vehicle=vehicle, execution_id=execution_id
+    )
+    return electric_vehicle_scenario_response(scenario, vehicle=vehicle)
