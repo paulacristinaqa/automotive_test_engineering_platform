@@ -24,6 +24,8 @@ class PermissionName(StrEnum):
     DIAGNOSTICS_MANAGE = "diagnostics:manage"
     ELECTRIC_VEHICLE_READ = "electric_vehicle:read"
     ELECTRIC_VEHICLE_MANAGE = "electric_vehicle:manage"
+    ADAS_READ = "adas:read"
+    ADAS_MANAGE = "adas:manage"
     TEST_RUNS_READ = "test_runs:read"
     TEST_RUNS_WRITE = "test_runs:write"
     ENVIRONMENT_PROFILES_READ = "environment_profiles:read"
