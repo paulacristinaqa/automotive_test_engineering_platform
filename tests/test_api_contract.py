@@ -683,6 +683,26 @@ def test_adas_cross_platform_evidence_contracts_are_published() -> None:
     )
 
 
+def test_test_catalog_contracts_and_safe_pagination_are_published() -> None:
+    schema = core_app.openapi()
+    paths = schema["paths"]
+    assert {"get", "post"} <= set(paths["/api/v1/test-definitions"])
+    assert {"get", "post"} <= set(paths["/api/v1/test-suites"])
+    assert "patch" in paths["/api/v1/test-definitions/{definition_id}/status"]
+    assert "patch" in paths["/api/v1/test-suites/{suite_id}/status"]
+    parameters = {
+        item["name"]: item["schema"]
+        for item in paths["/api/v1/test-definitions"]["get"]["parameters"]
+    }
+    assert parameters["limit"]["maximum"] == 100
+    assert parameters["offset"]["maximum"] == 1_000_000
+    definition = schema["components"]["schemas"]["TestDefinitionCreate"]
+    assert definition["properties"]["steps"]["maxItems"] == 100
+    assert definition["properties"]["timeout_seconds"]["maximum"] == 86_400
+    suite = schema["components"]["schemas"]["TestSuiteCreate"]
+    assert suite["properties"]["cases"]["maxItems"] == 200
+
+
 def test_metrics_endpoint_is_operational_but_not_part_of_public_openapi() -> None:
     assert "/metrics" not in core_app.openapi()["paths"]
     response = TestClient(core_app).get("/metrics")

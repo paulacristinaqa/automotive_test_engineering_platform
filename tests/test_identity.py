@@ -9,3 +9,5 @@ def test_email_is_normalized_for_identity_lookup() -> None:
 def test_administrator_permission_set_is_explicit() -> None:
     assert ADMIN_PERMISSIONS == frozenset(PermissionName)
     assert PermissionName.PLATFORM_ADMIN in ADMIN_PERMISSIONS
+    assert PermissionName.TEST_CATALOG_READ.value == "test_catalog:read"
+    assert PermissionName.TEST_CATALOG_MANAGE.value == "test_catalog:manage"
