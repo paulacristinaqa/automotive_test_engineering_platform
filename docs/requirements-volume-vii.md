@@ -50,3 +50,29 @@
 - **ADAS-T-020** Verify behavior after the final waypoint with and without terminal velocity.
 - **ADAS-T-021** Verify stale context updates do not mutate the scene.
 - **ADAS-T-022** Verify atomic audit and `atep.adas.world_scene.context_updated.v1` evidence.
+
+## VII-3 Deterministic sensor simulation
+
+- **ADAS-F-014** Configure camera, radar, and LiDAR sensors for a scene without changing scene truth.
+- **ADAS-F-015** Bound sensor mount, yaw, range, horizontal field of view, latency, and position noise.
+- **ADAS-F-016** Produce persisted observations tied to an exact scene revision and logical time.
+- **ADAS-F-017** Filter actors by effective visibility range and sensor field of view.
+- **ADAS-F-018** Apply deterministic angular occlusion using nearer visible actors.
+- **ADAS-F-019** Apply seed-derived position noise and environment-sensitive confidence.
+- **ADAS-F-020** Expose sensor creation, listing, observation capture, and observation retrieval APIs.
+- **ADAS-F-021** Atomically record audit and outbox evidence for sensors and observations.
+- **ADAS-NF-007** Repeating an observation from identical truth, configuration, and seed shall produce identical detections.
+- **ADAS-NF-008** Operational events shall contain counts and references, not complete detection payloads.
+
+- **ADAS-T-023** Reject invalid range, field of view, latency, noise, and identifiers.
+- **ADAS-T-024** Verify an actor outside the field of view is excluded.
+- **ADAS-T-025** Verify an actor beyond effective visibility or sensor range is excluded.
+- **ADAS-T-026** Verify a nearer aligned actor occludes a farther actor.
+- **ADAS-T-027** Verify identical seeds produce identical noise and different seeds vary it.
+- **ADAS-T-028** Verify camera confidence responds to precipitation and low light.
+- **ADAS-T-029** Verify LiDAR confidence responds to fog, rain, and snow while radar remains available.
+- **ADAS-T-030** Reject capture against a stale scene revision.
+- **ADAS-T-031** Verify observation latency, captured scene time, and revision are persisted.
+- **ADAS-T-032** Verify sensor and observation identity conflicts are stable.
+- **ADAS-T-033** Verify `adas:read` and `adas:manage` protection on all sensor APIs.
+- **ADAS-T-034** Verify atomic, minimized audit and outbox evidence.

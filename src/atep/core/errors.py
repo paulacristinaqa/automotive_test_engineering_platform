@@ -67,6 +67,24 @@ class AdasSceneContractError(ApplicationError):
         )
 
 
+class AdasSensorConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="adas_sensor_conflict",
+            message="This sensor identifier already exists in the scene.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class AdasObservationConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="adas_observation_conflict",
+            message="This observation identifier already exists for the sensor.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
 class DuplicateEmailError(ApplicationError):
     def __init__(self) -> None:
         super().__init__(

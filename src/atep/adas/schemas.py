@@ -36,6 +36,12 @@ class TrafficControlType(StrEnum):
     SPEED_LIMIT_SIGN = "speed_limit_sign"
 
 
+class SensorType(StrEnum):
+    CAMERA = "camera"
+    RADAR = "radar"
+    LIDAR = "lidar"
+
+
 class Vector3(BaseModel):
     x: float = Field(ge=-1_000_000, le=1_000_000)
     y: float = Field(ge=-1_000_000, le=1_000_000)
@@ -193,3 +199,68 @@ class WorldScenePage(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class SensorConfigurationCreate(BaseModel):
+    sensor_id: str = Field(min_length=3, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]+$")
+    sensor_type: SensorType
+    mount_position_m: Vector3 = Field(default_factory=lambda: Vector3(x=0, y=0, z=1.2))
+    yaw_deg: float = Field(default=0, ge=-180, le=180)
+    max_range_m: float = Field(gt=0, le=2_000)
+    horizontal_fov_deg: float = Field(gt=0, le=360)
+    latency_ms: int = Field(default=0, ge=0, le=10_000)
+    position_noise_stddev_m: float = Field(default=0, ge=0, le=50)
+
+
+class SensorConfigurationResponse(BaseModel):
+    id: UUID
+    scene_id: str
+    sensor_id: str
+    sensor_type: SensorType
+    mount_position_m: Vector3
+    yaw_deg: float
+    max_range_m: float
+    horizontal_fov_deg: float
+    latency_ms: int
+    position_noise_stddev_m: float
+    created_by_user_id: UUID
+    created_at: datetime
+    updated_at: datetime
+
+
+class SensorConfigurationPage(BaseModel):
+    items: list[SensorConfigurationResponse]
+    total: int
+    limit: int
+    offset: int
+
+
+class SensorObservationCreate(BaseModel):
+    observation_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]+$")
+    expected_scene_revision: int = Field(ge=1)
+    seed: int = Field(ge=0, le=2_147_483_647)
+
+
+class SensorDetection(BaseModel):
+    actor_id: str
+    actor_type: ActorType
+    relative_position_m: Vector3
+    range_m: float = Field(ge=0)
+    azimuth_deg: float = Field(ge=-180, le=180)
+    confidence: float = Field(ge=0, le=1)
+
+
+class SensorObservationResponse(BaseModel):
+    id: UUID
+    observation_id: str
+    scene_id: str
+    sensor_id: str
+    sensor_type: SensorType
+    scene_revision: int
+    scene_simulation_time_ms: int
+    observed_simulation_time_ms: int
+    seed: int
+    detections: list[SensorDetection]
+    metrics: dict[str, int | float]
+    requested_by_user_id: UUID
+    created_at: datetime
