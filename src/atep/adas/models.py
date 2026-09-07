@@ -145,3 +145,34 @@ class AdasPlanningEvaluation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     requested_by_user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
     )
+
+
+class AdasTestScenarioExecution(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "adas_test_scenario_executions"
+    __table_args__ = (
+        UniqueConstraint("scene_id", "execution_id", name="uq_adas_test_scenario_execution"),
+        CheckConstraint("scene_revision >= 1", name="ck_adas_scenario_revision"),
+    )
+
+    scene_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("adas_world_scenes.id", ondelete="CASCADE"), index=True
+    )
+    perception_result_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("adas_perception_results.id", ondelete="CASCADE"),
+        index=True,
+    )
+    execution_id: Mapped[str] = mapped_column(String(64))
+    scenario_type: Mapped[str] = mapped_column(String(40), index=True)
+    scene_revision: Mapped[int] = mapped_column(Integer)
+    request_hash: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(16), index=True)
+    maneuver: Mapped[str] = mapped_column(String(32))
+    alerts: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    assertions: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    fault_injections: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    coverage: Mapped[dict[str, Any]] = mapped_column(JSON)
+    regression_fingerprint: Mapped[str] = mapped_column(String(64), index=True)
+    requested_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )

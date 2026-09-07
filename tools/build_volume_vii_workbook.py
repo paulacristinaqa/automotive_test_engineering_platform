@@ -68,7 +68,7 @@ def main() -> None:
     title.add_run("ATEP Volume VII ADAS Engineering Workbook")
     subtitle = doc.add_paragraph()
     subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    subtitle.add_run("Version 0.5.0   VII 1 through VII 5 Implemented").bold = True
+    subtitle.add_run("Version 0.6.0   VII 1 through VII 6 Implemented").bold = True
     doc.add_paragraph(
         "This workbook records the first engineering baseline for the ATEP ADAS volume. "
         "The world model provides deterministic sensor independent ground truth, so later "
@@ -78,10 +78,10 @@ def main() -> None:
         doc,
         ["Field", "Value"],
         [
-            ["Status", "VII-1 through VII-5 implemented and verified"],
+            ["Status", "VII-1 through VII-6 implemented and verified"],
             ["Technology", "FastAPI, PostgreSQL, SQLAlchemy, Alembic, Pydantic"],
             ["Cost", "Local first with no paid cloud or AI dependency"],
-            ["Next", "VII-6 ADAS test scenarios"],
+            ["Next", "VII-7 cross-platform integration"],
         ],
         [1.5, 5.4],
     )
@@ -98,8 +98,8 @@ def main() -> None:
         [
             "In scope: creation, lookup, pagination, and constant velocity advancement.",
             "In scope: ego vehicle, vehicle, pedestrian, cyclist, and static obstacle actors.",
-            "Deferred: weather, traffic controls, sensor physics, perception, planning, "
-            "and alerts.",
+            "Delivered next: environment, sensors, perception, planning, alerts, and scenarios.",
+            "Deferred: cross-platform test-run, Vehicle Gateway, CarSystemUI, and dashboard links.",
         ],
     )
 
@@ -226,7 +226,7 @@ def main() -> None:
             "Focused ADAS and API contract tests pass in one process.",
             "Ruff formatting and static checks pass for the new module.",
             "mypy passes for the module and application composition.",
-            "Migrations 0044 through 0048 form one linear ADAS migration history.",
+            "Migrations 0044 through 0049 form one linear ADAS migration history.",
             "The implementation uses no GPU and no paid external service.",
         ],
     )
@@ -452,20 +452,82 @@ def main() -> None:
         ],
         [1.55, 2.55, 2.75],
     )
-    doc.add_heading("17 Next Development", level=1)
-    doc.add_paragraph()
+    doc.add_page_break()
+    doc.add_heading("17 ADAS Test Scenarios", level=1)
     doc.add_paragraph(
-        "VII-6 will add NCAP-inspired ADAS scenarios, controlled fault injection, regression "
-        "evidence, and coverage measurement using the verified simulation pipeline."
+        "VII-6 executes bounded, repeatable engineering scenarios over an immutable scene and "
+        "persisted perception result. The catalogue is inspired by common consumer safety "
+        "assessment concerns but does not claim official NCAP certification or homologation."
     )
-    doc.add_heading("18 Study Exercises", level=1)
+    add_table(
+        doc,
+        ["Scenario family", "Primary behavior", "Evidence"],
+        [
+            ["Car to car AEB", "Lead vehicle collision response", "TTC alert and braking"],
+            ["Pedestrian AEB", "Pedestrian collision response", "Detection and maneuver"],
+            ["Lane support", "Lane envelope recovery", "Departure alert and centering"],
+            ["Traffic signal", "Red signal compliance", "Critical alert and stop"],
+        ],
+        [1.55, 2.8, 2.3],
+    )
+    doc.add_heading("18 Fault Regression and Coverage", level=1)
+    add_table(
+        doc,
+        ["Mechanism", "Engineering control", "Purpose"],
+        [
+            [
+                "Fault injection",
+                "Drop or misclassify up to twenty unique predictions",
+                "Exercise degraded perception safely",
+            ],
+            [
+                "Assertions",
+                "Expected maneuver, required alerts, and minimum F1",
+                "Produce explicit pass or fail evidence",
+            ],
+            [
+                "Coverage",
+                "Scenario, target, alert, maneuver, fault, and assertion dimensions",
+                "Show what each execution exercised",
+            ],
+            [
+                "Fingerprint",
+                "Canonical deterministic SHA-256 evidence",
+                "Compare regressions across execution identities",
+            ],
+            [
+                "Replay",
+                "Request hash and stable conflict",
+                "Prevent duplicate or ambiguous evidence",
+            ],
+        ],
+        [1.4, 3.0, 2.25],
+    )
+    doc.add_heading("19 VII 6 Verification Addendum", level=1)
+    add_table(
+        doc,
+        ["ID range", "Coverage", "Objective"],
+        [
+            ["ADAS-T-056 to 060", "Contracts and faults", "Validate bounded fault behavior"],
+            ["ADAS-T-061 to 064", "Evidence and replay", "Validate results and determinism"],
+            ["ADAS-T-065 to 068", "API and persistence", "Validate access and traceability"],
+        ],
+        [1.55, 2.55, 2.75],
+    )
+    doc.add_heading("20 Next Development", level=1)
+    doc.add_paragraph(
+        "VII-7 will connect ADAS scenario evidence to ATEP test runs, Vehicle Gateway, "
+        "CarSystemUI presentation, and real-time dashboard streams."
+    )
+    doc.add_heading("21 Study Exercises", level=1)
     bullets(
         doc,
         [
             "Repeat an advance with a stale revision and explain the stable conflict.",
-            "Design a radar miss while preserving the scene truth.",
             "Submit one duplicate and one misclassified prediction and calculate the F1 score.",
             "Compare braking decisions at TTC values above and below the emergency threshold.",
+            "Drop the lead-vehicle prediction, compare fingerprints, and explain why these "
+            "scenarios are not official certification evidence.",
         ],
     )
     doc.core_properties.title = "ATEP Volume VII ADAS Engineering Workbook"

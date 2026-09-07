@@ -123,3 +123,32 @@
 - **ADAS-T-053** Reject unknown ego lane and changed scene revisions.
 - **ADAS-T-054** Verify `adas:read` and `adas:manage` protection on planning APIs.
 - **ADAS-T-055** Verify atomic, minimized audit and `atep.adas.planning.evaluation.created.v1` evidence.
+
+## VII-6 ADAS test scenarios
+
+- **ADAS-F-035** Execute persisted NCAP-inspired car-to-car AEB, pedestrian AEB, lane-support, and traffic-signal scenario families.
+- **ADAS-F-036** Apply bounded prediction-drop and prediction-misclassification faults without changing scene truth or stored perception evidence.
+- **ADAS-F-037** Evaluate expected maneuver, required alerts, and minimum overall perception F1 as explicit assertions.
+- **ADAS-F-038** Persist pass or fail status, observed maneuver, alerts, assertion evidence, fault inputs, and per-execution coverage.
+- **ADAS-F-039** Generate a deterministic SHA-256 regression fingerprint independent from execution identity and wall-clock time.
+- **ADAS-F-040** Provide exact idempotent replay and reject changed reuse of an execution identifier with a stable conflict.
+- **ADAS-F-041** Expose execute, bounded list, and detail APIs protected by ADAS permissions.
+- **ADAS-F-042** Atomically record audit and transactional outbox evidence for completed scenarios.
+- **ADAS-NF-014** Limit each execution to twenty unique fault targets and four unique required alert types.
+- **ADAS-NF-015** Reject unknown fault targets and stale scene or perception revisions before persistence.
+- **ADAS-NF-016** Keep events free from complete predictions, alerts, assertion details, and fault payloads.
+- **ADAS-NF-017** Describe scenarios as NCAP-inspired engineering exercises, not official homologation or certification evidence.
+
+- **ADAS-T-056** Reject malformed fault definitions, duplicate fault targets, duplicate alerts, and invalid thresholds.
+- **ADAS-T-057** Verify the car-to-car AEB family passes for a perceived imminent lead-vehicle collision.
+- **ADAS-T-058** Verify dropping a critical perception prediction changes planner output and fails the expected assertions.
+- **ADAS-T-059** Verify misclassification changes only the selected prediction and preserves stored perception evidence.
+- **ADAS-T-060** Reject fault injection against an unknown prediction before any write.
+- **ADAS-T-061** Verify assertion status and assertion-coverage counts for passed and failed scenarios.
+- **ADAS-T-062** Verify different execution identifiers with identical deterministic inputs produce the same regression fingerprint.
+- **ADAS-T-063** Verify exact replay is idempotent and changed identifier reuse returns `adas_scenario_execution_conflict`.
+- **ADAS-T-064** Reject stale scene and perception revisions before scenario evidence is stored.
+- **ADAS-T-065** Verify bounded, stable newest-first scenario pagination.
+- **ADAS-T-066** Verify `adas:read`, `adas:manage`, and HTTP 403 behavior for scenario APIs.
+- **ADAS-T-067** Verify atomic audit and `atep.adas.test_scenario.completed.v1` evidence is minimized.
+- **ADAS-T-068** Verify migration `0049` upgrade and downgrade structure.
