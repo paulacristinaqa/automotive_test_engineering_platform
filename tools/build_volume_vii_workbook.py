@@ -68,7 +68,7 @@ def main() -> None:
     title.add_run("ATEP Volume VII ADAS Engineering Workbook")
     subtitle = doc.add_paragraph()
     subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    subtitle.add_run("Version 0.3.0   VII 1 through VII 3 Implemented").bold = True
+    subtitle.add_run("Version 0.4.0   VII 1 through VII 4 Implemented").bold = True
     doc.add_paragraph(
         "This workbook records the first engineering baseline for the ATEP ADAS volume. "
         "The world model provides deterministic sensor independent ground truth, so later "
@@ -78,10 +78,10 @@ def main() -> None:
         doc,
         ["Field", "Value"],
         [
-            ["Status", "VII-1 through VII-3 implemented and verified"],
+            ["Status", "VII-1 through VII-4 implemented and verified"],
             ["Technology", "FastAPI, PostgreSQL, SQLAlchemy, Alembic, Pydantic"],
             ["Cost", "Local first with no paid cloud or AI dependency"],
-            ["Next", "VII-4 perception and ground truth scoring"],
+            ["Next", "VII-5 planning and alerts"],
         ],
         [1.5, 5.4],
     )
@@ -226,7 +226,7 @@ def main() -> None:
             "Focused ADAS and API contract tests pass in one process.",
             "Ruff formatting and static checks pass for the new module.",
             "mypy passes for the module and application composition.",
-            "Migrations 0044 through 0046 form one linear ADAS migration history.",
+            "Migrations 0044 through 0047 form one linear ADAS migration history.",
             "The implementation uses no GPU and no paid external service.",
         ],
     )
@@ -389,19 +389,50 @@ def main() -> None:
         ],
         [1.55, 2.55, 2.75],
     )
-    doc.add_heading("13 Next Development", level=1)
+    doc.add_heading("13 Perception and Ground Truth Scoring", level=1)
     doc.add_paragraph(
-        "VII-4 will add perception outputs for objects, lanes, signs, signals, and pedestrians, "
-        "then score them against scene truth and persisted sensor observations."
+        "VII-4 persists perception outputs for objects, pedestrians, lanes, signs, and signals. "
+        "Predictions reference stable truth identifiers and are matched one-to-one against actors "
+        "visible in the sensor observation plus lane and traffic-control truth from the unchanged "
+        "scene revision."
     )
-    doc.add_heading("14 Study Exercises", level=1)
+    add_table(
+        doc,
+        ["Metric", "Definition", "Engineering control"],
+        [
+            ["Precision", "TP divided by TP plus FP", "Measures prediction correctness"],
+            ["Recall", "TP divided by TP plus FN", "Measures ground-truth coverage"],
+            ["F1", "Harmonic mean of precision and recall", "Balances both failure modes"],
+            ["Revision gate", "Observation revision equals current scene", "Rejects stale truth"],
+            ["One-to-one match", "Each truth target matches once", "Prevents score inflation"],
+        ],
+        [1.35, 2.8, 2.7],
+    )
+    doc.add_heading("14 VII 4 Verification Addendum", level=1)
+    add_table(
+        doc,
+        ["ID range", "Coverage", "Objective"],
+        [
+            ["ADAS-T-035 to 038", "Contracts and truth", "Validate all perception target types"],
+            ["ADAS-T-039 to 041", "Deterministic scoring", "Validate exact one-to-one metrics"],
+            ["ADAS-T-042", "Revision gate", "Reject comparison against changed truth"],
+            ["ADAS-T-043 to 044", "RBAC and evidence", "Validate access and traceability"],
+        ],
+        [1.55, 2.55, 2.75],
+    )
+    doc.add_heading("15 Next Development", level=1)
+    doc.add_paragraph(
+        "VII-5 will add deterministic collision risk, lane departure, following-distance, "
+        "maneuver, and alert evaluation using the verified scene and perception evidence."
+    )
+    doc.add_heading("16 Study Exercises", level=1)
     bullets(
         doc,
         [
             "Create an urban crossing and calculate actor positions after two seconds.",
             "Repeat an advance with a stale revision and explain the stable conflict.",
             "Design a radar miss while preserving the scene truth.",
-            "Compare ENU coordinates with latitude and longitude for local simulation.",
+            "Submit one duplicate and one misclassified prediction and calculate the F1 score.",
         ],
     )
     doc.core_properties.title = "ATEP Volume VII ADAS Engineering Workbook"

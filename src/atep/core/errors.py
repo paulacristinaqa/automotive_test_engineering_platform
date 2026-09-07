@@ -85,6 +85,15 @@ class AdasObservationConflictError(ApplicationError):
         )
 
 
+class AdasPerceptionConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="adas_perception_conflict",
+            message="A perception result with this identifier already exists for the observation.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
 class DuplicateEmailError(ApplicationError):
     def __init__(self) -> None:
         super().__init__(

@@ -96,3 +96,27 @@ class AdasSensorObservation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     requested_by_user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
     )
+
+
+class AdasPerceptionResult(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "adas_perception_results"
+    __table_args__ = (
+        UniqueConstraint("sensor_observation_id", "result_id", name="uq_adas_perception_result"),
+        CheckConstraint("scene_revision >= 1", name="ck_adas_perception_revision"),
+    )
+
+    sensor_observation_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("adas_sensor_observations.id", ondelete="CASCADE"),
+        index=True,
+    )
+    result_id: Mapped[str] = mapped_column(String(64))
+    scene_revision: Mapped[int] = mapped_column(Integer)
+    model_name: Mapped[str] = mapped_column(String(120))
+    model_version: Mapped[str] = mapped_column(String(64))
+    predictions: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    overall_score: Mapped[dict[str, Any]] = mapped_column(JSON)
+    scores_by_target: Mapped[dict[str, Any]] = mapped_column(JSON)
+    requested_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )

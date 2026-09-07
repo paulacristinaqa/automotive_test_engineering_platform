@@ -614,6 +614,23 @@ def test_test_artifact_contracts_and_safe_pagination_are_published() -> None:
     assert "kind" in parameters
 
 
+def test_adas_perception_scoring_contracts_are_published() -> None:
+    schema = core_app.openapi()
+    paths = schema["paths"]
+    base = (
+        "/api/v1/vehicles/{vehicle_id}/adas/scenes/{scene_id}/sensors/{sensor_id}"
+        "/observations/{observation_id}/perception-results"
+    )
+    assert "post" in paths[base]
+    assert "get" in paths[f"{base}/{{result_id}}"]
+    command = schema["components"]["schemas"]["PerceptionResultCreate"]
+    assert command["properties"]["predictions"]["maxItems"] == 10_000
+    prediction = schema["components"]["schemas"]["PerceptionPrediction"]
+    confidence = prediction["properties"]["confidence"]
+    assert confidence["minimum"] == 0.0
+    assert confidence["maximum"] == 1.0
+
+
 def test_metrics_endpoint_is_operational_but_not_part_of_public_openapi() -> None:
     assert "/metrics" not in core_app.openapi()["paths"]
     response = TestClient(core_app).get("/metrics")

@@ -3,7 +3,14 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from atep.adas.perception_service import (
+    create_perception_result,
+    perception_response,
+    require_perception_result,
+)
 from atep.adas.schemas import (
+    PerceptionResultCreate,
+    PerceptionResultResponse,
     SensorConfigurationCreate,
     SensorConfigurationPage,
     SensorConfigurationResponse,
@@ -238,3 +245,62 @@ async def get_sensor_observation_endpoint(
         session, sensor_id=sensor.id, observation_id=observation_id
     )
     return observation_response(observation, sensor, scene)
+
+
+@router.post(
+    "/{scene_id}/sensors/{sensor_id}/observations/{observation_id}/perception-results",
+    response_model=PerceptionResultResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_perception_result_endpoint(
+    vehicle_id: str,
+    scene_id: str,
+    sensor_id: str,
+    observation_id: str,
+    command: PerceptionResultCreate,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(adas_manage)],
+) -> PerceptionResultResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    scene = await require_scene(session, vehicle_id=vehicle.id, scene_id=scene_id)
+    sensor = await require_sensor(session, scene_id=scene.id, sensor_id=sensor_id)
+    observation = await require_observation(
+        session, sensor_id=sensor.id, observation_id=observation_id
+    )
+    result = await create_perception_result(
+        session,
+        scene=scene,
+        observation=observation,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(result, attribute_names=["created_at"])
+    return perception_response(result, observation, scene)
+
+
+@router.get(
+    "/{scene_id}/sensors/{sensor_id}/observations/{observation_id}/perception-results/{result_id}",
+    response_model=PerceptionResultResponse,
+)
+async def get_perception_result_endpoint(
+    vehicle_id: str,
+    scene_id: str,
+    sensor_id: str,
+    observation_id: str,
+    result_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(adas_read)],
+) -> PerceptionResultResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    scene = await require_scene(session, vehicle_id=vehicle.id, scene_id=scene_id)
+    sensor = await require_sensor(session, scene_id=scene.id, sensor_id=sensor_id)
+    observation = await require_observation(
+        session, sensor_id=sensor.id, observation_id=observation_id
+    )
+    result = await require_perception_result(
+        session, observation_id=observation.id, result_id=result_id
+    )
+    return perception_response(result, observation, scene)
