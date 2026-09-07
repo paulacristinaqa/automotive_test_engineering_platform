@@ -68,7 +68,7 @@ def main() -> None:
     title.add_run("ATEP Volume VII ADAS Engineering Workbook")
     subtitle = doc.add_paragraph()
     subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    subtitle.add_run("Version 0.4.0   VII 1 through VII 4 Implemented").bold = True
+    subtitle.add_run("Version 0.5.0   VII 1 through VII 5 Implemented").bold = True
     doc.add_paragraph(
         "This workbook records the first engineering baseline for the ATEP ADAS volume. "
         "The world model provides deterministic sensor independent ground truth, so later "
@@ -78,10 +78,10 @@ def main() -> None:
         doc,
         ["Field", "Value"],
         [
-            ["Status", "VII-1 through VII-4 implemented and verified"],
+            ["Status", "VII-1 through VII-5 implemented and verified"],
             ["Technology", "FastAPI, PostgreSQL, SQLAlchemy, Alembic, Pydantic"],
             ["Cost", "Local first with no paid cloud or AI dependency"],
-            ["Next", "VII-5 planning and alerts"],
+            ["Next", "VII-6 ADAS test scenarios"],
         ],
         [1.5, 5.4],
     )
@@ -226,7 +226,7 @@ def main() -> None:
             "Focused ADAS and API contract tests pass in one process.",
             "Ruff formatting and static checks pass for the new module.",
             "mypy passes for the module and application composition.",
-            "Migrations 0044 through 0047 form one linear ADAS migration history.",
+            "Migrations 0044 through 0048 form one linear ADAS migration history.",
             "The implementation uses no GPU and no paid external service.",
         ],
     )
@@ -420,19 +420,52 @@ def main() -> None:
         ],
         [1.55, 2.55, 2.75],
     )
-    doc.add_heading("15 Next Development", level=1)
+    doc.add_page_break()
+    doc.add_heading("15 Planning and Alerts", level=1)
     doc.add_paragraph(
-        "VII-5 will add deterministic collision risk, lane departure, following-distance, "
-        "maneuver, and alert evaluation using the verified scene and perception evidence."
+        "VII-5 evaluates perceived actors, the declared ego lane, and perceived signal state. "
+        "Relative forward motion produces collision TTC and lead-vehicle distance, while nearest-"
+        "segment geometry produces lane-center offset. Ordered risks select one deterministic "
+        "maneuver and a stable alert sequence."
     )
-    doc.add_heading("16 Study Exercises", level=1)
+    add_table(
+        doc,
+        ["Decision input", "Evaluation", "Possible outcome"],
+        [
+            ["Perceived actors", "Forward path, relative speed, TTC", "Brake or emergency brake"],
+            ["Lead vehicle", "Minimum following distance", "Unsafe following warning"],
+            ["Ego lane", "Centerline offset and usable envelope", "Lane centering"],
+            ["Perceived signal", "Red classification", "Stop and critical alert"],
+            ["Concurrent risks", "Fixed maneuver priority", "Reproducible decision"],
+        ],
+        [1.55, 2.8, 2.3],
+    )
+    doc.add_heading("16 VII 5 Verification Addendum", level=1)
+    add_table(
+        doc,
+        ["ID range", "Coverage", "Objective"],
+        [
+            ["ADAS-T-045 to 047", "Thresholds and motion", "Validate bounds, distance, and TTC"],
+            ["ADAS-T-048 to 052", "Alerts and maneuvers", "Validate risk decisions and priority"],
+            ["ADAS-T-053", "Truth integrity", "Reject unknown lanes and stale revisions"],
+            ["ADAS-T-054 to 055", "RBAC and evidence", "Validate access and traceability"],
+        ],
+        [1.55, 2.55, 2.75],
+    )
+    doc.add_heading("17 Next Development", level=1)
+    doc.add_paragraph()
+    doc.add_paragraph(
+        "VII-6 will add NCAP-inspired ADAS scenarios, controlled fault injection, regression "
+        "evidence, and coverage measurement using the verified simulation pipeline."
+    )
+    doc.add_heading("18 Study Exercises", level=1)
     bullets(
         doc,
         [
-            "Create an urban crossing and calculate actor positions after two seconds.",
             "Repeat an advance with a stale revision and explain the stable conflict.",
             "Design a radar miss while preserving the scene truth.",
             "Submit one duplicate and one misclassified prediction and calculate the F1 score.",
+            "Compare braking decisions at TTC values above and below the emergency threshold.",
         ],
     )
     doc.core_properties.title = "ATEP Volume VII ADAS Engineering Workbook"

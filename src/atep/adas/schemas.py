@@ -50,6 +50,26 @@ class PerceptionTargetType(StrEnum):
     SIGNAL = "signal"
 
 
+class ManeuverType(StrEnum):
+    MAINTAIN_LANE = "maintain_lane"
+    LANE_CENTERING = "lane_centering"
+    BRAKE = "brake"
+    EMERGENCY_BRAKE = "emergency_brake"
+    STOP = "stop"
+
+
+class AdasAlertType(StrEnum):
+    FORWARD_COLLISION = "forward_collision"
+    UNSAFE_FOLLOWING_DISTANCE = "unsafe_following_distance"
+    LANE_DEPARTURE = "lane_departure"
+    RED_SIGNAL = "red_signal"
+
+
+class AlertSeverity(StrEnum):
+    WARNING = "warning"
+    CRITICAL = "critical"
+
+
 class Vector3(BaseModel):
     x: float = Field(ge=-1_000_000, le=1_000_000)
     y: float = Field(ge=-1_000_000, le=1_000_000)
@@ -316,5 +336,49 @@ class PerceptionResultResponse(BaseModel):
     predictions: list[PerceptionPrediction]
     overall_score: PerceptionScore
     scores_by_target: dict[PerceptionTargetType, PerceptionScore]
+    requested_by_user_id: UUID
+    created_at: datetime
+
+
+class PlanningEvaluationCreate(BaseModel):
+    evaluation_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]+$")
+    expected_scene_revision: int = Field(ge=1)
+    ego_lane_id: str = Field(min_length=1, max_length=64)
+    minimum_following_distance_m: float = Field(default=15, gt=0, le=200)
+    collision_warning_ttc_s: float = Field(default=4, ge=0.5, le=20)
+    emergency_brake_ttc_s: float = Field(default=1.5, ge=0.1, le=10)
+    lane_departure_margin_m: float = Field(default=0.2, ge=0, le=2)
+
+    @model_validator(mode="after")
+    def ttc_thresholds_are_ordered(self) -> "PlanningEvaluationCreate":
+        if self.emergency_brake_ttc_s >= self.collision_warning_ttc_s:
+            raise ValueError("emergency brake TTC must be lower than collision warning TTC")
+        return self
+
+
+class PlanningRiskMetrics(BaseModel):
+    nearest_lead_distance_m: float | None = Field(default=None, ge=0)
+    minimum_ttc_s: float | None = Field(default=None, ge=0)
+    lane_center_offset_m: float = Field(ge=0)
+    safe_following_distance: bool
+    lane_departure: bool
+    red_signal_detected: bool
+
+
+class AdasAlert(BaseModel):
+    alert_type: AdasAlertType
+    severity: AlertSeverity
+    message: str = Field(min_length=1, max_length=240)
+
+
+class PlanningEvaluationResponse(BaseModel):
+    id: UUID
+    evaluation_id: str
+    perception_result_id: str
+    scene_id: str
+    scene_revision: int
+    maneuver: ManeuverType
+    risk_metrics: PlanningRiskMetrics
+    alerts: list[AdasAlert]
     requested_by_user_id: UUID
     created_at: datetime

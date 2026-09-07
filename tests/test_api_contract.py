@@ -631,6 +631,22 @@ def test_adas_perception_scoring_contracts_are_published() -> None:
     assert confidence["maximum"] == 1.0
 
 
+def test_adas_planning_and_alert_contracts_are_published() -> None:
+    schema = core_app.openapi()
+    paths = schema["paths"]
+    base = (
+        "/api/v1/vehicles/{vehicle_id}/adas/scenes/{scene_id}/sensors/{sensor_id}"
+        "/observations/{observation_id}/perception-results/{result_id}/planning-evaluations"
+    )
+    assert "post" in paths[base]
+    assert "get" in paths[f"{base}/{{evaluation_id}}"]
+    command = schema["components"]["schemas"]["PlanningEvaluationCreate"]
+    assert command["properties"]["minimum_following_distance_m"]["maximum"] == 200.0
+    assert command["properties"]["collision_warning_ttc_s"]["maximum"] == 20.0
+    response = schema["components"]["schemas"]["PlanningEvaluationResponse"]
+    assert {"maneuver", "risk_metrics", "alerts"} <= set(response["required"])
+
+
 def test_metrics_endpoint_is_operational_but_not_part_of_public_openapi() -> None:
     assert "/metrics" not in core_app.openapi()["paths"]
     response = TestClient(core_app).get("/metrics")

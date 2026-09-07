@@ -98,3 +98,28 @@
 - **ADAS-T-042** Reject scoring after scene truth changes with `adas_scene_version_conflict`.
 - **ADAS-T-043** Verify `adas:read` and `adas:manage` protection on perception APIs.
 - **ADAS-T-044** Verify atomic, minimized audit and `atep.adas.perception.result.created.v1` evidence.
+
+## VII-5 Planning and alerts
+
+- **ADAS-F-028** Evaluate a planning decision from a persisted perception result and exact scene revision.
+- **ADAS-F-029** Calculate nearest lead-vehicle distance and minimum time to collision for perceived actors.
+- **ADAS-F-030** Measure ego lateral distance from the declared lane centerline.
+- **ADAS-F-031** Detect unsafe following distance, lane departure, forward collision risk, and red signals.
+- **ADAS-F-032** Select maintain-lane, lane-centering, brake, emergency-brake, or stop maneuvers deterministically.
+- **ADAS-F-033** Persist risk metrics, maneuver, alerts, input thresholds, audit, and outbox evidence.
+- **ADAS-F-034** Expose planning evaluation creation and retrieval APIs.
+- **ADAS-NF-011** Bound thresholds and require emergency-brake TTC below collision-warning TTC.
+- **ADAS-NF-012** Use only actors represented in perception output for actor-based planning risks.
+- **ADAS-NF-013** Reject planning when scene, perception, and command revisions do not match.
+
+- **ADAS-T-045** Reject invalid or unordered planning thresholds.
+- **ADAS-T-046** Verify a safe scene produces maintain-lane with no alerts.
+- **ADAS-T-047** Verify TTC uses relative forward speed and the nearest collision-path actor.
+- **ADAS-T-048** Verify critical forward-collision risk selects emergency braking.
+- **ADAS-T-049** Verify short lead distance produces an unsafe-following alert.
+- **ADAS-T-050** Verify lateral lane-envelope violation selects lane centering.
+- **ADAS-T-051** Verify a perceived red signal selects stop.
+- **ADAS-T-052** Verify maneuver priority is deterministic when multiple risks exist.
+- **ADAS-T-053** Reject unknown ego lane and changed scene revisions.
+- **ADAS-T-054** Verify `adas:read` and `adas:manage` protection on planning APIs.
+- **ADAS-T-055** Verify atomic, minimized audit and `atep.adas.planning.evaluation.created.v1` evidence.
