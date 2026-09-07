@@ -13,6 +13,8 @@ Volume VII begins with a deterministic, sensor-independent representation of the
 - `GET /api/v1/vehicles/{vehicle_id}/adas/scenes/{scene_id}/sensors`
 - `POST /api/v1/vehicles/{vehicle_id}/adas/scenes/{scene_id}/sensors/{sensor_id}/observations`
 - `GET /api/v1/vehicles/{vehicle_id}/adas/scenes/{scene_id}/sensors/{sensor_id}/observations/{observation_id}`
+- `POST /api/v1/vehicles/{vehicle_id}/adas/scenes/{scene_id}/sensors/{sensor_id}/observations/{observation_id}/perception-results`
+- `GET /api/v1/vehicles/{vehicle_id}/adas/scenes/{scene_id}/sensors/{sensor_id}/observations/{observation_id}/perception-results/{result_id}`
 
 Reads require `adas:read`; mutations require `adas:manage`. A scene uses an ENU coordinate frame, road and lane geometry, one ego vehicle, and bounded ground-truth actors. Advance operations apply constant velocity for a bounded logical duration and require the current revision.
 
@@ -23,3 +25,5 @@ VII-2 adds weather, precipitation, visibility, ambient illumination, temperature
 No paid service is required. PostgreSQL persists scenes, while the existing audit and transactional outbox mechanisms provide traceability and integration events.
 
 VII-3 derives camera, radar, and LiDAR observations from a fixed scene revision. The simulator applies mount pose, range, horizontal field of view, environmental visibility, angular occlusion, latency metadata, deterministic seed-based position noise, and sensor-sensitive confidence. Observations are persisted separately from scene truth, allowing later perception scoring and exact evidence retrieval.
+
+VII-4 accepts perception outputs for objects, pedestrians, lanes, signs, and signals. Predictions reference stable truth identifiers and classifications. A one-to-one matcher produces true-positive, false-positive, and false-negative counts plus precision, recall, and F1 overall and by target type. Actor truth is limited to the persisted sensor observation; lane and traffic-control truth comes from the same scene revision. Scoring is rejected if that scene has changed, preventing comparison with stale truth.

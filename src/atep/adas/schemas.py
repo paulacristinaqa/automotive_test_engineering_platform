@@ -42,6 +42,14 @@ class SensorType(StrEnum):
     LIDAR = "lidar"
 
 
+class PerceptionTargetType(StrEnum):
+    OBJECT = "object"
+    PEDESTRIAN = "pedestrian"
+    LANE = "lane"
+    SIGN = "sign"
+    SIGNAL = "signal"
+
+
 class Vector3(BaseModel):
     x: float = Field(ge=-1_000_000, le=1_000_000)
     y: float = Field(ge=-1_000_000, le=1_000_000)
@@ -262,5 +270,51 @@ class SensorObservationResponse(BaseModel):
     seed: int
     detections: list[SensorDetection]
     metrics: dict[str, int | float]
+    requested_by_user_id: UUID
+    created_at: datetime
+
+
+class PerceptionPrediction(BaseModel):
+    prediction_id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]+$")
+    target_type: PerceptionTargetType
+    ground_truth_id: str = Field(min_length=1, max_length=64)
+    classification: str = Field(min_length=1, max_length=64)
+    confidence: float = Field(ge=0, le=1)
+
+
+class PerceptionResultCreate(BaseModel):
+    result_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]+$")
+    model_name: str = Field(min_length=1, max_length=120)
+    model_version: str = Field(min_length=1, max_length=64)
+    predictions: list[PerceptionPrediction] = Field(default_factory=list, max_length=10_000)
+
+    @model_validator(mode="after")
+    def prediction_identifiers_are_unique(self) -> "PerceptionResultCreate":
+        identifiers = [item.prediction_id for item in self.predictions]
+        if len(identifiers) != len(set(identifiers)):
+            raise ValueError("prediction identifiers must be unique")
+        return self
+
+
+class PerceptionScore(BaseModel):
+    true_positive: int = Field(ge=0)
+    false_positive: int = Field(ge=0)
+    false_negative: int = Field(ge=0)
+    precision: float = Field(ge=0, le=1)
+    recall: float = Field(ge=0, le=1)
+    f1_score: float = Field(ge=0, le=1)
+
+
+class PerceptionResultResponse(BaseModel):
+    id: UUID
+    result_id: str
+    observation_id: str
+    scene_id: str
+    scene_revision: int
+    model_name: str
+    model_version: str
+    predictions: list[PerceptionPrediction]
+    overall_score: PerceptionScore
+    scores_by_target: dict[PerceptionTargetType, PerceptionScore]
     requested_by_user_id: UUID
     created_at: datetime

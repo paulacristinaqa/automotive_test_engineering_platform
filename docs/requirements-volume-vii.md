@@ -76,3 +76,25 @@
 - **ADAS-T-032** Verify sensor and observation identity conflicts are stable.
 - **ADAS-T-033** Verify `adas:read` and `adas:manage` protection on all sensor APIs.
 - **ADAS-T-034** Verify atomic, minimized audit and outbox evidence.
+
+## VII-4 Perception and ground-truth scoring
+
+- **ADAS-F-022** Submit persisted perception results for an exact sensor observation.
+- **ADAS-F-023** Represent object, pedestrian, lane, sign, and signal predictions.
+- **ADAS-F-024** Associate predictions with stable ground-truth identifiers and classifications.
+- **ADAS-F-025** Score predictions one-to-one as true positives, false positives, and false negatives.
+- **ADAS-F-026** Calculate deterministic precision, recall, and F1 overall and by target type.
+- **ADAS-F-027** Expose perception result creation and retrieval APIs.
+- **ADAS-NF-009** Reject scoring when the current scene revision differs from the observation revision.
+- **ADAS-NF-010** Keep operational evidence free from complete prediction payloads.
+
+- **ADAS-T-035** Reject duplicate prediction identifiers and out-of-range confidence.
+- **ADAS-T-036** Verify object and pedestrian truth is limited to actors present in the observation.
+- **ADAS-T-037** Verify lane truth is derived from the authoritative road model.
+- **ADAS-T-038** Verify sign and signal truth includes type-specific classifications and state.
+- **ADAS-T-039** Verify perfect predictions produce precision, recall, and F1 of one.
+- **ADAS-T-040** Verify duplicate predictions cannot match one truth item twice.
+- **ADAS-T-041** Verify misclassification produces one false positive and one false negative.
+- **ADAS-T-042** Reject scoring after scene truth changes with `adas_scene_version_conflict`.
+- **ADAS-T-043** Verify `adas:read` and `adas:manage` protection on perception APIs.
+- **ADAS-T-044** Verify atomic, minimized audit and `atep.adas.perception.result.created.v1` evidence.
