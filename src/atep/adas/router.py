@@ -4,11 +4,25 @@ from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atep.adas.schemas import (
+    SensorConfigurationCreate,
+    SensorConfigurationPage,
+    SensorConfigurationResponse,
+    SensorObservationCreate,
+    SensorObservationResponse,
     WorldSceneAdvance,
     WorldSceneContextUpdate,
     WorldSceneCreate,
     WorldScenePage,
     WorldSceneResponse,
+)
+from atep.adas.sensor_service import (
+    capture_observation,
+    create_sensor,
+    list_sensors,
+    observation_response,
+    require_observation,
+    require_sensor,
+    sensor_response,
 )
 from atep.adas.service import (
     advance_scene,
@@ -126,3 +140,101 @@ async def update_scene_context_endpoint(
     await session.commit()
     await session.refresh(scene, attribute_names=["updated_at"])
     return scene_response(scene, vehicle)
+
+
+@router.post(
+    "/{scene_id}/sensors",
+    response_model=SensorConfigurationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_sensor_endpoint(
+    vehicle_id: str,
+    scene_id: str,
+    command: SensorConfigurationCreate,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(adas_manage)],
+) -> SensorConfigurationResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    scene = await require_scene(session, vehicle_id=vehicle.id, scene_id=scene_id)
+    sensor = await create_sensor(
+        session,
+        scene=scene,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(sensor, attribute_names=["created_at", "updated_at"])
+    return sensor_response(sensor, scene)
+
+
+@router.get("/{scene_id}/sensors", response_model=SensorConfigurationPage)
+async def list_sensors_endpoint(
+    vehicle_id: str,
+    scene_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(adas_read)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
+) -> SensorConfigurationPage:
+    vehicle = await require_vehicle(session, vehicle_id)
+    scene = await require_scene(session, vehicle_id=vehicle.id, scene_id=scene_id)
+    sensors, total = await list_sensors(session, scene_id=scene.id, limit=limit, offset=offset)
+    return SensorConfigurationPage(
+        items=[sensor_response(item, scene) for item in sensors],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.post(
+    "/{scene_id}/sensors/{sensor_id}/observations",
+    response_model=SensorObservationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def capture_sensor_observation_endpoint(
+    vehicle_id: str,
+    scene_id: str,
+    sensor_id: str,
+    command: SensorObservationCreate,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(adas_manage)],
+) -> SensorObservationResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    scene = await require_scene(session, vehicle_id=vehicle.id, scene_id=scene_id)
+    sensor = await require_sensor(session, scene_id=scene.id, sensor_id=sensor_id)
+    observation = await capture_observation(
+        session,
+        scene=scene,
+        sensor=sensor,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(observation, attribute_names=["created_at"])
+    return observation_response(observation, sensor, scene)
+
+
+@router.get(
+    "/{scene_id}/sensors/{sensor_id}/observations/{observation_id}",
+    response_model=SensorObservationResponse,
+)
+async def get_sensor_observation_endpoint(
+    vehicle_id: str,
+    scene_id: str,
+    sensor_id: str,
+    observation_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(adas_read)],
+) -> SensorObservationResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    scene = await require_scene(session, vehicle_id=vehicle.id, scene_id=scene_id)
+    sensor = await require_sensor(session, scene_id=scene.id, sensor_id=sensor_id)
+    observation = await require_observation(
+        session, sensor_id=sensor.id, observation_id=observation_id
+    )
+    return observation_response(observation, sensor, scene)

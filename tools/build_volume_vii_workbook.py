@@ -68,7 +68,7 @@ def main() -> None:
     title.add_run("ATEP Volume VII ADAS Engineering Workbook")
     subtitle = doc.add_paragraph()
     subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    subtitle.add_run("Version 0.2.0   VII 1 and VII 2 Implemented").bold = True
+    subtitle.add_run("Version 0.3.0   VII 1 through VII 3 Implemented").bold = True
     doc.add_paragraph(
         "This workbook records the first engineering baseline for the ATEP ADAS volume. "
         "The world model provides deterministic sensor independent ground truth, so later "
@@ -78,10 +78,10 @@ def main() -> None:
         doc,
         ["Field", "Value"],
         [
-            ["Status", "VII-1 and VII-2 implemented and verified"],
+            ["Status", "VII-1 through VII-3 implemented and verified"],
             ["Technology", "FastAPI, PostgreSQL, SQLAlchemy, Alembic, Pydantic"],
             ["Cost", "Local first with no paid cloud or AI dependency"],
-            ["Next", "VII-3 camera radar and LiDAR sensor simulation"],
+            ["Next", "VII-4 perception and ground truth scoring"],
         ],
         [1.5, 5.4],
     )
@@ -226,7 +226,7 @@ def main() -> None:
             "Focused ADAS and API contract tests pass in one process.",
             "Ruff formatting and static checks pass for the new module.",
             "mypy passes for the module and application composition.",
-            "Migrations 0044 and 0045 form one linear ADAS migration history.",
+            "Migrations 0044 through 0046 form one linear ADAS migration history.",
             "The implementation uses no GPU and no paid external service.",
         ],
     )
@@ -323,12 +323,78 @@ def main() -> None:
         ],
         [1.55, 2.55, 2.75],
     )
-    doc.add_heading("11 Next Development", level=1)
+    doc.add_heading("11 Deterministic Sensor Simulation", level=1)
     doc.add_paragraph(
-        "VII-3 will add camera, radar, and LiDAR observation models with deterministic noise, "
-        "latency, range, field of view, and occlusion without changing scene ground truth."
+        "VII-3 adds persisted camera, radar, and LiDAR configurations and observations. "
+        "Every observation identifies its scene revision, captured logical time, latency-adjusted "
+        "observation time, and deterministic seed while leaving scene ground truth unchanged."
     )
-    doc.add_heading("12 Study Exercises", level=1)
+    add_table(
+        doc,
+        ["Mechanism", "Implementation", "Verification objective"],
+        [
+            [
+                "Geometry",
+                "Mount pose, yaw, range, and horizontal field of view",
+                "Exclude actors outside the sensor envelope",
+            ],
+            [
+                "Occlusion",
+                "Near-to-far angular coverage",
+                "Hide aligned actors behind nearer actors",
+            ],
+            [
+                "Noise",
+                "SHA-256 seed-derived bounded position offsets",
+                "Reproduce identical detections",
+            ],
+            [
+                "Environment",
+                "Visibility range and sensor-sensitive confidence",
+                "Represent rain, fog, snow, and low light",
+            ],
+            [
+                "Evidence",
+                "Persisted observation plus minimized audit and outbox event",
+                "Retain traceability without event bloat",
+            ],
+        ],
+        [1.4, 2.9, 2.55],
+    )
+    doc.add_heading("12 VII 3 Verification Addendum", level=1)
+    add_table(
+        doc,
+        ["ID range", "Coverage", "Objective"],
+        [
+            [
+                "ADAS-T-023 to 025",
+                "Bounds, FOV, and range",
+                "Validate configuration and spatial filtering",
+            ],
+            [
+                "ADAS-T-026 to 029",
+                "Occlusion, noise, and environment",
+                "Validate deterministic sensor effects",
+            ],
+            [
+                "ADAS-T-030 to 032",
+                "Revision, time, and identity",
+                "Validate stable persisted evidence",
+            ],
+            [
+                "ADAS-T-033 to 034",
+                "RBAC, audit, and events",
+                "Validate access and atomic traceability",
+            ],
+        ],
+        [1.55, 2.55, 2.75],
+    )
+    doc.add_heading("13 Next Development", level=1)
+    doc.add_paragraph(
+        "VII-4 will add perception outputs for objects, lanes, signs, signals, and pedestrians, "
+        "then score them against scene truth and persisted sensor observations."
+    )
+    doc.add_heading("14 Study Exercises", level=1)
     bullets(
         doc,
         [

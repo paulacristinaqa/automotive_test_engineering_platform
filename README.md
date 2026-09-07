@@ -371,7 +371,7 @@ operational guidance, and review worksheets.
 | IV | CAN Network | Implemented — increments IV-1 through IV-7 |
 | V | Diagnostics | Baseline complete — increments V-1 through V-7 implemented |
 | VI | Electric Vehicle | Baseline complete — increments VI-1 through VI-7 implemented |
-| VII | ADAS | VII-1 world model and VII-2 environment and traffic controls implemented |
+| VII | ADAS | VII-1 through VII-3 world, environment, traffic, trajectory, and sensor simulation implemented |
 | VII | ADAS | Planned |
 | VIII | Test Framework | Planned |
 | IX | AI Test Engineer | Planned |
