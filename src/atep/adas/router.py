@@ -13,7 +13,16 @@ from atep.adas.planning_service import (
     planning_response,
     require_planning_evaluation,
 )
+from atep.adas.scenario_service import (
+    execute_scenario,
+    list_scenario_executions,
+    require_scenario_execution,
+    scenario_response,
+)
 from atep.adas.schemas import (
+    AdasScenarioExecute,
+    AdasScenarioPage,
+    AdasScenarioResponse,
     PerceptionResultCreate,
     PerceptionResultResponse,
     PlanningEvaluationCreate,
@@ -46,6 +55,7 @@ from atep.adas.service import (
     scene_response,
     update_scene_context,
 )
+from atep.core.errors import ResourceNotFoundError
 from atep.db.session import get_session
 from atep.identity.dependencies import require_permissions
 from atep.identity.models import User
@@ -380,3 +390,117 @@ async def get_planning_evaluation_endpoint(
         session, perception_result_id=perception.id, evaluation_id=evaluation_id
     )
     return planning_response(evaluation, perception, scene)
+
+
+@router.post(
+    "/{scene_id}/sensors/{sensor_id}/observations/{observation_id}/perception-results/"
+    "{result_id}/test-scenarios",
+    response_model=AdasScenarioResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def execute_adas_scenario_endpoint(
+    vehicle_id: str,
+    scene_id: str,
+    sensor_id: str,
+    observation_id: str,
+    result_id: str,
+    command: AdasScenarioExecute,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(adas_manage)],
+) -> AdasScenarioResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    scene = await require_scene(session, vehicle_id=vehicle.id, scene_id=scene_id)
+    sensor = await require_sensor(session, scene_id=scene.id, sensor_id=sensor_id)
+    observation = await require_observation(
+        session, sensor_id=sensor.id, observation_id=observation_id
+    )
+    perception = await require_perception_result(
+        session, observation_id=observation.id, result_id=result_id
+    )
+    execution, duplicate = await execute_scenario(
+        session,
+        scene=scene,
+        perception=perception,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    if not duplicate:
+        await session.refresh(execution, attribute_names=["created_at"])
+    return scenario_response(
+        execution, scene=scene, perception=perception, duplicate=duplicate
+    )
+
+
+@router.get(
+    "/{scene_id}/sensors/{sensor_id}/observations/{observation_id}/perception-results/"
+    "{result_id}/test-scenarios",
+    response_model=AdasScenarioPage,
+)
+async def list_adas_scenarios_endpoint(
+    vehicle_id: str,
+    scene_id: str,
+    sensor_id: str,
+    observation_id: str,
+    result_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(adas_read)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
+) -> AdasScenarioPage:
+    vehicle = await require_vehicle(session, vehicle_id)
+    scene = await require_scene(session, vehicle_id=vehicle.id, scene_id=scene_id)
+    sensor = await require_sensor(session, scene_id=scene.id, sensor_id=sensor_id)
+    observation = await require_observation(
+        session, sensor_id=sensor.id, observation_id=observation_id
+    )
+    perception = await require_perception_result(
+        session, observation_id=observation.id, result_id=result_id
+    )
+    items, total = await list_scenario_executions(
+        session,
+        scene_id=scene.id,
+        perception_result_id=perception.id,
+        limit=limit,
+        offset=offset,
+    )
+    return AdasScenarioPage(
+        items=[scenario_response(item, scene=scene, perception=perception) for item in items],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get(
+    "/{scene_id}/sensors/{sensor_id}/observations/{observation_id}/perception-results/"
+    "{result_id}/test-scenarios/{execution_id}",
+    response_model=AdasScenarioResponse,
+)
+async def get_adas_scenario_endpoint(
+    vehicle_id: str,
+    scene_id: str,
+    sensor_id: str,
+    observation_id: str,
+    result_id: str,
+    execution_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(adas_read)],
+) -> AdasScenarioResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    scene = await require_scene(session, vehicle_id=vehicle.id, scene_id=scene_id)
+    sensor = await require_sensor(session, scene_id=scene.id, sensor_id=sensor_id)
+    observation = await require_observation(
+        session, sensor_id=sensor.id, observation_id=observation_id
+    )
+    perception = await require_perception_result(
+        session, observation_id=observation.id, result_id=result_id
+    )
+    execution = await require_scenario_execution(
+        session, scene_id=scene.id, execution_id=execution_id
+    )
+    if execution.perception_result_id != perception.id:
+        raise ResourceNotFoundError("adas_test_scenario")
+    return scenario_response(execution, scene=scene, perception=perception)

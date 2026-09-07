@@ -106,6 +106,25 @@ class AdasPlanningConflictError(ApplicationError):
         )
 
 
+class AdasScenarioConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="adas_scenario_execution_conflict",
+            message="The scenario execution identifier is already used by another request.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class AdasScenarioContractError(ApplicationError):
+    def __init__(self, reason: str) -> None:
+        super().__init__(
+            code="adas_scenario_contract_error",
+            message="The ADAS scenario contract is not satisfied.",
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            details={"reason": reason},
+        )
+
+
 class DuplicateEmailError(ApplicationError):
     def __init__(self) -> None:
         super().__init__(

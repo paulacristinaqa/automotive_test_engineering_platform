@@ -70,6 +70,23 @@ class AlertSeverity(StrEnum):
     CRITICAL = "critical"
 
 
+class AdasScenarioType(StrEnum):
+    AEB_CAR_TO_CAR = "aeb_car_to_car"
+    AEB_PEDESTRIAN = "aeb_pedestrian"
+    LANE_SUPPORT = "lane_support"
+    TRAFFIC_SIGNAL_COMPLIANCE = "traffic_signal_compliance"
+
+
+class AdasFaultType(StrEnum):
+    DROP_PREDICTION = "drop_prediction"
+    MISCLASSIFY_PREDICTION = "misclassify_prediction"
+
+
+class ScenarioStatus(StrEnum):
+    PASSED = "passed"
+    FAILED = "failed"
+
+
 class Vector3(BaseModel):
     x: float = Field(ge=-1_000_000, le=1_000_000)
     y: float = Field(ge=-1_000_000, le=1_000_000)
@@ -382,3 +399,93 @@ class PlanningEvaluationResponse(BaseModel):
     alerts: list[AdasAlert]
     requested_by_user_id: UUID
     created_at: datetime
+
+
+class AdasFaultInjection(BaseModel):
+    fault_type: AdasFaultType
+    prediction_id: str = Field(min_length=1, max_length=64)
+    replacement_classification: str | None = Field(default=None, min_length=1, max_length=64)
+
+    @model_validator(mode="after")
+    def replacement_matches_fault(self) -> "AdasFaultInjection":
+        if (
+            self.fault_type == AdasFaultType.MISCLASSIFY_PREDICTION
+            and self.replacement_classification is None
+        ):
+            raise ValueError("misclassification requires replacement_classification")
+        if (
+            self.fault_type == AdasFaultType.DROP_PREDICTION
+            and self.replacement_classification is not None
+        ):
+            raise ValueError("drop prediction does not accept replacement_classification")
+        return self
+
+
+class AdasScenarioExecute(BaseModel):
+    execution_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]+$")
+    scenario_type: AdasScenarioType
+    expected_scene_revision: int = Field(ge=1)
+    ego_lane_id: str = Field(min_length=1, max_length=64)
+    expected_maneuver: ManeuverType
+    required_alerts: list[AdasAlertType] = Field(default_factory=list, max_length=4)
+    minimum_overall_f1: float = Field(default=0, ge=0, le=1)
+    minimum_following_distance_m: float = Field(default=15, gt=0, le=200)
+    collision_warning_ttc_s: float = Field(default=4, ge=0.5, le=20)
+    emergency_brake_ttc_s: float = Field(default=1.5, ge=0.1, le=10)
+    lane_departure_margin_m: float = Field(default=0.2, ge=0, le=2)
+    fault_injections: list[AdasFaultInjection] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def scenario_invariants(self) -> "AdasScenarioExecute":
+        if self.emergency_brake_ttc_s >= self.collision_warning_ttc_s:
+            raise ValueError("emergency brake TTC must be lower than collision warning TTC")
+        if len(self.required_alerts) != len(set(self.required_alerts)):
+            raise ValueError("required alerts must be unique")
+        prediction_ids = [item.prediction_id for item in self.fault_injections]
+        if len(prediction_ids) != len(set(prediction_ids)):
+            raise ValueError("a prediction can receive at most one fault injection")
+        return self
+
+
+class AdasScenarioAssertion(BaseModel):
+    name: str
+    passed: bool
+    expected: str
+    observed: str
+
+
+class AdasScenarioCoverage(BaseModel):
+    scenario_type: AdasScenarioType
+    target_types: list[PerceptionTargetType]
+    alert_types: list[AdasAlertType]
+    maneuver: ManeuverType
+    fault_types: list[AdasFaultType]
+    assertions_passed: int = Field(ge=0)
+    assertions_total: int = Field(ge=1)
+    assertion_coverage: float = Field(ge=0, le=1)
+
+
+class AdasScenarioResponse(BaseModel):
+    id: UUID
+    execution_id: str
+    scene_id: str
+    perception_result_id: str
+    scenario_type: AdasScenarioType
+    scene_revision: int
+    status: ScenarioStatus
+    duplicate: bool = False
+    maneuver: ManeuverType
+    alerts: list[AdasAlert]
+    assertions: list[AdasScenarioAssertion]
+    fault_injections: list[AdasFaultInjection]
+    coverage: AdasScenarioCoverage
+    regression_fingerprint: str
+    requested_by_user_id: UUID
+    created_at: datetime
+
+
+class AdasScenarioPage(BaseModel):
+    items: list[AdasScenarioResponse]
+    total: int
+    limit: int
+    offset: int

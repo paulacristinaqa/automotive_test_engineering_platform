@@ -647,6 +647,25 @@ def test_adas_planning_and_alert_contracts_are_published() -> None:
     assert {"maneuver", "risk_metrics", "alerts"} <= set(response["required"])
 
 
+def test_adas_test_scenario_contracts_and_safe_pagination_are_published() -> None:
+    schema = core_app.openapi()
+    paths = schema["paths"]
+    base = (
+        "/api/v1/vehicles/{vehicle_id}/adas/scenes/{scene_id}/sensors/{sensor_id}"
+        "/observations/{observation_id}/perception-results/{result_id}/test-scenarios"
+    )
+    assert {"get", "post"} <= set(paths[base])
+    assert "get" in paths[f"{base}/{{execution_id}}"]
+    parameters = {item["name"]: item["schema"] for item in paths[base]["get"]["parameters"]}
+    assert parameters["limit"]["maximum"] == 100
+    assert parameters["offset"]["maximum"] == 1_000_000
+    command = schema["components"]["schemas"]["AdasScenarioExecute"]
+    assert command["properties"]["fault_injections"]["maxItems"] == 20
+    assert command["properties"]["minimum_overall_f1"]["maximum"] == 1.0
+    response = schema["components"]["schemas"]["AdasScenarioResponse"]
+    assert {"regression_fingerprint", "coverage", "assertions"} <= set(response["required"])
+
+
 def test_metrics_endpoint_is_operational_but_not_part_of_public_openapi() -> None:
     assert "/metrics" not in core_app.openapi()["paths"]
     response = TestClient(core_app).get("/metrics")

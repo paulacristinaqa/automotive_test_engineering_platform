@@ -5,9 +5,9 @@
 - [x] **VII-3 Sensor simulation** - camera, radar, and LiDAR observations with noise, latency, range, field of view, and occlusion.
 - [x] **VII-4 Perception** - object, lane, sign, signal, and pedestrian detections measured against ground truth.
 - [x] **VII-5 Planning and alerts** - collision risk, lane departure, following distance, maneuvers, and warnings.
-- [ ] **VII-6 ADAS test scenarios** - NCAP-inspired cases, fault injection, regression evidence, and coverage.
+- [x] **VII-6 ADAS test scenarios** - NCAP-inspired cases, fault injection, regression evidence, and coverage.
 - [ ] **VII-7 Cross-platform integration** - ATEP test runs, Vehicle Gateway, CarSystemUI evidence, dashboard streams, and workbook completion.
 
 ## Next recommended increment
 
-VII-6 introduces NCAP-inspired ADAS scenarios, controlled fault injection, regression evidence, and coverage measurement.
+VII-7 connects ADAS evidence to ATEP test runs, Vehicle Gateway, CarSystemUI, and dashboard streams.
