@@ -176,3 +176,29 @@ class AdasTestScenarioExecution(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     requested_by_user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
     )
+
+
+class AdasIntegrationEvidence(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "adas_integration_evidence"
+    __table_args__ = (
+        UniqueConstraint("scenario_execution_id", name="uq_adas_integration_scenario"),
+        UniqueConstraint("evidence_id", name="uq_adas_integration_evidence_id"),
+    )
+
+    scenario_execution_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("adas_test_scenario_executions.id", ondelete="CASCADE"),
+        index=True,
+    )
+    test_run_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("test_runs.id", ondelete="RESTRICT"), index=True
+    )
+    evidence_id: Mapped[str] = mapped_column(String(64))
+    request_hash: Mapped[str] = mapped_column(String(64))
+    telemetry_event_ids: Mapped[list[str]] = mapped_column(JSON)
+    vehicle_command_ids: Mapped[list[str]] = mapped_column(JSON)
+    carsystemui_evidence: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    dashboard_summary: Mapped[dict[str, Any]] = mapped_column(JSON)
+    requested_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )

@@ -6,8 +6,8 @@
 - [x] **VII-4 Perception** - object, lane, sign, signal, and pedestrian detections measured against ground truth.
 - [x] **VII-5 Planning and alerts** - collision risk, lane departure, following distance, maneuvers, and warnings.
 - [x] **VII-6 ADAS test scenarios** - NCAP-inspired cases, fault injection, regression evidence, and coverage.
-- [ ] **VII-7 Cross-platform integration** - ATEP test runs, Vehicle Gateway, CarSystemUI evidence, dashboard streams, and workbook completion.
+- [x] **VII-7 Cross-platform integration** - ATEP test runs, Vehicle Gateway, CarSystemUI evidence, dashboard streams, and workbook completion.
 
 ## Next recommended increment
 
-VII-7 connects ADAS evidence to ATEP test runs, Vehicle Gateway, CarSystemUI, and dashboard streams.
+Volume VII baseline is complete. The next recommended increment is Volume VIII-1: test definition, reusable test-case contracts, and suite composition.

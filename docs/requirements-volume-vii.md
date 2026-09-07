@@ -152,3 +152,32 @@
 - **ADAS-T-066** Verify `adas:read`, `adas:manage`, and HTTP 403 behavior for scenario APIs.
 - **ADAS-T-067** Verify atomic audit and `atep.adas.test_scenario.completed.v1` evidence is minimized.
 - **ADAS-T-068** Verify migration `0049` upgrade and downgrade structure.
+
+## VII-7 Cross-platform integration
+
+- **ADAS-F-043** Correlate one persisted ADAS scenario with one ATEP test run for the same vehicle.
+- **ADAS-F-044** Reference existing Vehicle Gateway telemetry events and commands without copying their payloads into ADAS storage.
+- **ADAS-F-045** Retain bounded CarSystemUI evidence containing surface, connection state, displayed scenario status, client version, and timezone-aware capture time.
+- **ADAS-F-046** Reject telemetry, commands, test runs, or CarSystemUI evidence that is inconsistent with the scenario vehicle, run, or persisted status.
+- **ADAS-F-047** Produce a dashboard summary containing scenario status, maneuver, alerts, assertion coverage, regression fingerprint, and evidence counts.
+- **ADAS-F-048** Publish the dashboard summary to the existing authenticated test-run WebSocket channel after the database transaction commits.
+- **ADAS-F-049** Provide idempotent evidence creation and protected evidence retrieval APIs.
+- **ADAS-F-050** Atomically persist integration evidence, audit, and transactional outbox event.
+- **ADAS-NF-018** Bound telemetry and command references at 100 each and CarSystemUI observations at 50.
+- **ADAS-NF-019** Require unique evidence identifiers and timezone-aware client timestamps.
+- **ADAS-NF-020** Keep outbox and live-stream messages free from complete telemetry, command, and CarSystemUI payload collections.
+- **ADAS-NF-021** Treat Redis publication as best effort after durable commit so a live-stream outage cannot erase evidence.
+
+- **ADAS-T-069** Reject empty, duplicate, oversized, or timezone-naive integration evidence contracts.
+- **ADAS-T-070** Correlate a scenario and test run belonging to the same vehicle.
+- **ADAS-T-071** Reject a test run belonging to another vehicle.
+- **ADAS-T-072** Reject missing or cross-vehicle telemetry references.
+- **ADAS-T-073** Reject missing commands or commands assigned to another vehicle or test run.
+- **ADAS-T-074** Reject CarSystemUI evidence whose displayed status differs from persisted scenario status.
+- **ADAS-T-075** Verify deterministic dashboard summary values and bounded evidence counts.
+- **ADAS-T-076** Verify exact replay is idempotent and changed reuse returns `adas_integration_evidence_conflict`.
+- **ADAS-T-077** Verify `adas:read`, `adas:manage`, and HTTP 403 behavior on integration-evidence APIs.
+- **ADAS-T-078** Verify atomic minimized audit and `atep.adas.integration_evidence.created.v1` evidence.
+- **ADAS-T-079** Verify post-commit Redis publication uses the existing test-run channel and tolerates publication failure.
+- **ADAS-T-080** Verify the live message contains dashboard summary fields but excludes referenced payload collections.
+- **ADAS-T-081** Verify migration `0050` upgrade and downgrade structure.

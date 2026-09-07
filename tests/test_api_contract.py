@@ -666,6 +666,23 @@ def test_adas_test_scenario_contracts_and_safe_pagination_are_published() -> Non
     assert {"regression_fingerprint", "coverage", "assertions"} <= set(response["required"])
 
 
+def test_adas_cross_platform_evidence_contracts_are_published() -> None:
+    schema = core_app.openapi()
+    base = (
+        "/api/v1/vehicles/{vehicle_id}/adas/scenes/{scene_id}/test-scenarios/"
+        "{execution_id}/integration-evidence"
+    )
+    assert {"get", "post"} <= set(schema["paths"][base])
+    command = schema["components"]["schemas"]["AdasIntegrationEvidenceCreate"]
+    assert command["properties"]["telemetry_event_ids"]["maxItems"] == 100
+    assert command["properties"]["vehicle_command_ids"]["maxItems"] == 100
+    assert command["properties"]["carsystemui_evidence"]["maxItems"] == 50
+    response = schema["components"]["schemas"]["AdasIntegrationEvidenceResponse"]
+    assert {"dashboard_summary", "test_run_id", "scenario_execution_id"} <= set(
+        response["required"]
+    )
+
+
 def test_metrics_endpoint_is_operational_but_not_part_of_public_openapi() -> None:
     assert "/metrics" not in core_app.openapi()["paths"]
     response = TestClient(core_app).get("/metrics")

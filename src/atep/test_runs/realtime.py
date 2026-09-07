@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 
 import structlog
 from fastapi import WebSocket, WebSocketDisconnect
+from pydantic import BaseModel
 
 from atep.core.config import get_settings
 from atep.core.observability import Observability
@@ -26,9 +27,26 @@ async def publish_test_run_update(
     *,
     observability: Observability | None = None,
 ) -> None:
+    await publish_test_run_message(
+        redis_client,
+        run_id=event.test_run.run_id,
+        event=event,
+        event_type=getattr(event, "type", "atep.test_run.updated.v1"),
+        observability=observability,
+    )
+
+
+async def publish_test_run_message(
+    redis_client: object,
+    *,
+    run_id: str,
+    event: BaseModel,
+    event_type: str,
+    observability: Observability | None = None,
+) -> None:
     try:
         await redis_client.publish(  # type: ignore[attr-defined]
-            test_run_channel(event.test_run.run_id), event.model_dump_json()
+            test_run_channel(run_id), event.model_dump_json()
         )
         if observability is not None:
             observability.live_publish_attempts.labels("success").inc()
@@ -37,7 +55,8 @@ async def publish_test_run_update(
             observability.live_publish_attempts.labels("error").inc()
         log.warning(
             "test_run_live_update_unavailable",
-            run_id=event.test_run.run_id,
+            run_id=run_id,
+            event_type=event_type,
             error_type=type(exc).__name__,
         )
 

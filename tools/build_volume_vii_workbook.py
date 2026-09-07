@@ -68,7 +68,7 @@ def main() -> None:
     title.add_run("ATEP Volume VII ADAS Engineering Workbook")
     subtitle = doc.add_paragraph()
     subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    subtitle.add_run("Version 0.6.0   VII 1 through VII 6 Implemented").bold = True
+    subtitle.add_run("Version 0.7.0   Volume VII Baseline Complete").bold = True
     doc.add_paragraph(
         "This workbook records the first engineering baseline for the ATEP ADAS volume. "
         "The world model provides deterministic sensor independent ground truth, so later "
@@ -78,10 +78,10 @@ def main() -> None:
         doc,
         ["Field", "Value"],
         [
-            ["Status", "VII-1 through VII-6 implemented and verified"],
+            ["Status", "VII-1 through VII-7 implemented and verified"],
             ["Technology", "FastAPI, PostgreSQL, SQLAlchemy, Alembic, Pydantic"],
             ["Cost", "Local first with no paid cloud or AI dependency"],
-            ["Next", "VII-7 cross-platform integration"],
+            ["Next", "Volume VIII-1 test definitions and suite composition"],
         ],
         [1.5, 5.4],
     )
@@ -98,8 +98,8 @@ def main() -> None:
         [
             "In scope: creation, lookup, pagination, and constant velocity advancement.",
             "In scope: ego vehicle, vehicle, pedestrian, cyclist, and static obstacle actors.",
-            "Delivered next: environment, sensors, perception, planning, alerts, and scenarios.",
-            "Deferred: cross-platform test-run, Vehicle Gateway, CarSystemUI, and dashboard links.",
+            "Delivered: environment, sensors, perception, planning, alerts, and scenarios.",
+            "Delivered: cross-platform test-run, Gateway, CarSystemUI, and dashboard evidence.",
         ],
     )
 
@@ -226,7 +226,7 @@ def main() -> None:
             "Focused ADAS and API contract tests pass in one process.",
             "Ruff formatting and static checks pass for the new module.",
             "mypy passes for the module and application composition.",
-            "Migrations 0044 through 0049 form one linear ADAS migration history.",
+            "Migrations 0044 through 0050 form one linear ADAS migration history.",
             "The implementation uses no GPU and no paid external service.",
         ],
     )
@@ -514,24 +514,83 @@ def main() -> None:
         ],
         [1.55, 2.55, 2.75],
     )
-    doc.add_heading("20 Next Development", level=1)
+    doc.add_page_break()
+    doc.add_heading("20 Cross-Platform Evidence", level=1)
     doc.add_paragraph(
-        "VII-7 will connect ADAS scenario evidence to ATEP test runs, Vehicle Gateway, "
-        "CarSystemUI presentation, and real-time dashboard streams."
+        "VII-7 closes the ADAS baseline by correlating one persisted scenario execution with "
+        "an ATEP test run, Vehicle Gateway observations and commands, CarSystemUI presentation "
+        "evidence, and a minimized live dashboard update. Referential checks prevent evidence "
+        "from crossing vehicle or test-run boundaries."
     )
-    doc.add_heading("21 Study Exercises", level=1)
+    add_table(
+        doc,
+        ["Boundary", "Engineering control", "Purpose"],
+        [
+            [
+                "ATEP test run",
+                "Same vehicle and explicit run identity",
+                "Own the orchestration context",
+            ],
+            [
+                "Gateway telemetry",
+                "Existing event IDs from the same vehicle",
+                "Correlate observations",
+            ],
+            [
+                "Gateway commands",
+                "Existing command IDs from the same vehicle and run",
+                "Correlate actuation",
+            ],
+            [
+                "CarSystemUI",
+                "Surface, connection, status, version, and timestamp",
+                "Capture cockpit evidence",
+            ],
+            [
+                "Dashboard stream",
+                "Minimized summary published only after commit",
+                "Provide safe live feedback",
+            ],
+        ],
+        [1.45, 3.1, 2.1],
+    )
+    doc.add_heading("21 VII 7 Verification Addendum", level=1)
+    add_table(
+        doc,
+        ["ID range", "Coverage", "Objective"],
+        [
+            [
+                "ADAS-T-069 to 074",
+                "Contracts and correlation",
+                "Validate bounded cross-platform evidence",
+            ],
+            [
+                "ADAS-T-075 to 080",
+                "Replay, access, and live stream",
+                "Validate safety and observability",
+            ],
+            ["ADAS-T-081", "Migration", "Validate the evidence persistence schema"],
+        ],
+        [1.55, 2.55, 2.75],
+    )
+    doc.add_heading("22 Baseline Outcome and Next Development", level=1)
+    doc.add_paragraph(
+        "Volume VII now provides a complete deterministic ADAS engineering baseline from world "
+        "truth through cross-platform evidence. The next increment is Volume VIII-1: reusable "
+        "test definitions, test cases, and suite composition."
+    )
+    doc.add_heading("23 Study Exercises", level=1)
     bullets(
         doc,
         [
             "Repeat an advance with a stale revision and explain the stable conflict.",
-            "Submit one duplicate and one misclassified prediction and calculate the F1 score.",
             "Compare braking decisions at TTC values above and below the emergency threshold.",
-            "Drop the lead-vehicle prediction, compare fingerprints, and explain why these "
-            "scenarios are not official certification evidence.",
+            "Correlate one scenario with gateway and CarSystemUI evidence, then explain which "
+            "referential checks prevent cross-vehicle contamination.",
         ],
     )
     doc.core_properties.title = "ATEP Volume VII ADAS Engineering Workbook"
-    doc.core_properties.subject = "Deterministic ADAS world model engineering evidence"
+    doc.core_properties.subject = "Complete deterministic ADAS engineering evidence"
     doc.core_properties.author = "ATEP Engineering"
     doc.save(OUTPUT)
 

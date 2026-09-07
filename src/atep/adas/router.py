@@ -1,8 +1,15 @@
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from atep.adas.integration_service import (
+    create_integration_evidence,
+    integration_evidence_response,
+    require_integration_evidence,
+)
 from atep.adas.perception_service import (
     create_perception_result,
     perception_response,
@@ -20,9 +27,12 @@ from atep.adas.scenario_service import (
     scenario_response,
 )
 from atep.adas.schemas import (
+    AdasIntegrationEvidenceCreate,
+    AdasIntegrationEvidenceResponse,
     AdasScenarioExecute,
     AdasScenarioPage,
     AdasScenarioResponse,
+    AdasTestRunEvidenceStreamEvent,
     PerceptionResultCreate,
     PerceptionResultResponse,
     PlanningEvaluationCreate,
@@ -61,6 +71,10 @@ from atep.identity.dependencies import require_permissions
 from atep.identity.models import User
 from atep.identity.permissions import PermissionName
 from atep.identity.users_router import request_correlation_id
+from atep.test_runs.models import TestRun
+from atep.test_runs.realtime import publish_test_run_message
+from atep.test_runs.service import require_test_run
+from atep.vehicles.models import VehicleCommand, VehicleTelemetryEvent
 from atep.vehicles.service import require_vehicle
 
 router = APIRouter(prefix="/vehicles/{vehicle_id}/adas/scenes", tags=["adas"])
@@ -504,3 +518,103 @@ async def get_adas_scenario_endpoint(
     if execution.perception_result_id != perception.id:
         raise ResourceNotFoundError("adas_test_scenario")
     return scenario_response(execution, scene=scene, perception=perception)
+
+
+@router.post(
+    "/{scene_id}/test-scenarios/{execution_id}/integration-evidence",
+    response_model=AdasIntegrationEvidenceResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_adas_integration_evidence_endpoint(
+    vehicle_id: str,
+    scene_id: str,
+    execution_id: str,
+    command: AdasIntegrationEvidenceCreate,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(adas_manage)],
+) -> AdasIntegrationEvidenceResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    scene = await require_scene(session, vehicle_id=vehicle.id, scene_id=scene_id)
+    scenario = await require_scenario_execution(
+        session, scene_id=scene.id, execution_id=execution_id
+    )
+    test_run, _test_run_vehicle = await require_test_run(session, command.test_run_id)
+    telemetry_events = list(
+        await session.scalars(
+            select(VehicleTelemetryEvent).where(
+                VehicleTelemetryEvent.event_id.in_(command.telemetry_event_ids)
+            )
+        )
+    )
+    vehicle_commands = list(
+        await session.scalars(
+            select(VehicleCommand).where(
+                VehicleCommand.command_id.in_(command.vehicle_command_ids)
+            )
+        )
+    )
+    evidence, duplicate = await create_integration_evidence(
+        session,
+        scene=scene,
+        scenario=scenario,
+        test_run=test_run,
+        telemetry_events=telemetry_events,
+        vehicle_commands=vehicle_commands,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    if not duplicate:
+        await session.refresh(evidence, attribute_names=["created_at"])
+    response = integration_evidence_response(
+        evidence,
+        scene=scene,
+        scenario=scenario,
+        test_run=test_run,
+        duplicate=duplicate,
+    )
+    if not duplicate:
+        stream_event = AdasTestRunEvidenceStreamEvent(
+            run_id=test_run.run_id,
+            evidence_id=response.evidence_id,
+            scenario_execution_id=response.scenario_execution_id,
+            dashboard_summary=response.dashboard_summary,
+            occurred_at=datetime.now(UTC),
+        )
+        await publish_test_run_message(
+            request.app.state.redis,
+            run_id=test_run.run_id,
+            event=stream_event,
+            event_type=stream_event.type,
+            observability=request.app.state.observability,
+        )
+    return response
+
+
+@router.get(
+    "/{scene_id}/test-scenarios/{execution_id}/integration-evidence",
+    response_model=AdasIntegrationEvidenceResponse,
+)
+async def get_adas_integration_evidence_endpoint(
+    vehicle_id: str,
+    scene_id: str,
+    execution_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(adas_read)],
+) -> AdasIntegrationEvidenceResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    scene = await require_scene(session, vehicle_id=vehicle.id, scene_id=scene_id)
+    scenario = await require_scenario_execution(
+        session, scene_id=scene.id, execution_id=execution_id
+    )
+    evidence = await require_integration_evidence(
+        session, scenario_execution_id=scenario.id
+    )
+    test_run = await session.get(TestRun, evidence.test_run_id)
+    if test_run is None:
+        raise ResourceNotFoundError("test_run")
+    return integration_evidence_response(
+        evidence, scene=scene, scenario=scenario, test_run=test_run
+    )
