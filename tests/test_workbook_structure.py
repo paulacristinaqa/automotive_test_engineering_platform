@@ -7,6 +7,7 @@ def test_each_active_volume_has_an_independent_source_and_output() -> None:
     volume_iv = Path("tools/build_volume_iv_workbook.py").read_text(encoding="utf-8")
     volume_v = Path("tools/build_volume_v_workbook.py").read_text(encoding="utf-8")
     volume_vi = Path("tools/build_volume_vi_workbook.py").read_text(encoding="utf-8")
+    volume_viii = Path("tools/build_volume_viii_workbook.py").read_text(encoding="utf-8")
     assert '"workbook-volume-i.md"' in volume_i
     assert '"ATEP_Volume_I_Core_Platform_Engineering_Workbook.docx"' in volume_i
     assert '"workbook-volume-ii.md"' in volume_ii
@@ -17,6 +18,8 @@ def test_each_active_volume_has_an_independent_source_and_output() -> None:
     assert '"ATEP_Volume_V_Diagnostics_Engineering_Workbook.docx"' in volume_v
     assert '"workbook-volume-vi.md"' in volume_vi
     assert '"ATEP_Volume_VI_Electric_Vehicle_Engineering_Workbook.docx"' in volume_vi
+    assert '"workbook-volume-viii.md"' in volume_viii
+    assert '"ATEP_Volume_VIII_Test_Framework_Engineering_Workbook.docx"' in volume_viii
 
 
 def test_workbook_index_covers_all_planned_volumes() -> None:

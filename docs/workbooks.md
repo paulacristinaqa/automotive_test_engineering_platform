@@ -13,7 +13,7 @@ decisions while preserving cross-volume traceability.
 | V | Diagnostics | Baseline complete - V-1 through V-7 | `docs/workbook-volume-v.md` | `docs/ATEP_Volume_V_Diagnostics_Engineering_Workbook.docx` |
 | VI | Electric Vehicle | Baseline complete - VI-1 through VI-7 | `docs/workbook-volume-vi.md` | `docs/ATEP_Volume_VI_Electric_Vehicle_Engineering_Workbook.docx` |
 | VII | ADAS | Baseline complete - VII-1 through VII-7 | `docs/workbook-volume-vii.md` | `docs/ATEP_Volume_VII_ADAS_Engineering_Workbook.docx` |
-| VIII | Test Framework | Planned | To be created when development begins | To be created |
+| VIII | Test Framework | VIII-1 implemented | `docs/workbook-volume-viii.md` | `docs/ATEP_Volume_VIII_Test_Framework_Engineering_Workbook.docx` |
 | IX | AI Test Engineer | Planned | To be created when development begins | To be created |
 | X | Dashboard | Planned | To be created when development begins | To be created |
 | XI | DevOps | Planned | To be created when development begins | To be created |
@@ -31,6 +31,8 @@ decisions while preserving cross-volume traceability.
   arbitration, DBC, CAN FD, and network-fault behavior.
 - Volume VII owns ADAS ground truth, environments, traffic actors, sensors, perception, planning,
   alerts, and scenario evidence.
+- Volume VIII owns reusable test definitions, suites, execution policy, scheduling, regression,
+  performance, stress, fault injection, mutation testing, and test coverage.
 - Cross-volume integrations are referenced from both relevant workbooks, but the detailed design
   belongs to the workbook that owns the behavior.
 - Historical revision entries remain in the workbook where they were originally recorded; new

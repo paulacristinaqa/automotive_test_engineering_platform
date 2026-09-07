@@ -867,6 +867,44 @@ class TestArtifactConflictError(ApplicationError):
         )
 
 
+class TestDefinitionConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="test_definition_conflict",
+            message="The definition identifier was already used for different content.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class TestSuiteConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="test_suite_conflict",
+            message="The suite identifier was already used for different content.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class TestCatalogVersionConflictError(ApplicationError):
+    def __init__(self, *, current_version: int) -> None:
+        super().__init__(
+            code="test_catalog_version_conflict",
+            message="The test catalog resource was changed by another operation.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_version": current_version},
+        )
+
+
+class TestCatalogStateError(ApplicationError):
+    def __init__(self, *, current_status: str, requested_status: str) -> None:
+        super().__init__(
+            code="test_catalog_state_conflict",
+            message="The requested test catalog operation is not allowed in its state.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_status": current_status, "requested_status": requested_status},
+        )
+
+
 class TestArtifactTooLargeError(ApplicationError):
     def __init__(self, *, max_bytes: int) -> None:
         super().__init__(

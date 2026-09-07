@@ -34,6 +34,8 @@ class PermissionName(StrEnum):
     TEST_JOBS_MANAGE = "test_jobs:manage"
     TEST_ARTIFACTS_READ = "test_artifacts:read"
     TEST_ARTIFACTS_WRITE = "test_artifacts:write"
+    TEST_CATALOG_READ = "test_catalog:read"
+    TEST_CATALOG_MANAGE = "test_catalog:manage"
     PLATFORM_ADMIN = "platform:admin"
 
 
