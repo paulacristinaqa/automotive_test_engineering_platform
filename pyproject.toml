@@ -9,7 +9,7 @@ description = "Automotive Test Engineering Platform - Core Platform"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-  "aio-pika>=9.5,<10",
+  "aio-pika>=9.5,<11",
   "alembic>=1.14,<2",
   "asyncpg>=0.30,<1",
   "boto3>=1.43.49,<2",
@@ -23,9 +23,9 @@ dependencies = [
   "prometheus-client>=0.22,<1",
   "PyJWT>=2.10,<3",
   "python-multipart>=0.0.20,<1",
-  "redis>=5.2,<6",
+  "redis>=5.2,<9",
   "sqlalchemy[asyncio]>=2.0.36,<3",
-  "structlog>=24.4,<26",
+  "structlog>=24.4,<27",
   "uvicorn[standard]>=0.34,<1",
 ]
 
