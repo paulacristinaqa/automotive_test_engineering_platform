@@ -125,6 +125,25 @@ class AdasScenarioContractError(ApplicationError):
         )
 
 
+class AdasIntegrationEvidenceConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="adas_integration_evidence_conflict",
+            message="The ADAS integration evidence identifier is already used differently.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class AdasIntegrationEvidenceContractError(ApplicationError):
+    def __init__(self, reason: str) -> None:
+        super().__init__(
+            code="adas_integration_evidence_contract_error",
+            message="The cross-platform ADAS evidence is inconsistent.",
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            details={"reason": reason},
+        )
+
+
 class DuplicateEmailError(ApplicationError):
     def __init__(self) -> None:
         super().__init__(

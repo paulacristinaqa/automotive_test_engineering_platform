@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import StrEnum
+from typing import Annotated
 from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
@@ -85,6 +86,18 @@ class AdasFaultType(StrEnum):
 class ScenarioStatus(StrEnum):
     PASSED = "passed"
     FAILED = "failed"
+
+
+class CarSystemUiSurface(StrEnum):
+    TEST_RUN = "test_run"
+    ADAS_ALERTS = "adas_alerts"
+    DASHBOARD = "dashboard"
+
+
+class CarSystemUiConnectionState(StrEnum):
+    CONNECTED = "connected"
+    RECONNECTING = "reconnecting"
+    DISCONNECTED = "disconnected"
 
 
 class Vector3(BaseModel):
@@ -489,3 +502,79 @@ class AdasScenarioPage(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class CarSystemUiEvidence(BaseModel):
+    event_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]+$")
+    surface: CarSystemUiSurface
+    connection_state: CarSystemUiConnectionState
+    displayed_scenario_status: ScenarioStatus
+    client_version: str = Field(min_length=1, max_length=64)
+    captured_at: datetime
+
+    @model_validator(mode="after")
+    def timestamp_has_timezone(self) -> "CarSystemUiEvidence":
+        if self.captured_at.tzinfo is None or self.captured_at.utcoffset() is None:
+            raise ValueError("CarSystemUI evidence timestamps must include a UTC offset")
+        return self
+
+
+EvidenceReference = Annotated[
+    str, Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]+$")
+]
+
+
+class AdasIntegrationEvidenceCreate(BaseModel):
+    evidence_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]+$")
+    test_run_id: str = Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]+$")
+    telemetry_event_ids: list[EvidenceReference] = Field(default_factory=list, max_length=100)
+    vehicle_command_ids: list[EvidenceReference] = Field(default_factory=list, max_length=100)
+    carsystemui_evidence: list[CarSystemUiEvidence] = Field(default_factory=list, max_length=50)
+
+    @model_validator(mode="after")
+    def evidence_is_unique_and_present(self) -> "AdasIntegrationEvidenceCreate":
+        collections = (
+            self.telemetry_event_ids,
+            self.vehicle_command_ids,
+            [item.event_id for item in self.carsystemui_evidence],
+        )
+        if not any(collections):
+            raise ValueError("at least one cross-platform evidence reference is required")
+        if any(len(values) != len(set(values)) for values in collections):
+            raise ValueError("cross-platform evidence identifiers must be unique")
+        return self
+
+
+class AdasDashboardSummary(BaseModel):
+    scenario_status: ScenarioStatus
+    maneuver: ManeuverType
+    alert_types: list[AdasAlertType]
+    assertion_coverage: float = Field(ge=0, le=1)
+    regression_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    telemetry_event_count: int = Field(ge=0, le=100)
+    vehicle_command_count: int = Field(ge=0, le=100)
+    carsystemui_evidence_count: int = Field(ge=0, le=50)
+
+
+class AdasIntegrationEvidenceResponse(BaseModel):
+    id: UUID
+    evidence_id: str
+    scene_id: str
+    scenario_execution_id: str
+    test_run_id: str
+    telemetry_event_ids: list[str]
+    vehicle_command_ids: list[str]
+    carsystemui_evidence: list[CarSystemUiEvidence]
+    dashboard_summary: AdasDashboardSummary
+    duplicate: bool = False
+    requested_by_user_id: UUID
+    created_at: datetime
+
+
+class AdasTestRunEvidenceStreamEvent(BaseModel):
+    type: str = "atep.adas.integration_evidence.created.v1"
+    run_id: str
+    evidence_id: str
+    scenario_execution_id: str
+    dashboard_summary: AdasDashboardSummary
+    occurred_at: datetime
