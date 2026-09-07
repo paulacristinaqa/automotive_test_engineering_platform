@@ -8,9 +8,16 @@ from atep.adas.perception_service import (
     perception_response,
     require_perception_result,
 )
+from atep.adas.planning_service import (
+    create_planning_evaluation,
+    planning_response,
+    require_planning_evaluation,
+)
 from atep.adas.schemas import (
     PerceptionResultCreate,
     PerceptionResultResponse,
+    PlanningEvaluationCreate,
+    PlanningEvaluationResponse,
     SensorConfigurationCreate,
     SensorConfigurationPage,
     SensorConfigurationResponse,
@@ -304,3 +311,72 @@ async def get_perception_result_endpoint(
         session, observation_id=observation.id, result_id=result_id
     )
     return perception_response(result, observation, scene)
+
+
+@router.post(
+    "/{scene_id}/sensors/{sensor_id}/observations/{observation_id}/perception-results/"
+    "{result_id}/planning-evaluations",
+    response_model=PlanningEvaluationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_planning_evaluation_endpoint(
+    vehicle_id: str,
+    scene_id: str,
+    sensor_id: str,
+    observation_id: str,
+    result_id: str,
+    command: PlanningEvaluationCreate,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(adas_manage)],
+) -> PlanningEvaluationResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    scene = await require_scene(session, vehicle_id=vehicle.id, scene_id=scene_id)
+    sensor = await require_sensor(session, scene_id=scene.id, sensor_id=sensor_id)
+    observation = await require_observation(
+        session, sensor_id=sensor.id, observation_id=observation_id
+    )
+    perception = await require_perception_result(
+        session, observation_id=observation.id, result_id=result_id
+    )
+    evaluation = await create_planning_evaluation(
+        session,
+        scene=scene,
+        perception=perception,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    await session.refresh(evaluation, attribute_names=["created_at"])
+    return planning_response(evaluation, perception, scene)
+
+
+@router.get(
+    "/{scene_id}/sensors/{sensor_id}/observations/{observation_id}/perception-results/"
+    "{result_id}/planning-evaluations/{evaluation_id}",
+    response_model=PlanningEvaluationResponse,
+)
+async def get_planning_evaluation_endpoint(
+    vehicle_id: str,
+    scene_id: str,
+    sensor_id: str,
+    observation_id: str,
+    result_id: str,
+    evaluation_id: str,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(adas_read)],
+) -> PlanningEvaluationResponse:
+    vehicle = await require_vehicle(session, vehicle_id)
+    scene = await require_scene(session, vehicle_id=vehicle.id, scene_id=scene_id)
+    sensor = await require_sensor(session, scene_id=scene.id, sensor_id=sensor_id)
+    observation = await require_observation(
+        session, sensor_id=sensor.id, observation_id=observation_id
+    )
+    perception = await require_perception_result(
+        session, observation_id=observation.id, result_id=result_id
+    )
+    evaluation = await require_planning_evaluation(
+        session, perception_result_id=perception.id, evaluation_id=evaluation_id
+    )
+    return planning_response(evaluation, perception, scene)

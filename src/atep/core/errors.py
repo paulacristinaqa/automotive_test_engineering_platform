@@ -94,6 +94,18 @@ class AdasPerceptionConflictError(ApplicationError):
         )
 
 
+class AdasPlanningConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="adas_planning_conflict",
+            message=(
+                "A planning evaluation with this identifier already exists for the "
+                "perception result."
+            ),
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
 class DuplicateEmailError(ApplicationError):
     def __init__(self) -> None:
         super().__init__(

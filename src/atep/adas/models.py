@@ -120,3 +120,28 @@ class AdasPerceptionResult(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     requested_by_user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
     )
+
+
+class AdasPlanningEvaluation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "adas_planning_evaluations"
+    __table_args__ = (
+        UniqueConstraint(
+            "perception_result_id", "evaluation_id", name="uq_adas_planning_evaluation"
+        ),
+        CheckConstraint("scene_revision >= 1", name="ck_adas_planning_revision"),
+    )
+
+    perception_result_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("adas_perception_results.id", ondelete="CASCADE"),
+        index=True,
+    )
+    evaluation_id: Mapped[str] = mapped_column(String(64))
+    scene_revision: Mapped[int] = mapped_column(Integer)
+    input_parameters: Mapped[dict[str, Any]] = mapped_column(JSON)
+    maneuver: Mapped[str] = mapped_column(String(32), index=True)
+    risk_metrics: Mapped[dict[str, Any]] = mapped_column(JSON)
+    alerts: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    requested_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )

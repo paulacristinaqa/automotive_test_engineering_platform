@@ -12,7 +12,7 @@ decisions while preserving cross-volume traceability.
 | IV | CAN Network | IV-1 through IV-7 implemented | `docs/workbook-volume-iv.md` | `docs/ATEP_Volume_IV_CAN_Network_Engineering_Workbook.docx` |
 | V | Diagnostics | Baseline complete - V-1 through V-7 | `docs/workbook-volume-v.md` | `docs/ATEP_Volume_V_Diagnostics_Engineering_Workbook.docx` |
 | VI | Electric Vehicle | Baseline complete - VI-1 through VI-7 | `docs/workbook-volume-vi.md` | `docs/ATEP_Volume_VI_Electric_Vehicle_Engineering_Workbook.docx` |
-| VII | ADAS | VII-1 through VII-4 implemented | `docs/workbook-volume-vii.md` | `docs/ATEP_Volume_VII_ADAS_Engineering_Workbook.docx` |
+| VII | ADAS | VII-1 through VII-5 implemented | `docs/workbook-volume-vii.md` | `docs/ATEP_Volume_VII_ADAS_Engineering_Workbook.docx` |
 | VIII | Test Framework | Planned | To be created when development begins | To be created |
 | IX | AI Test Engineer | Planned | To be created when development begins | To be created |
 | X | Dashboard | Planned | To be created when development begins | To be created |
