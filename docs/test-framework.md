@@ -3,7 +3,8 @@
 Volume VIII turns the existing execution infrastructure into a reusable test engineering system.
 VIII-1 introduced the catalog, VIII-2 bound reviewed suites to deterministic case execution, and
 VIII-3 connects those snapshots to the durable scheduler for smoke, sanity, and regression runs.
-Performance, stress, fault injection, mutation testing, and coverage remain later increments.
+VIII-5 adds bounded cross-domain fault campaigns and recovery evidence. Performance and stress are
+intentionally deferred until stable final baselines exist; mutation testing and coverage remain next.
 
 ## API
 
@@ -19,6 +20,14 @@ Performance, stress, fault injection, mutation testing, and coverage remain late
 - `PATCH /api/v1/test-runs/{run_id}/cases/{case_id}` records a versioned case transition.
 - `POST /api/v1/test-jobs` accepts a catalog suite and matching smoke, sanity, or regression policy.
 - `GET /api/v1/test-jobs` and `GET /api/v1/test-jobs/{job_id}` expose the immutable selection.
+- `POST /api/v1/fault-campaigns` creates an idempotent draft campaign.
+- `GET /api/v1/fault-campaigns` and `GET /api/v1/fault-campaigns/{campaign_id}` expose campaigns.
+- `PATCH /api/v1/fault-campaigns/{campaign_id}/status` activates or archives a campaign.
+- `POST /api/v1/fault-campaigns/{campaign_id}/executions` creates a versioned execution snapshot.
+- `GET /api/v1/fault-executions` and `GET /api/v1/fault-executions/{execution_id}` expose execution state.
+- `GET /api/v1/fault-executions/{execution_id}/steps` returns ordered step results.
+- `PATCH /api/v1/fault-executions/{execution_id}/steps/{step_id}` records injection and recovery evidence.
+- `PATCH /api/v1/fault-executions/{execution_id}/cancel` cancels an incomplete execution.
 
 ## Composition model
 
@@ -57,6 +66,24 @@ When the bounded background scheduler dispatches the job, it creates the run and
 results from that stored snapshot in the same transaction. It does not re-read mutable catalog
 composition, so later archival cannot change scheduled intent. Jobs without a catalog binding keep
 their existing behavior for backward compatibility.
+
+## Fault campaigns
+
+A campaign defines one to thirty-two ordered fault steps across Digital Vehicle, ECU, CAN,
+diagnostics, Electric Vehicle, and ADAS. Each domain has an explicit action allowlist. Every step
+must declare its expected effect and a bounded recovery plan, while the campaign limits blast
+radius to one component, one network, or one vehicle and caps total injection plus recovery time at
+thirty minutes.
+
+An execution snapshots the active campaign and materializes pending step results in one transaction.
+Step results move through injection, observation, recovery, and terminal states with optimistic
+locking. Required failed or skipped steps fail the aggregate execution after all steps are terminal;
+optional failures remain informative. Exact retries remain idempotent after campaign archival.
+
+The framework owns orchestration intent, lifecycle, safety bounds, and evidence. Digital Vehicle,
+ECU, CAN, diagnostics, EV, and ADAS simulators remain responsible for performing their native state
+mutations. Automatic adapter dispatch belongs to VIII-7; the VIII-5 API deliberately exposes no
+arbitrary command runner.
 
 ## Security and cost
 

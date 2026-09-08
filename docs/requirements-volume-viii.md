@@ -47,6 +47,23 @@
 - **TF-NF-008** Restrict this increment to smoke, sanity, and regression; performance and stress remain VIII-4.
 - **TF-NF-009** Keep due-job dispatch bounded, concurrent-worker safe, CPU-only, and independent of paid services.
 
+## VIII-5 Fault campaigns
+
+- **TF-F-029** Create reusable fault campaigns spanning Digital Vehicle, ECU, CAN, diagnostics, EV, and ADAS domains.
+- **TF-F-030** Restrict every domain to an explicit fault-action allowlist and reject cross-domain action reuse.
+- **TF-F-031** Require a bounded blast radius, injection duration, recovery action, recovery timeout, and verification statement.
+- **TF-F-032** Apply idempotent creation and a draft, active, archived forward-only lifecycle with optimistic locking.
+- **TF-F-033** Create executions only from active campaigns and preserve an immutable versioned campaign snapshot.
+- **TF-F-034** Materialize one pending result for each ordered campaign step atomically with execution creation.
+- **TF-F-035** Bind each execution to a vehicle and optionally to a test run for the same vehicle.
+- **TF-F-036** Record injecting, injected, recovering, recovered, failed, and skipped step transitions and derive aggregate progress and outcome.
+- **TF-F-037** Allow an authorized operator to cancel an incomplete campaign execution.
+- **TF-F-038** Atomically persist audit and outbox evidence using bounded counts and fingerprints instead of raw parameters or evidence references.
+- **TF-F-039** Preserve exact execution replay after the source campaign is archived while rejecting new executions.
+- **TF-NF-010** Limit campaigns to 32 steps, structured parameters to 8,192 bytes, and total injection plus recovery budget to 30 minutes.
+- **TF-NF-011** Keep physical mutation in native domain simulators; campaign contracts must not expose arbitrary generic command execution.
+- **TF-NF-012** Run campaign management and verification locally without GPU, paid cloud, or paid AI dependencies.
+
 ## Verification catalogue
 
 - **TF-T-001** Accept a complete reusable definition and normalize identifiers and tags.
@@ -83,3 +100,17 @@
 - **TF-T-032** Verify job and run events expose selection metadata without copying case payloads.
 - **TF-T-033** Verify API contracts, RBAC, safe pagination, and legacy scheduler compatibility.
 - **TF-T-034** Verify migration 0053 upgrade, downgrade, foreign keys, indexes, and one Alembic head.
+- **TF-T-035** Accept every supported domain and its allowlisted fault actions.
+- **TF-T-036** Reject cross-domain actions, duplicate step identities or order, and excessive campaign budgets.
+- **TF-T-037** Verify campaign creation idempotency, conflict behavior, audit, and bounded outbox evidence.
+- **TF-T-038** Verify campaign lifecycle and optimistic version conflicts.
+- **TF-T-039** Create an execution snapshot and materialize ordered pending step results atomically.
+- **TF-T-040** Reject inactive campaigns, mismatched test-run vehicles, and unsafe execution bounds.
+- **TF-T-041** Replay an exact execution after campaign archival without duplicating steps or evidence.
+- **TF-T-042** Verify the complete inject, observe, recover lifecycle and aggregate passed outcome.
+- **TF-T-043** Verify required failures or skips fail the execution while optional failures do not.
+- **TF-T-044** Reject invalid step transitions and stale step-result versions with stable conflicts.
+- **TF-T-045** Verify cancellation of incomplete executions and rejection after terminal completion.
+- **TF-T-046** Verify API contracts, RBAC, pagination, safe schema bounds, and stable HTTP errors.
+- **TF-T-047** Verify audit and outbox payloads expose fingerprints and counts without raw parameters or evidence references.
+- **TF-T-048** Verify migration 0054 upgrade, downgrade, constraints, indexes, and one linear Alembic head.

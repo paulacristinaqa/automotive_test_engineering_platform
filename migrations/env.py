@@ -16,6 +16,7 @@ from atep.ecus import models as ecu_models  # noqa: F401
 from atep.electric_vehicle import models as electric_vehicle_models  # noqa: F401
 from atep.environment_profiles import models as environment_profile_models  # noqa: F401
 from atep.events import models as event_models  # noqa: F401
+from atep.fault_campaigns import models as fault_campaign_models  # noqa: F401
 from atep.identity import models as identity_models  # noqa: F401
 from atep.registry import models as registry_models  # noqa: F401
 from atep.test_catalog import models as test_catalog_models  # noqa: F401

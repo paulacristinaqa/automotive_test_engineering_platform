@@ -90,9 +90,10 @@ def main() -> None:
     title.add_run("ATEP Volume VIII Test Framework Engineering Workbook")
     subtitle = doc.add_paragraph()
     subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    subtitle.add_run("Version 0.3.0   VIII 3 Scheduler and Selection Implemented").bold = True
+    subtitle.add_run("Version 0.4.0   VIII 5 Fault Campaigns Implemented").bold = True
     doc.add_paragraph(
-        "This workbook records the catalog, execution-binding, and scheduled-selection baseline "
+        "This workbook records the catalog, execution-binding, scheduled-selection, and bounded "
+        "fault-campaign baseline "
         "for ATEP. Reusable "
         "definitions describe test intent, suites preserve reviewed composition, and "
         "catalog-backed "
@@ -102,11 +103,11 @@ def main() -> None:
         doc,
         ["Field", "Value"],
         [
-            ["Status", "VIII-1, VIII-2, and VIII-3 implemented and verified"],
+            ["Status", "VIII-1, VIII-2, VIII-3, and VIII-5 implemented and verified"],
             ["Technology", "FastAPI, PostgreSQL, SQLAlchemy, Alembic, Pydantic"],
             ["Security", "test_catalog:read and test_catalog:manage"],
             ["Cost", "Local first with no paid cloud, AI, or GPU dependency"],
-            ["Next", "VIII-4 performance and stress profiles, thresholds, and trends"],
+            ["Next", "VIII-6 mutation testing and coverage; VIII-4 deferred"],
         ],
         [1.5, 5.4],
     )
@@ -117,7 +118,8 @@ def main() -> None:
         "test's preconditions, actions, inputs, expectations, classification, and resource budget. "
         "A suite selects active definitions in an explicit order and freezes their versions. "
         "VIII-2 binds that snapshot to a run and records each case outcome. VIII-3 schedules "
-        "that immutable intent for later smoke, sanity, or regression execution."
+        "that immutable intent for later smoke, sanity, or regression execution. VIII-5 adds "
+        "cross-domain fault campaigns with recovery plans and evidence."
     )
     bullets(
         doc,
@@ -128,8 +130,8 @@ def main() -> None:
             ),
             "Suites classify smoke, sanity, regression, performance, stress, and safety intent.",
             (
-                "Performance, stress, campaigns, mutation testing, and coverage remain later "
-                "increments."
+                "Performance and stress remain planned but are deferred until near completion; "
+                "mutation testing and coverage are next."
             ),
         ],
     )
@@ -143,10 +145,14 @@ def main() -> None:
             ["FastAPI", "Bounded contracts, pagination, status filtering, and RBAC"],
             ["Domain service", "Idempotency, lifecycle, snapshots, audit, and outbox"],
             ["PostgreSQL", "Definitions, suite composition snapshots, versions, and status"],
-            ["Alembic", "Linear migrations 0051 through 0053 with reversible schema changes"],
+            ["Alembic", "Linear migrations 0051 through 0054 with reversible schema changes"],
             [
                 "Run executor",
                 "Materializes and updates ordered cases without rewriting catalog intent",
+            ],
+            [
+                "Fault campaigns",
+                "Snapshots bounded injection and recovery intent without arbitrary commands",
             ],
         ],
         [1.55, 5.35],
@@ -203,6 +209,8 @@ def main() -> None:
             ["Test definitions", "List and detail", "test_catalog:read"],
             ["Test suites", "Create and status change", "test_catalog:manage"],
             ["Test suites", "List and detail", "test_catalog:read"],
+            ["Fault campaigns", "Create, status, execute, cancel", "test_catalog:manage"],
+            ["Fault campaigns", "List, detail, and results", "test_catalog:read"],
         ],
         [1.65, 3.25, 2.0],
     )
@@ -272,7 +280,36 @@ def main() -> None:
         [1.55, 2.25, 3.1],
     )
 
-    doc.add_heading("10 Events and Audit", level=1)
+    doc.add_page_break()
+    doc.add_heading("10 Fault Campaigns", level=1)
+    doc.add_paragraph(
+        "VIII-5 defines reusable campaigns across Digital Vehicle, ECU, CAN, diagnostics, "
+        "Electric Vehicle, and ADAS. Each step selects a domain-specific allowlisted action, "
+        "declares an expected effect, and includes a mandatory recovery plan. The framework owns "
+        "intent and evidence; native simulators retain ownership of the actual state mutation."
+    )
+    add_table(
+        doc,
+        ["Safety control", "Bound", "Engineering purpose"],
+        [
+            ["Blast radius", "Component, network, or vehicle", "Exclude fleet-wide impact"],
+            ["Campaign size", "1 to 32 steps", "Bound orchestration and persistence"],
+            ["Parameters", "8192 bytes per step", "Prevent unbounded structured input"],
+            ["Time budget", "30 minutes total", "Bound injection and recovery exposure"],
+            ["Recovery", "Required for every step", "Make restoration and proof explicit"],
+            ["Command surface", "Allowlisted actions only", "Exclude arbitrary command execution"],
+        ],
+        [1.5, 2.35, 3.05],
+    )
+    doc.add_paragraph(
+        "An active campaign creates an immutable execution snapshot and one pending result per "
+        "ordered step. Results move through injection, observation, recovery, and terminal states "
+        "using optimistic versions. Required failure or skip fails the completed execution; "
+        "optional failures remain informative. Exact replay remains valid after campaign archival."
+    )
+
+    doc.add_page_break()
+    doc.add_heading("11 Events and Audit", level=1)
     add_table(
         doc,
         ["Mutation", "Outbox event", "Audit action"],
@@ -296,6 +333,27 @@ def main() -> None:
             ],
             ["Schedule selection", "atep.test_job.scheduled.v1", "test_job.scheduled"],
             ["Dispatch selection", "atep.test_job.dispatched.v1", "test_job.dispatched"],
+            ["Create fault campaign", "atep.fault_campaign.created.v1", "fault_campaign.created"],
+            [
+                "Change campaign status",
+                "atep.fault_campaign.status_changed.v1",
+                "fault_campaign.status_changed",
+            ],
+            [
+                "Create fault execution",
+                "atep.fault_campaign.execution.requested.v1",
+                "fault_campaign.execution_requested",
+            ],
+            [
+                "Record fault step",
+                "atep.fault_campaign.step_recorded.v1",
+                "fault_campaign.step_recorded",
+            ],
+            [
+                "Cancel fault execution",
+                "atep.fault_campaign.execution.cancelled.v1",
+                "fault_campaign.execution_cancelled",
+            ],
         ],
         [1.65, 3.15, 2.1],
     )
@@ -307,7 +365,7 @@ def main() -> None:
     )
 
     doc.add_page_break()
-    doc.add_heading("11 Engineering Decisions", level=1)
+    doc.add_heading("12 Engineering Decisions", level=1)
     add_table(
         doc,
         ["Decision", "Rationale", "Consequence"],
@@ -339,12 +397,22 @@ def main() -> None:
                 "Protect delayed execution intent",
                 "Dispatch ignores later catalog drift",
             ],
+            [
+                "Keep native mutation in domains",
+                "Preserve simulator ownership",
+                "Automatic adapters remain VIII-7",
+            ],
+            [
+                "Require recovery intent",
+                "Make safe restoration testable",
+                "Every step has a bounded recovery plan",
+            ],
         ],
         [1.65, 2.75, 2.5],
     )
 
     doc.add_page_break()
-    doc.add_heading("12 Verification Catalogue", level=1)
+    doc.add_heading("13 Verification Catalogue", level=1)
     add_table(
         doc,
         ["ID range", "Coverage", "Objective"],
@@ -369,12 +437,17 @@ def main() -> None:
                 "Scheduled selection",
                 "Validate policies, snapshots, dispatch, and migration",
             ],
+            [
+                "TF-T-035 to 048",
+                "Fault campaigns",
+                "Validate safety, lifecycle, aggregation, evidence, API, and migration",
+            ],
         ],
         [1.55, 2.45, 2.9],
     )
 
     doc.add_page_break()
-    doc.add_heading("13 Risks and Controls", level=1)
+    doc.add_heading("14 Risks and Controls", level=1)
     add_table(
         doc,
         ["Risk", "Control", "Next action"],
@@ -397,25 +470,45 @@ def main() -> None:
                 "Immutable job selection snapshot",
                 "Dispatch only persisted cases",
             ],
+            [
+                "Unsafe injection scope",
+                "Allowlist, blast radius, and time budget",
+                "Keep fleet scope excluded",
+            ],
+            [
+                "Vehicle state not restored",
+                "Required recovery and verification",
+                "Adapters report recovery evidence in VIII-7",
+            ],
+            [
+                "Resource-heavy early benchmarks",
+                "Defer VIII-4 until stable baselines",
+                "Run bounded CPU-only functional tests now",
+            ],
         ],
         [1.5, 2.55, 2.85],
     )
 
-    doc.add_heading("14 Study Exercises", level=1)
+    doc.add_heading("15 Study Exercises", level=1)
     doc.add_paragraph(
         "Create one ADAS definition and identify its invariants. Then run two required cases, "
         "explain the aggregate result, and compare an exact retry after suite archival with a new "
         "run request for the archived suite. Schedule the same suite, archive it, and explain why "
-        "the stored job can still dispatch reproducibly."
+        "the stored job can still dispatch reproducibly. Finally, design one battery-temperature "
+        "fault with recovery verification and explain why the campaign contract must not expose "
+        "an arbitrary shell or adapter command."
     )
 
-    doc.add_heading("15 Next Development", level=1)
+    doc.add_heading("16 Next Development", level=1)
     doc.add_paragraph(
-        "VIII-4 will add bounded performance and stress profiles, acceptance thresholds, resource "
-        "budgets, and comparable trend evidence while preserving VIII-3 selection snapshots."
+        "VIII-6 will add mutation operators, kill-rate evidence, requirement coverage, and gap "
+        "analysis. VIII-4 remains planned near project completion, when stable baselines make "
+        "performance thresholds and comparable trends meaningful."
     )
     doc.core_properties.title = "ATEP Volume VIII Test Framework Engineering Workbook"
-    doc.core_properties.subject = "Versioned catalog, execution binding, and scheduled selection"
+    doc.core_properties.subject = (
+        "Versioned catalog, execution binding, scheduling, and fault campaigns"
+    )
     doc.core_properties.author = "ATEP Engineering"
     doc.save(OUTPUT)
 

@@ -1,7 +1,7 @@
 # Volume VIII Test Framework Engineering Workbook
 
-Version 0.3.0 records the VIII-1 catalog, VIII-2 execution binding, and VIII-3 scheduled-selection
-baseline. It documents
+Version 0.4.0 records the VIII-1 catalog, VIII-2 execution binding, VIII-3 scheduled-selection,
+and VIII-5 fault-campaign baseline. It documents
 architecture, contracts, lifecycle, RBAC, persistence, events, audit, deterministic case results,
 aggregate run semantics, test objectives, risks, and study exercises.
 
@@ -46,6 +46,30 @@ its pending cases from that immutable intent.
 - Legacy jobs remain supported, while selection metadata appears in API, audit, and outbox evidence.
 - Migration 0053 adds the nullable catalog reference, selection policy, version, snapshot, and indexes.
 
+## VIII-5 outcome
+
+VIII-5 defines reusable, versioned fault campaigns across Digital Vehicle, ECU, CAN, diagnostics,
+Electric Vehicle, and ADAS. Executions preserve immutable intent, track injection and recovery as
+explicit states, and aggregate required outcomes without granting a generic command-execution path.
+
+## VIII-5 evidence
+
+- Domain-specific action allowlists prevent misleading or arbitrary cross-domain commands.
+- Every fault step declares expected behavior and a bounded recovery action and verification.
+- Blast radius is limited to one component, network, or vehicle; fleet-wide campaigns are excluded.
+- Active campaign executions snapshot up to 32 ordered steps and optionally link to a test run.
+- Step updates use optimistic locking and derive aggregate progress, pass, or fail state.
+- Exact execution replay remains idempotent after campaign archival.
+- Audit and outbox records contain counts and fingerprints, not raw parameters or evidence references.
+- Migration 0054 adds campaigns, executions, and step results with reversible constraints and indexes.
+- Native simulators retain ownership of state mutation; automatic adapter dispatch remains VIII-7.
+
+## Deferred increment
+
+VIII-4 performance and stress testing remains in the roadmap but is intentionally postponed until
+near project completion. Stable system baselines will make resource thresholds and trend evidence
+meaningful while avoiding unnecessary CPU/GPU use during active architecture changes.
+
 ## Next increment
 
-VIII-4 will add bounded performance and stress profiles, thresholds, resource budgets, and trends.
+VIII-6 will add mutation operators, kill-rate evidence, requirement coverage, and gap analysis.
