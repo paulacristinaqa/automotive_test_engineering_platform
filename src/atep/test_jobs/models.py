@@ -29,6 +29,15 @@ class TestJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     environment_profile_version: Mapped[int | None] = mapped_column(Integer)
     environment_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    catalog_suite_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("test_suites.id", ondelete="RESTRICT"),
+        index=True,
+        default=None,
+    )
+    catalog_suite_version: Mapped[int | None] = mapped_column(Integer, default=None)
+    selection_policy: Mapped[str | None] = mapped_column(String(20), index=True, default=None)
+    selection_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
     name: Mapped[str] = mapped_column(String(160))
     suite: Mapped[str] = mapped_column(String(24), index=True)
     metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)

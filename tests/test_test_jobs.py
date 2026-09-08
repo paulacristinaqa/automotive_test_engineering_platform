@@ -9,13 +9,16 @@ from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atep.audit.models import AuditRecord
+from atep.core.errors import TestCatalogStateError as CatalogStateError
 from atep.core.errors import TestJobStateError as JobStateError
 from atep.core.errors import TestJobVersionConflictError as JobVersionConflictError
 from atep.events.models import OutboxEvent
+from atep.test_catalog.models import TestSuite as CatalogSuite
 from atep.test_jobs.models import TestJob as JobRecord
 from atep.test_jobs.schemas import TestJobCancel as JobCancel
 from atep.test_jobs.schemas import TestJobCreate as JobCreate
 from atep.test_jobs.service import cancel_test_job, create_test_job, dispatch_due_test_jobs
+from atep.test_runs.models import TestCaseResult as CaseResultRecord
 from atep.test_runs.models import TestRun as RunRecord
 from atep.vehicles.models import Vehicle
 
@@ -93,6 +96,39 @@ def command() -> JobCreate:
     )
 
 
+def catalog_suite(*, status: str = "active", suite_type: str = "smoke") -> CatalogSuite:
+    return CatalogSuite(
+        id=uuid4(),
+        suite_id="battery-smoke-suite",
+        created_by_user_id=uuid4(),
+        name="Battery smoke suite",
+        description="",
+        suite_type=suite_type,
+        composition=[
+            {
+                "definition_id": "battery-temperature-check",
+                "definition_version": 3,
+                "name": "Battery temperature check",
+                "order": 1,
+                "required": True,
+                "parameter_overrides": {"limit_celsius": 50},
+            }
+        ],
+        tags=["battery"],
+        status=status,
+        version=4,
+        created_at=NOW,
+        updated_at=NOW,
+    )
+
+
+def selected_command() -> JobCreate:
+    payload = command().model_dump()
+    payload["catalog_suite_id"] = "battery-smoke-suite"
+    payload["selection_policy"] = "smoke"
+    return JobCreate(**payload)
+
+
 def scheduled_job(target: Vehicle) -> JobRecord:
     return JobRecord(
         id=uuid4(),
@@ -126,6 +162,15 @@ def test_schedule_contract_requires_timezone_and_bounded_identifier() -> None:
     payload = command().model_dump()
     payload["job_id"] = "short"
     with pytest.raises(ValidationError, match="8 characters"):
+        JobCreate(**payload)
+
+    payload = command().model_dump()
+    payload["catalog_suite_id"] = "battery-smoke-suite"
+    with pytest.raises(ValidationError, match="provided together"):
+        JobCreate(**payload)
+
+    payload["selection_policy"] = "regression"
+    with pytest.raises(ValidationError, match="must match"):
         JobCreate(**payload)
 
 
@@ -162,6 +207,67 @@ async def test_creation_is_idempotent_audited_and_evented() -> None:
     assert returned is created
     assert duplicate is True
     assert retry_session.added == []
+
+
+@pytest.mark.asyncio
+async def test_catalog_selection_is_validated_and_snapshotted() -> None:
+    target = vehicle()
+    suite = catalog_suite()
+    session = FakeSession(None, None, None)
+    created, duplicate = await create_test_job(
+        cast(AsyncSession, session),
+        command=selected_command(),
+        vehicle=target,
+        catalog_suite=suite,
+        actor_user_id=uuid4(),
+        correlation_id=None,
+        now=NOW,
+    )
+    assert duplicate is False
+    assert created.catalog_suite_id == suite.id
+    assert created.catalog_suite_version == 4
+    assert created.selection_policy == "smoke"
+    assert created.selection_snapshot == {
+        "suite_id": "battery-smoke-suite",
+        "name": "Battery smoke suite",
+        "suite_type": "smoke",
+        "tags": ["battery"],
+        "cases": suite.composition,
+    }
+    event = next(item for item in session.added if isinstance(item, OutboxEvent))
+    assert event.payload["catalog_suite_id"] == "battery-smoke-suite"
+    assert event.payload["catalog_suite_version"] == 4
+    assert event.payload["selection_policy"] == "smoke"
+    assert event.payload["selection_case_count"] == 1
+    assert "selection_snapshot" not in event.payload
+
+    suite.composition[0]["definition_version"] = 99
+    assert created.selection_snapshot["cases"][0]["definition_version"] == 3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("suite", "requested_status"),
+    [
+        (catalog_suite(status="draft"), "schedule"),
+        (catalog_suite(suite_type="regression"), "smoke"),
+    ],
+)
+async def test_catalog_selection_rejects_inactive_or_mismatched_suite(
+    suite: CatalogSuite, requested_status: str
+) -> None:
+    with pytest.raises(CatalogStateError) as captured:
+        await create_test_job(
+            cast(AsyncSession, FakeSession(None, None, None)),
+            command=selected_command(),
+            vehicle=vehicle(),
+            catalog_suite=suite,
+            actor_user_id=uuid4(),
+            correlation_id=None,
+            now=NOW,
+        )
+    assert captured.value.details is not None
+    assert captured.value.details["requested_status"] == requested_status
 
 
 @pytest.mark.asyncio
@@ -235,3 +341,31 @@ async def test_due_dispatch_creates_run_and_atomic_evidence() -> None:
     assert [item.action for item in session.added if isinstance(item, AuditRecord)] == [
         "test_job.dispatched"
     ]
+
+
+@pytest.mark.asyncio
+async def test_selected_dispatch_materializes_the_scheduled_snapshot() -> None:
+    target = vehicle()
+    suite = catalog_suite()
+    job = scheduled_job(target)
+    job.catalog_suite_id = suite.id
+    job.catalog_suite_version = suite.version
+    job.selection_policy = "smoke"
+    job.selection_snapshot = {
+        "suite_id": suite.suite_id,
+        "name": suite.name,
+        "suite_type": suite.suite_type,
+        "tags": suite.tags,
+        "cases": suite.composition,
+    }
+    session = FakeSession(rows=[(job, target)])
+    count = await dispatch_due_test_jobs(cast(AsyncSession, session), now=NOW, limit=10)
+    assert count == 1
+    run = next(item for item in session.added if isinstance(item, RunRecord))
+    result = next(item for item in session.added if isinstance(item, CaseResultRecord))
+    assert run.catalog_suite_id == suite.id
+    assert run.catalog_suite_version == 4
+    assert run.catalog_suite_snapshot == job.selection_snapshot
+    assert result.definition_id == "battery-temperature-check"
+    assert result.definition_version == 3
+    assert result.status == "pending"

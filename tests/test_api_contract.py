@@ -480,7 +480,8 @@ def test_diagnostics_contracts_and_safe_pagination_are_published() -> None:
 
 
 def test_test_job_scheduler_contracts_and_safe_pagination_are_published() -> None:
-    paths = core_app.openapi()["paths"]
+    schema = core_app.openapi()
+    paths = schema["paths"]
     collection = paths["/api/v1/test-jobs"]
     assert {"get", "post"} <= set(collection)
     assert "/api/v1/test-jobs/{job_id}" in paths
@@ -490,6 +491,14 @@ def test_test_job_scheduler_contracts_and_safe_pagination_are_published() -> Non
     assert parameters["offset"]["maximum"] == 1_000_000
     assert "status" in parameters
     assert "vehicle_id" in parameters
+    create_contract = schema["components"]["schemas"]["TestJobCreate"]["properties"]
+    assert "catalog_suite_id" in create_contract
+    assert "selection_policy" in create_contract
+    assert schema["components"]["schemas"]["TestSelectionPolicy"]["enum"] == [
+        "smoke",
+        "sanity",
+        "regression",
+    ]
 
 
 def test_electric_vehicle_battery_contracts_are_published() -> None:
