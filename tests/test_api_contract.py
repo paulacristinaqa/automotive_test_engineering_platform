@@ -703,6 +703,24 @@ def test_test_catalog_contracts_and_safe_pagination_are_published() -> None:
     assert suite["properties"]["cases"]["maxItems"] == 200
 
 
+def test_catalog_execution_case_result_contracts_are_published() -> None:
+    schema = core_app.openapi()
+    paths = schema["paths"]
+    collection = paths["/api/v1/test-runs/{run_id}/cases"]
+    detail = paths["/api/v1/test-runs/{run_id}/cases/{case_id}"]
+    assert "get" in collection
+    assert "patch" in detail
+    parameters = {item["name"]: item["schema"] for item in collection["get"]["parameters"]}
+    assert parameters["limit"]["maximum"] == 200
+    assert parameters["offset"]["maximum"] == 1_000_000
+    create = schema["components"]["schemas"]["TestRunCreate"]
+    assert create["properties"]["catalog_suite_id"]["anyOf"][0]["maxLength"] == 64
+    update = schema["components"]["schemas"]["TestCaseResultUpdate"]
+    assert update["properties"]["attempt"]["maximum"] == 100
+    assert update["properties"]["duration_ms"]["anyOf"][0]["maximum"] == 86_400_000
+    assert update["properties"]["evidence_refs"]["maxItems"] == 20
+
+
 def test_metrics_endpoint_is_operational_but_not_part_of_public_openapi() -> None:
     assert "/metrics" not in core_app.openapi()["paths"]
     response = TestClient(core_app).get("/metrics")

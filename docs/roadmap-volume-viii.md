@@ -2,7 +2,8 @@
 
 - [x] **VIII-1 Test catalog** - reusable test definitions, structured steps, versioned lifecycle,
   deterministic suite composition, RBAC, audit, events, APIs, and workbook baseline.
-- [ ] **VIII-2 Execution binding** - create test runs from active suite snapshots and record case results.
+- [x] **VIII-2 Execution binding** - active suite snapshots, materialized run cases, bounded results,
+  deterministic aggregation, RBAC, audit, outbox, and live updates.
 - [ ] **VIII-3 Scheduler and selection** - scheduled execution, smoke, sanity, and regression selection.
 - [ ] **VIII-4 Performance and stress** - load profiles, thresholds, resource budgets, and trend evidence.
 - [ ] **VIII-5 Fault injection** - reusable fault campaigns across vehicle, ECU, CAN, diagnostics, EV, and ADAS.
@@ -11,5 +12,5 @@
 
 ## Next recommended increment
 
-VIII-2 should bind an active suite snapshot to a test run and introduce deterministic per-case
-execution records, results, evidence references, and aggregate run status.
+VIII-3 should extend the durable scheduler with catalog-suite selection policies for smoke, sanity,
+and regression execution while preserving the VIII-2 execution snapshot.

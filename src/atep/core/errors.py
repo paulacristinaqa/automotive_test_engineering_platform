@@ -800,6 +800,26 @@ class TestRunStateError(ApplicationError):
         )
 
 
+class TestCaseResultVersionConflictError(ApplicationError):
+    def __init__(self, *, current_version: int) -> None:
+        super().__init__(
+            code="test_case_result_version_conflict",
+            message="The test case result was changed by another operation.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_version": current_version},
+        )
+
+
+class TestCaseResultStateError(ApplicationError):
+    def __init__(self, *, current_status: str, requested_status: str) -> None:
+        super().__init__(
+            code="test_case_result_state_conflict",
+            message="The requested test case result transition is not allowed.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_status": current_status, "requested_status": requested_status},
+        )
+
+
 class EnvironmentProfileConflictError(ApplicationError):
     def __init__(self) -> None:
         super().__init__(
