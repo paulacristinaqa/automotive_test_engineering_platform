@@ -637,6 +637,106 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             assert completed_catalog_run.json()["status"] == "passed"
             assert completed_catalog_run.json()["progress_percent"] == 100
 
+            fault_campaign_id = f"battery-fault-{uuid4().hex[:12]}"
+            fault_execution_id = f"fault-run-{uuid4().hex[:12]}"
+            campaign_payload = {
+                "campaign_id": fault_campaign_id,
+                "name": "Battery thermal recovery campaign",
+                "description": "Bounded EV fault with explicit recovery evidence.",
+                "blast_radius": "single_component",
+                "tags": ["battery", "regression"],
+                "steps": [
+                    {
+                        "step_id": "inject-temperature",
+                        "order": 1,
+                        "domain": "electric_vehicle",
+                        "action": "battery_overtemperature",
+                        "target_id": "battery-pack-main",
+                        "parameters": {"temperature_celsius": 48.0},
+                        "duration_ms": 5_000,
+                        "expected_effect": "BMS warning is observable",
+                        "recovery": {
+                            "action": "restore nominal thermal state",
+                            "timeout_ms": 10_000,
+                            "verification": "Temperature returns below the warning threshold",
+                        },
+                    }
+                ],
+            }
+            fault_campaign = await client.post(
+                "/api/v1/fault-campaigns", headers=admin_headers, json=campaign_payload
+            )
+            assert fault_campaign.status_code == 201, fault_campaign.text
+            activated_campaign = await client.patch(
+                f"/api/v1/fault-campaigns/{fault_campaign_id}/status",
+                headers=admin_headers,
+                json={"expected_version": 1, "status": "active"},
+            )
+            assert activated_campaign.status_code == 200, activated_campaign.text
+            fault_execution_payload = {
+                "execution_id": fault_execution_id,
+                "vehicle_id": vehicle_identifier,
+                "test_run_id": catalog_run_id,
+                "seed": 42,
+                "dry_run": False,
+                "metadata": {"requirement": "TF-F-035"},
+            }
+            fault_execution = await client.post(
+                f"/api/v1/fault-campaigns/{fault_campaign_id}/executions",
+                headers=admin_headers,
+                json=fault_execution_payload,
+            )
+            assert fault_execution.status_code == 201, fault_execution.text
+            assert fault_execution.json()["campaign_version"] == 2
+            assert fault_execution.json()["test_run_id"] == catalog_run_id
+            for version, step_status in enumerate(
+                ("injecting", "injected", "recovering", "recovered"), start=1
+            ):
+                step_update = await client.patch(
+                    f"/api/v1/fault-executions/{fault_execution_id}/steps/inject-temperature",
+                    headers=admin_headers,
+                    json={
+                        "expected_version": version,
+                        "status": step_status,
+                        "attempt": 1,
+                        "duration_ms": 125 if step_status == "recovered" else None,
+                        "observed_effect": step_status,
+                        "evidence_refs": (
+                            ["telemetry://battery-temperature"]
+                            if step_status == "recovered"
+                            else []
+                        ),
+                    },
+                )
+                assert step_update.status_code == 200, step_update.text
+            completed_fault_execution = await client.get(
+                f"/api/v1/fault-executions/{fault_execution_id}", headers=admin_headers
+            )
+            assert completed_fault_execution.status_code == 200, completed_fault_execution.text
+            assert completed_fault_execution.json()["status"] == "passed"
+            assert completed_fault_execution.json()["progress_percent"] == 100
+            archived_campaign = await client.patch(
+                f"/api/v1/fault-campaigns/{fault_campaign_id}/status",
+                headers=admin_headers,
+                json={"expected_version": 2, "status": "archived"},
+            )
+            assert archived_campaign.status_code == 200, archived_campaign.text
+            replayed_fault_execution = await client.post(
+                f"/api/v1/fault-campaigns/{fault_campaign_id}/executions",
+                headers=admin_headers,
+                json=fault_execution_payload,
+            )
+            assert replayed_fault_execution.status_code == 200, replayed_fault_execution.text
+            archived_rejection = await expected_error(
+                client,
+                "POST",
+                f"/api/v1/fault-campaigns/{fault_campaign_id}/executions",
+                409,
+                headers=admin_headers,
+                json={**fault_execution_payload, "execution_id": f"fault-run-{uuid4().hex[:12]}"},
+            )
+            assert archived_rejection["code"] == "fault_campaign_state_conflict"
+
             artifact_id = uuid4().hex
             artifact_content = b'{"result":"passed","temperature_celsius":47.8}'
             artifact_upload = await client.post(
@@ -1238,6 +1338,10 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                 client, "GET", "/api/v1/test-jobs", 403, headers=user_headers
             )
             assert jobs_denied["code"] == "permission_denied"
+            fault_campaigns_denied = await expected_error(
+                client, "GET", "/api/v1/fault-campaigns", 403, headers=user_headers
+            )
+            assert fault_campaigns_denied["code"] == "permission_denied"
             artifacts_denied = await expected_error(
                 client,
                 "GET",

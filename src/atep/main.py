@@ -29,6 +29,7 @@ from atep.ecus.router import router as ecus_router
 from atep.ecus.router import scenarios_router as ecu_scenarios_router
 from atep.electric_vehicle.router import router as electric_vehicle_router
 from atep.environment_profiles.router import router as environment_profiles_router
+from atep.fault_campaigns.router import router as fault_campaigns_router
 from atep.identity.bootstrap import ensure_bootstrap_admin
 from atep.identity.roles_router import router as roles_router
 from atep.identity.router import router as identity_router
@@ -127,6 +128,7 @@ app.include_router(environment_profiles_router, prefix="/api/v1", dependencies=r
 app.include_router(test_jobs_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(artifacts_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(test_catalog_router, prefix="/api/v1", dependencies=rate_limited)
+app.include_router(fault_campaigns_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(test_runs_websocket_router, prefix="/api/v1")
 install_exception_handlers(app)
 

@@ -925,6 +925,84 @@ class TestCatalogStateError(ApplicationError):
         )
 
 
+class FaultCampaignConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="fault_campaign_conflict",
+            message="The fault campaign identifier was already used for different content.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class FaultCampaignVersionConflictError(ApplicationError):
+    def __init__(self, *, current_version: int) -> None:
+        super().__init__(
+            code="fault_campaign_version_conflict",
+            message="The fault campaign was changed by another operation.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_version": current_version},
+        )
+
+
+class FaultCampaignStateError(ApplicationError):
+    def __init__(self, *, current_status: str, requested_status: str) -> None:
+        super().__init__(
+            code="fault_campaign_state_conflict",
+            message="The requested fault campaign operation is not allowed in its state.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_status": current_status, "requested_status": requested_status},
+        )
+
+
+class FaultExecutionConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="fault_execution_conflict",
+            message="The fault execution identifier was already used for different content.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class FaultExecutionVersionConflictError(ApplicationError):
+    def __init__(self, *, current_version: int) -> None:
+        super().__init__(
+            code="fault_execution_version_conflict",
+            message="The fault execution was changed by another operation.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_version": current_version},
+        )
+
+
+class FaultExecutionStateError(ApplicationError):
+    def __init__(self, *, current_status: str, requested_status: str) -> None:
+        super().__init__(
+            code="fault_execution_state_conflict",
+            message="The requested fault execution operation is not allowed in its state.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_status": current_status, "requested_status": requested_status},
+        )
+
+
+class FaultStepVersionConflictError(ApplicationError):
+    def __init__(self, *, current_version: int) -> None:
+        super().__init__(
+            code="fault_step_version_conflict",
+            message="The fault step result was changed by another operation.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_version": current_version},
+        )
+
+
+class FaultStepStateError(ApplicationError):
+    def __init__(self, *, current_status: str, requested_status: str) -> None:
+        super().__init__(
+            code="fault_step_state_conflict",
+            message="The requested fault step transition is not allowed.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_status": current_status, "requested_status": requested_status},
+        )
+
+
 class TestArtifactTooLargeError(ApplicationError):
     def __init__(self, *, max_bytes: int) -> None:
         super().__init__(

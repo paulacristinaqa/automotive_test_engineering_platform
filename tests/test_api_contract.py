@@ -501,6 +501,28 @@ def test_test_job_scheduler_contracts_and_safe_pagination_are_published() -> Non
     ]
 
 
+def test_fault_campaign_contracts_and_safe_bounds_are_published() -> None:
+    schema = core_app.openapi()
+    paths = schema["paths"]
+    assert {"get", "post"} <= set(paths["/api/v1/fault-campaigns"])
+    assert "get" in paths["/api/v1/fault-campaigns/{campaign_id}"]
+    assert "patch" in paths["/api/v1/fault-campaigns/{campaign_id}/status"]
+    assert "post" in paths["/api/v1/fault-campaigns/{campaign_id}/executions"]
+    assert {"get"} <= set(paths["/api/v1/fault-executions"])
+    assert "patch" in paths["/api/v1/fault-executions/{execution_id}/cancel"]
+    assert "get" in paths["/api/v1/fault-executions/{execution_id}/steps"]
+    assert "patch" in paths["/api/v1/fault-executions/{execution_id}/steps/{step_id}"]
+    campaign = schema["components"]["schemas"]["FaultCampaignCreate"]["properties"]
+    assert campaign["steps"]["maxItems"] == 32
+    step = schema["components"]["schemas"]["FaultCampaignStep"]["properties"]
+    assert step["duration_ms"]["maximum"] == 600_000
+    execution = schema["components"]["schemas"]["FaultExecutionCreate"]["properties"]
+    assert execution["seed"]["maximum"] == 2_147_483_647
+    result = schema["components"]["schemas"]["FaultStepResultUpdate"]["properties"]
+    assert result["attempt"]["maximum"] == 100
+    assert result["evidence_refs"]["maxItems"] == 20
+
+
 def test_electric_vehicle_battery_contracts_are_published() -> None:
     schema = core_app.openapi()
     paths = schema["paths"]
