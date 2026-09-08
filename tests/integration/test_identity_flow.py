@@ -538,6 +538,105 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             assert test_run_page.json()["total"] == 1
             assert test_run_page.json()["items"][0]["run_id"] == test_run_id
 
+            definition_id = f"battery-case-{uuid4().hex[:12]}"
+            suite_id = f"battery-suite-{uuid4().hex[:12]}"
+            catalog_run_id = uuid4().hex
+            definition = await client.post(
+                "/api/v1/test-definitions",
+                headers=admin_headers,
+                json={
+                    "definition_id": definition_id,
+                    "name": "Battery warning is displayed",
+                    "domain": "electric_vehicle",
+                    "level": "end_to_end",
+                    "steps": [
+                        {
+                            "step_id": "inject-temperature",
+                            "action": "set_property",
+                            "target": "battery_temperature",
+                            "inputs": {"value": 48},
+                            "expected": "CarSystemUI displays a battery warning",
+                        }
+                    ],
+                },
+            )
+            assert definition.status_code == 201, definition.text
+            activated_definition = await client.patch(
+                f"/api/v1/test-definitions/{definition_id}/status",
+                headers=admin_headers,
+                json={"expected_version": 1, "status": "active"},
+            )
+            assert activated_definition.status_code == 200, activated_definition.text
+            suite = await client.post(
+                "/api/v1/test-suites",
+                headers=admin_headers,
+                json={
+                    "suite_id": suite_id,
+                    "name": "Battery integration smoke suite",
+                    "suite_type": "smoke",
+                    "cases": [
+                        {
+                            "definition_id": definition_id,
+                            "order": 1,
+                            "required": True,
+                            "parameter_overrides": {},
+                        }
+                    ],
+                },
+            )
+            assert suite.status_code == 201, suite.text
+            activated_suite = await client.patch(
+                f"/api/v1/test-suites/{suite_id}/status",
+                headers=admin_headers,
+                json={"expected_version": 1, "status": "active"},
+            )
+            assert activated_suite.status_code == 200, activated_suite.text
+            catalog_run_payload = {
+                "run_id": catalog_run_id,
+                "vehicle_id": vehicle_identifier,
+                "catalog_suite_id": suite_id,
+                "name": "Catalog-backed battery smoke test",
+                "suite": "smoke",
+                "metadata": {"requirement": "TF-F-012"},
+            }
+            catalog_run = await client.post(
+                "/api/v1/test-runs", headers=admin_headers, json=catalog_run_payload
+            )
+            assert catalog_run.status_code == 201, catalog_run.text
+            assert catalog_run.json()["catalog_suite_id"] == suite_id
+            assert catalog_run.json()["catalog_suite_version"] == 2
+            catalog_cases = await client.get(
+                f"/api/v1/test-runs/{catalog_run_id}/cases", headers=admin_headers
+            )
+            assert catalog_cases.status_code == 200, catalog_cases.text
+            assert catalog_cases.json()["total"] == 1
+            assert catalog_cases.json()["items"][0]["status"] == "pending"
+            running_case = await client.patch(
+                f"/api/v1/test-runs/{catalog_run_id}/cases/{definition_id}",
+                headers=admin_headers,
+                json={"expected_version": 1, "status": "running", "attempt": 1},
+            )
+            assert running_case.status_code == 200, running_case.text
+            passed_case = await client.patch(
+                f"/api/v1/test-runs/{catalog_run_id}/cases/{definition_id}",
+                headers=admin_headers,
+                json={
+                    "expected_version": 2,
+                    "status": "passed",
+                    "attempt": 1,
+                    "duration_ms": 125,
+                    "observed": "Battery warning displayed",
+                    "evidence_refs": ["telemetry://battery-warning-observation"],
+                },
+            )
+            assert passed_case.status_code == 200, passed_case.text
+            completed_catalog_run = await client.get(
+                f"/api/v1/test-runs/{catalog_run_id}", headers=admin_headers
+            )
+            assert completed_catalog_run.status_code == 200, completed_catalog_run.text
+            assert completed_catalog_run.json()["status"] == "passed"
+            assert completed_catalog_run.json()["progress_percent"] == 100
+
             artifact_id = uuid4().hex
             artifact_content = b'{"result":"passed","temperature_celsius":47.8}'
             artifact_upload = await client.post(

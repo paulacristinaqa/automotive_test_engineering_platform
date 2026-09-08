@@ -71,7 +71,8 @@ def main() -> None:
     section = doc.sections[0]
     section.page_width = Inches(8.5)
     section.page_height = Inches(11)
-    section.top_margin = section.bottom_margin = Inches(0.72)
+    section.top_margin = Inches(0.72)
+    section.bottom_margin = Inches(0.55)
     section.left_margin = section.right_margin = Inches(0.8)
     doc.styles["Normal"].font.name = "Aptos"
     doc.styles["Normal"].font.size = Pt(10.5)
@@ -89,21 +90,22 @@ def main() -> None:
     title.add_run("ATEP Volume VIII Test Framework Engineering Workbook")
     subtitle = doc.add_paragraph()
     subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    subtitle.add_run("Version 0.1.0   VIII 1 Test Catalog Implemented").bold = True
+    subtitle.add_run("Version 0.2.0   VIII 2 Execution Binding Implemented").bold = True
     doc.add_paragraph(
-        "This workbook records the first Test Framework baseline for ATEP. Reusable definitions "
-        "now describe test intent independently from execution, while suites preserve ordered, "
-        "versioned composition for later scheduling and result analysis."
+        "This workbook records the catalog and execution-binding baseline for ATEP. Reusable "
+        "definitions describe test intent, suites preserve reviewed composition, and "
+        "catalog-backed "
+        "runs now persist deterministic case results and aggregate outcomes."
     )
     add_table(
         doc,
         ["Field", "Value"],
         [
-            ["Status", "VIII-1 implemented and verified"],
+            ["Status", "VIII-1 and VIII-2 implemented and verified"],
             ["Technology", "FastAPI, PostgreSQL, SQLAlchemy, Alembic, Pydantic"],
             ["Security", "test_catalog:read and test_catalog:manage"],
             ["Cost", "Local first with no paid cloud, AI, or GPU dependency"],
-            ["Next", "VIII-2 suite execution binding and case results"],
+            ["Next", "VIII-3 scheduler and smoke, sanity, regression selection"],
         ],
         [1.5, 5.4],
     )
@@ -112,7 +114,8 @@ def main() -> None:
     doc.add_paragraph(
         "VIII-1 separates reusable test design from test execution. A definition captures one "
         "test's preconditions, actions, inputs, expectations, classification, and resource budget. "
-        "A suite selects active definitions in an explicit order and freezes their versions."
+        "A suite selects active definitions in an explicit order and freezes their versions. "
+        "VIII-2 binds that snapshot to a run and records each case outcome."
     )
     bullets(
         doc,
@@ -122,10 +125,7 @@ def main() -> None:
                 "integration domains."
             ),
             "Suites classify smoke, sanity, regression, performance, stress, and safety intent.",
-            (
-                "Execution, scheduling, campaigns, mutation testing, and coverage remain "
-                "later increments."
-            ),
+            ("Scheduling, campaigns, mutation testing, and coverage remain later increments."),
         ],
     )
 
@@ -138,10 +138,10 @@ def main() -> None:
             ["FastAPI", "Bounded contracts, pagination, status filtering, and RBAC"],
             ["Domain service", "Idempotency, lifecycle, snapshots, audit, and outbox"],
             ["PostgreSQL", "Definitions, suite composition snapshots, versions, and status"],
-            ["Alembic", "Linear migration 0051 with reversible schema creation"],
+            ["Alembic", "Linear migrations 0051 and 0052 with reversible schema changes"],
             [
-                "Future executor",
-                "Consumes an active suite snapshot without rewriting catalog intent",
+                "Run executor",
+                "Materializes and updates ordered cases without rewriting catalog intent",
             ],
         ],
         [1.55, 5.35],
@@ -203,7 +203,50 @@ def main() -> None:
     )
 
     doc.add_page_break()
-    doc.add_heading("7 Events and Audit", level=1)
+    doc.add_heading("7 Execution Binding", level=1)
+    doc.add_paragraph(
+        "A run may reference an active catalog suite. Creation freezes the suite identifier, name, "
+        "type, version, and composition and creates one pending result per ordered case in the "
+        "same "
+        "transaction. Existing runs remain reproducible after the source suite is archived."
+    )
+    add_table(
+        doc,
+        ["Persisted input", "Bound", "Purpose"],
+        [
+            ["Attempt", "0 to 100", "Represent controlled execution attempts"],
+            ["Duration", "0 to 86400000 ms", "Record terminal execution time"],
+            ["Observed result", "4000 characters", "Explain the measured outcome"],
+            ["Evidence", "20 references", "Link artifacts without copying content"],
+            ["Case page", "200 records", "Protect query and response resources"],
+        ],
+        [1.65, 1.8, 3.55],
+    )
+
+    doc.add_heading("8 Result Aggregation", level=1)
+    add_table(
+        doc,
+        ["Condition", "Run outcome", "Reason"],
+        [
+            ["Cases remain pending or running", "Running", "Execution is incomplete"],
+            ["Required case failed", "Failed", "Required intent was not satisfied"],
+            ["Required case skipped", "Failed", "Required evidence is missing"],
+            ["All required cases passed", "Passed", "Reviewed acceptance intent was met"],
+            [
+                "Optional case failed or skipped",
+                "Passed if required cases pass",
+                "Optional scope is informative",
+            ],
+        ],
+        [2.25, 2.1, 2.65],
+    )
+    doc.add_paragraph(
+        "Case results exclusively derive running, passed, and failed states for catalog-backed "
+        "runs. An authorized operator may still cancel an incomplete run directly."
+    )
+
+    doc.add_page_break()
+    doc.add_heading("9 Events and Audit", level=1)
     add_table(
         doc,
         ["Mutation", "Outbox event", "Audit action"],
@@ -220,6 +263,11 @@ def main() -> None:
                 "atep.test_suite.status_changed.v1",
                 "test_suite.status_changed",
             ],
+            [
+                "Record case result",
+                "atep.test_case.result_recorded.v1",
+                "test_case.result_recorded",
+            ],
         ],
         [1.65, 3.15, 2.1],
     )
@@ -230,7 +278,7 @@ def main() -> None:
         "public identifier returns a stable conflict."
     )
 
-    doc.add_heading("8 Engineering Decisions", level=1)
+    doc.add_heading("10 Engineering Decisions", level=1)
     add_table(
         doc,
         ["Decision", "Rationale", "Consequence"],
@@ -247,12 +295,22 @@ def main() -> None:
             ],
             ["Forward-only status", "Avoid accidental reuse", "Archived content remains auditable"],
             ["Bound JSON and lists", "Protect shared resources", "Large data belongs in artifacts"],
+            [
+                "Materialize cases",
+                "Make execution state queryable",
+                "Each run owns immutable case identity",
+            ],
+            [
+                "Aggregate in transaction",
+                "Keep progress consistent",
+                "Case and run update together",
+            ],
         ],
         [1.65, 2.75, 2.5],
     )
 
     doc.add_page_break()
-    doc.add_heading("9 Verification Catalogue", level=1)
+    doc.add_heading("11 Verification Catalogue", level=1)
     add_table(
         doc,
         ["ID range", "Coverage", "Objective"],
@@ -266,18 +324,29 @@ def main() -> None:
             ["TF-T-009 to 010", "Lifecycle", "Validate state and optimistic concurrency"],
             ["TF-T-011 to 012", "RBAC and API", "Validate permissions and safe pagination"],
             ["TF-T-013 to 015", "Persistence", "Validate migration, uniqueness, and atomicity"],
+            ["TF-T-016 to 019", "Execution binding", "Validate snapshots, cases, and replay"],
+            [
+                "TF-T-020 to 026",
+                "Case results",
+                "Validate bounds, aggregation, APIs, and migration",
+            ],
         ],
         [1.55, 2.45, 2.9],
     )
 
-    doc.add_heading("10 Risks and Controls", level=1)
+    doc.add_page_break()
+    doc.add_heading("12 Risks and Controls", level=1)
     add_table(
         doc,
         ["Risk", "Control", "Next action"],
         [
             ["Ambiguous sequence", "Unique explicit case order", "Executor follows snapshot order"],
-            ["Catalog drift", "Definition version snapshot", "Record execution snapshot in VIII-2"],
-            ["Unbounded tests", "Timeout and collection limits", "Add run-level budgets"],
+            ["Catalog drift", "Suite and definition snapshots", "Run remains reproducible"],
+            [
+                "Unbounded results",
+                "Duration and collection limits",
+                "Large evidence stays in artifacts",
+            ],
             [
                 "Unsafe activation",
                 "Draft review lifecycle and RBAC",
@@ -288,22 +357,20 @@ def main() -> None:
         [1.5, 2.55, 2.85],
     )
 
-    doc.add_heading("11 Study Exercises", level=1)
-    bullets(
-        doc,
-        [
-            "Create one ADAS definition and identify every invariant enforced before persistence.",
-            "Compose a smoke suite and explain its stored definition versions.",
-        ],
+    doc.add_heading("13 Study Exercises", level=1)
+    doc.add_paragraph(
+        "Create one ADAS definition and identify its invariants. Then run two required cases, "
+        "explain the aggregate result, and compare an exact retry after suite archival with a new "
+        "run request for the archived suite."
     )
 
-    doc.add_heading("12 Next Development", level=1)
+    doc.add_heading("14 Next Development", level=1)
     doc.add_paragraph(
-        "VIII-2 will bind active suite snapshots to runs, persist ordered case results, and "
-        "correlate artifact evidence."
+        "VIII-3 will connect scheduled jobs to catalog suites for smoke, sanity, and regression "
+        "selection while preserving the VIII-2 snapshot."
     )
     doc.core_properties.title = "ATEP Volume VIII Test Framework Engineering Workbook"
-    doc.core_properties.subject = "Reusable test definitions and deterministic suite composition"
+    doc.core_properties.subject = "Versioned test catalog, execution binding, and case results"
     doc.core_properties.author = "ATEP Engineering"
     doc.save(OUTPUT)
 

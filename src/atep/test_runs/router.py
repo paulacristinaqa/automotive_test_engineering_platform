@@ -13,6 +13,9 @@ from atep.identity.users_router import request_correlation_id
 from atep.test_runs.realtime import publish_test_run_update, stream_test_run
 from atep.test_runs.schemas import (
     RUN_ID_PATTERN,
+    TestCaseResultPage,
+    TestCaseResultResponse,
+    TestCaseResultUpdate,
     TestRunCreate,
     TestRunPage,
     TestRunResponse,
@@ -22,9 +25,14 @@ from atep.test_runs.schemas import (
     test_run_response,
 )
 from atep.test_runs.service import (
+    case_result_response,
     create_test_run,
+    list_case_results,
     list_test_runs,
+    require_case_result,
+    require_catalog_suite,
     require_test_run,
+    update_case_result,
     update_test_run_status,
 )
 from atep.vehicles.service import require_vehicle
@@ -49,11 +57,21 @@ async def create_test_run_endpoint(
         if command.environment_profile_id is not None
         else None
     )
+    catalog_suite = (
+        await require_catalog_suite(session, command.catalog_suite_id)
+        if command.catalog_suite_id is not None
+        else None
+    )
+    if catalog_suite is not None and catalog_suite.suite_type != command.suite.value:
+        from atep.core.errors import TestRunConflictError
+
+        raise TestRunConflictError()
     test_run, duplicate = await create_test_run(
         session,
         command=command,
         vehicle=vehicle,
         environment_profile=environment_profile,
+        catalog_suite=catalog_suite,
         actor_user_id=actor.id,
         correlation_id=request_correlation_id(request),
     )
@@ -70,6 +88,59 @@ async def create_test_run_endpoint(
             observability=request.app.state.observability,
         )
     return result
+
+
+@router.get("/{run_id}/cases", response_model=TestCaseResultPage)
+async def list_test_case_results_endpoint(
+    run_id: Annotated[str, Path(pattern=RUN_ID_PATTERN.pattern)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(test_runs_read)],
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
+) -> TestCaseResultPage:
+    test_run, _vehicle = await require_test_run(session, run_id)
+    items, total = await list_case_results(session, test_run=test_run, limit=limit, offset=offset)
+    return TestCaseResultPage(
+        items=[case_result_response(item, run_id) for item in items],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.patch("/{run_id}/cases/{case_id}", response_model=TestCaseResultResponse)
+async def update_test_case_result_endpoint(
+    run_id: Annotated[str, Path(pattern=RUN_ID_PATTERN.pattern)],
+    case_id: Annotated[str, Path(min_length=8, max_length=64, pattern=r"^[a-z0-9][a-z0-9-]+$")],
+    command: TestCaseResultUpdate,
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(test_runs_write)],
+) -> TestCaseResultResponse:
+    test_run, vehicle = await require_test_run(session, run_id, for_update=True)
+    result = await require_case_result(session, test_run=test_run, case_id=case_id, for_update=True)
+    updated, duplicate = await update_case_result(
+        session,
+        test_run=test_run,
+        vehicle=vehicle,
+        result=result,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(request),
+    )
+    await session.commit()
+    response = case_result_response(updated, run_id)
+    if not duplicate:
+        await publish_test_run_update(
+            request.app.state.redis,
+            TestRunStreamEvent(
+                type="atep.test_case.result_recorded.v1",
+                test_run=test_run_response(test_run, vehicle.identifier),
+                occurred_at=datetime.now(UTC),
+            ),
+            observability=request.app.state.observability,
+        )
+    return response
 
 
 @router.get("", response_model=TestRunPage)

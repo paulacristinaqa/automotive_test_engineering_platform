@@ -28,6 +28,14 @@ class TestRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     environment_profile_version: Mapped[int | None] = mapped_column(Integer, default=None)
     environment_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
+    catalog_suite_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("test_suites.id", ondelete="RESTRICT"),
+        index=True,
+        default=None,
+    )
+    catalog_suite_version: Mapped[int | None] = mapped_column(Integer, default=None)
+    catalog_suite_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
     name: Mapped[str] = mapped_column(String(160))
     suite: Mapped[str] = mapped_column(String(24), index=True)
     metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, default=dict)
@@ -37,3 +45,25 @@ class TestRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     summary: Mapped[str | None] = mapped_column(Text)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class TestCaseResult(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "test_case_results"
+    __table_args__ = (
+        UniqueConstraint("test_run_id", "case_id", name="uq_test_case_results_run_case"),
+    )
+
+    test_run_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("test_runs.id", ondelete="CASCADE"), index=True
+    )
+    case_id: Mapped[str] = mapped_column(String(64))
+    definition_id: Mapped[str] = mapped_column(String(64), index=True)
+    definition_version: Mapped[int] = mapped_column(Integer)
+    order: Mapped[int] = mapped_column(Integer)
+    required: Mapped[bool]
+    status: Mapped[str] = mapped_column(String(16), index=True)
+    attempt: Mapped[int] = mapped_column(Integer, default=0)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, default=None)
+    observed: Mapped[str | None] = mapped_column(Text, default=None)
+    evidence_refs: Mapped[list[str]] = mapped_column(JSON, default=list)
+    version: Mapped[int] = mapped_column(Integer, default=1)

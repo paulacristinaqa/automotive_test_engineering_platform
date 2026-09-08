@@ -1,8 +1,8 @@
 # Volume VIII Test Framework Engineering Workbook
 
-Version 0.1.0 records the VIII-1 baseline for reusable test definitions and deterministic suite
-composition. It documents architecture, contracts, lifecycle, RBAC, persistence, events, audit,
-quality controls, test objectives, risks, study exercises, and the transition to execution binding.
+Version 0.2.0 records the VIII-1 catalog and VIII-2 execution-binding baseline. It documents
+architecture, contracts, lifecycle, RBAC, persistence, events, audit, deterministic case results,
+aggregate run semantics, test objectives, risks, and study exercises.
 
 ## VIII-1 evidence
 
@@ -15,6 +15,21 @@ quality controls, test objectives, risks, study exercises, and the transition to
 - Audit records and outbox events are written in the same database transaction as catalog changes.
 - Focused tests, Ruff, mypy, full regression, hosted integration, and document QA provide evidence.
 
+## VIII-2 outcome
+
+VIII-2 binds active suite snapshots to test runs, materializes pending cases atomically, and records
+bounded case-level outcomes. Required failures or skips fail the aggregate run; otherwise complete
+runs pass. The existing authenticated run stream publishes the resulting progress and status.
+
+## VIII-2 evidence
+
+- Catalog-backed runs preserve suite identity, version, type, name, and ordered composition.
+- Exact run replay remains idempotent after suite archival.
+- Case transitions use optimistic versions and forward-only states.
+- Attempts, duration, observed results, and evidence references have explicit bounds.
+- Audit and outbox payloads retain evidence counts instead of raw evidence references.
+- Migration 0052 adds optional run binding and uniquely constrained case-result records.
+
 ## Next increment
 
-VIII-2 will bind active suite snapshots to test runs and persist deterministic case-level results.
+VIII-3 will connect scheduled jobs to catalog-suite selection for smoke, sanity, and regression runs.
