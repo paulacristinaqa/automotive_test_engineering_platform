@@ -24,6 +24,7 @@ from atep.test_jobs.service import (
     list_test_jobs,
     require_test_job,
 )
+from atep.test_runs.service import require_catalog_suite
 from atep.vehicles.service import require_vehicle
 
 router = APIRouter(prefix="/test-jobs", tags=["test-jobs"])
@@ -45,11 +46,17 @@ async def create_test_job_endpoint(
         if command.environment_profile_id is not None
         else None
     )
+    catalog_suite = (
+        await require_catalog_suite(session, command.catalog_suite_id)
+        if command.catalog_suite_id is not None
+        else None
+    )
     job, duplicate = await create_test_job(
         session,
         command=command,
         vehicle=vehicle,
         environment_profile=profile,
+        catalog_suite=catalog_suite,
         actor_user_id=actor.id,
         correlation_id=request_correlation_id(request),
     )

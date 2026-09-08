@@ -4,8 +4,9 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
+from atep.test_catalog.schemas import CATALOG_ID_PATTERN
 from atep.test_runs.schemas import ENVIRONMENT_PROFILE_ID_PATTERN, RUN_ID_PATTERN, TestSuite
 
 if TYPE_CHECKING:
@@ -20,11 +21,19 @@ class TestJobStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class TestSelectionPolicy(StrEnum):
+    SMOKE = "smoke"
+    SANITY = "sanity"
+    REGRESSION = "regression"
+
+
 class TestJobCreate(BaseModel):
     job_id: str = Field(min_length=8, max_length=64)
     run_id: str = Field(min_length=8, max_length=64)
     vehicle_id: str = Field(min_length=3, max_length=80)
     environment_profile_id: str | None = Field(default=None, min_length=8, max_length=64)
+    catalog_suite_id: str | None = Field(default=None, min_length=8, max_length=64)
+    selection_policy: TestSelectionPolicy | None = None
     name: str = Field(min_length=1, max_length=160)
     suite: TestSuite
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -61,12 +70,30 @@ class TestJobCreate(BaseModel):
             raise ValueError("environment profile IDs must be lowercase URL-safe slugs")
         return value
 
+    @field_validator("catalog_suite_id")
+    @classmethod
+    def normalize_catalog_suite_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().casefold()
+        if not CATALOG_ID_PATTERN.fullmatch(normalized):
+            raise ValueError("catalog suite IDs must be lowercase URL-safe slugs")
+        return normalized
+
     @field_validator("scheduled_for")
     @classmethod
     def require_timezone(cls, value: datetime) -> datetime:
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("scheduled_for must include a timezone offset")
         return value
+
+    @model_validator(mode="after")
+    def validate_selection(self) -> "TestJobCreate":
+        if (self.catalog_suite_id is None) != (self.selection_policy is None):
+            raise ValueError("catalog_suite_id and selection_policy must be provided together")
+        if self.selection_policy is not None and self.suite.value != self.selection_policy.value:
+            raise ValueError("suite must match selection_policy")
+        return self
 
 
 class TestJobCancel(BaseModel):
@@ -88,6 +115,10 @@ class TestJobResponse(BaseModel):
     environment_profile_id: str | None
     environment_profile_version: int | None
     environment_snapshot: dict[str, Any] | None
+    catalog_suite_id: str | None
+    catalog_suite_version: int | None
+    selection_policy: TestSelectionPolicy | None
+    selection_snapshot: dict[str, Any] | None
     name: str
     suite: TestSuite
     metadata: dict[str, Any]
@@ -122,6 +153,12 @@ def test_job_response(job: "TestJob", vehicle_identifier: str) -> TestJobRespons
         environment_profile_id=profile_id,
         environment_profile_version=job.environment_profile_version,
         environment_snapshot=job.environment_snapshot,
+        catalog_suite_id=(
+            str(job.selection_snapshot.get("suite_id")) if job.selection_snapshot else None
+        ),
+        catalog_suite_version=job.catalog_suite_version,
+        selection_policy=job.selection_policy,
+        selection_snapshot=job.selection_snapshot,
         name=job.name,
         suite=job.suite,
         metadata=job.metadata_,

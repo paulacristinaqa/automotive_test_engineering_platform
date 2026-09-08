@@ -1,3 +1,4 @@
+from copy import deepcopy
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -8,16 +9,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from atep.audit.service import record_audit
 from atep.core.errors import (
     ResourceNotFoundError,
+    TestCatalogStateError,
     TestJobConflictError,
     TestJobStateError,
     TestJobVersionConflictError,
 )
 from atep.environment_profiles.models import EnvironmentProfile
 from atep.events.outbox import enqueue_event
+from atep.test_catalog.models import TestSuite
+from atep.test_catalog.schemas import CatalogStatus
 from atep.test_jobs.models import TestJob
 from atep.test_jobs.schemas import TestJobCancel, TestJobCreate, TestJobStatus
-from atep.test_runs.models import TestRun
-from atep.test_runs.schemas import TestRunStatus
+from atep.test_runs.models import TestCaseResult, TestRun
+from atep.test_runs.schemas import TestCaseStatus, TestRunStatus
 from atep.test_runs.service import test_run_event_payload
 from atep.vehicles.models import Vehicle
 
@@ -30,11 +34,14 @@ async def create_test_job(
     actor_user_id: UUID,
     correlation_id: UUID | None,
     environment_profile: EnvironmentProfile | None = None,
+    catalog_suite: TestSuite | None = None,
     now: datetime | None = None,
 ) -> tuple[TestJob, bool]:
     existing = await session.scalar(select(TestJob).where(TestJob.job_id == command.job_id))
     if existing is not None:
-        if not _same_creation(existing, command, vehicle, environment_profile, actor_user_id):
+        if not _same_creation(
+            existing, command, vehicle, environment_profile, catalog_suite, actor_user_id
+        ):
             raise TestJobConflictError()
         return existing, True
     conflicting_job = await session.scalar(
@@ -43,6 +50,17 @@ async def create_test_job(
     existing_run = await session.scalar(select(TestRun.id).where(TestRun.run_id == command.run_id))
     if conflicting_job is not None or existing_run is not None:
         raise TestJobConflictError()
+
+    if catalog_suite is not None:
+        if catalog_suite.status != CatalogStatus.ACTIVE.value:
+            raise TestCatalogStateError(
+                current_status=catalog_suite.status, requested_status="schedule"
+            )
+        if catalog_suite.suite_type != command.selection_policy:
+            raise TestCatalogStateError(
+                current_status=catalog_suite.suite_type,
+                requested_status=str(command.selection_policy),
+            )
 
     created_at = now or datetime.now(UTC)
     snapshot = _profile_snapshot(environment_profile)
@@ -54,6 +72,10 @@ async def create_test_job(
         environment_profile_id=environment_profile.id if environment_profile else None,
         environment_profile_version=environment_profile.version if environment_profile else None,
         environment_snapshot=snapshot,
+        catalog_suite_id=catalog_suite.id if catalog_suite else None,
+        catalog_suite_version=catalog_suite.version if catalog_suite else None,
+        selection_policy=command.selection_policy.value if command.selection_policy else None,
+        selection_snapshot=_selection_snapshot(catalog_suite),
         name=command.name,
         suite=command.suite.value,
         metadata_=command.metadata,
@@ -198,6 +220,9 @@ async def dispatch_due_test_jobs(
             environment_profile_id=job.environment_profile_id,
             environment_profile_version=job.environment_profile_version,
             environment_snapshot=job.environment_snapshot,
+            catalog_suite_id=job.catalog_suite_id,
+            catalog_suite_version=job.catalog_suite_version,
+            catalog_suite_snapshot=job.selection_snapshot,
             name=job.name,
             suite=job.suite,
             metadata_=job.metadata_,
@@ -212,6 +237,27 @@ async def dispatch_due_test_jobs(
         )
         session.add(test_run)
         await session.flush()
+        if job.selection_snapshot is not None:
+            for case in job.selection_snapshot["cases"]:
+                session.add(
+                    TestCaseResult(
+                        test_run_id=test_run.id,
+                        case_id=str(case["definition_id"]),
+                        definition_id=str(case["definition_id"]),
+                        definition_version=int(case["definition_version"]),
+                        order=int(case["order"]),
+                        required=bool(case["required"]),
+                        status=TestCaseStatus.PENDING.value,
+                        attempt=0,
+                        duration_ms=None,
+                        observed=None,
+                        evidence_refs=[],
+                        version=1,
+                        created_at=dispatched_at,
+                        updated_at=dispatched_at,
+                    )
+                )
+            await session.flush()
         job.status = TestJobStatus.DISPATCHED.value
         job.version += 1
         job.test_run_id = test_run.id
@@ -258,6 +304,14 @@ def test_job_event_payload(job: TestJob, vehicle_identifier: str) -> dict[str, o
         ),
         "environment_profile_version": job.environment_profile_version,
         "environment_snapshot": job.environment_snapshot,
+        "catalog_suite_id": (
+            job.selection_snapshot.get("suite_id") if job.selection_snapshot else None
+        ),
+        "catalog_suite_version": job.catalog_suite_version,
+        "selection_policy": job.selection_policy,
+        "selection_case_count": (
+            len(job.selection_snapshot.get("cases", [])) if job.selection_snapshot else 0
+        ),
         "name": job.name,
         "suite": job.suite,
         "metadata": job.metadata_,
@@ -283,11 +337,24 @@ def _profile_snapshot(profile: EnvironmentProfile | None) -> dict[str, object] |
     }
 
 
+def _selection_snapshot(suite: TestSuite | None) -> dict[str, object] | None:
+    if suite is None:
+        return None
+    return {
+        "suite_id": suite.suite_id,
+        "name": suite.name,
+        "suite_type": suite.suite_type,
+        "tags": deepcopy(suite.tags),
+        "cases": deepcopy(suite.composition),
+    }
+
+
 def _same_creation(
     job: TestJob,
     command: TestJobCreate,
     vehicle: Vehicle,
     profile: EnvironmentProfile | None,
+    catalog_suite: TestSuite | None,
     actor_user_id: UUID,
 ) -> bool:
     return (
@@ -295,6 +362,9 @@ def _same_creation(
         and job.vehicle_id == vehicle.id
         and job.requested_by_user_id == actor_user_id
         and job.environment_profile_id == (profile.id if profile else None)
+        and job.catalog_suite_id == (catalog_suite.id if catalog_suite else None)
+        and job.selection_policy
+        == (command.selection_policy.value if command.selection_policy else None)
         and job.name == command.name
         and job.suite == command.suite.value
         and job.metadata_ == command.metadata

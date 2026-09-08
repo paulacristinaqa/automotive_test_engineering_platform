@@ -1,6 +1,7 @@
 # Volume VIII Test Framework Engineering Workbook
 
-Version 0.2.0 records the VIII-1 catalog and VIII-2 execution-binding baseline. It documents
+Version 0.3.0 records the VIII-1 catalog, VIII-2 execution binding, and VIII-3 scheduled-selection
+baseline. It documents
 architecture, contracts, lifecycle, RBAC, persistence, events, audit, deterministic case results,
 aggregate run semantics, test objectives, risks, and study exercises.
 
@@ -30,6 +31,21 @@ runs pass. The existing authenticated run stream publishes the resulting progres
 - Audit and outbox payloads retain evidence counts instead of raw evidence references.
 - Migration 0052 adds optional run binding and uniquely constrained case-result records.
 
+## VIII-3 outcome
+
+VIII-3 binds durable test jobs to an explicit smoke, sanity, or regression catalog selection. The
+job preserves the reviewed suite snapshot before waiting, and dispatch later creates the run and
+its pending cases from that immutable intent.
+
+## VIII-3 evidence
+
+- Catalog suite ID and selection policy must be supplied together and match the requested run suite.
+- Only active smoke, sanity, and regression suites can enter the scheduled-selection path.
+- Suite identity, version, type, tags, and ordered cases are persisted on the job.
+- Dispatch uses the job snapshot and materializes case results atomically with the run.
+- Legacy jobs remain supported, while selection metadata appears in API, audit, and outbox evidence.
+- Migration 0053 adds the nullable catalog reference, selection policy, version, snapshot, and indexes.
+
 ## Next increment
 
-VIII-3 will connect scheduled jobs to catalog-suite selection for smoke, sanity, and regression runs.
+VIII-4 will add bounded performance and stress profiles, thresholds, resource budgets, and trends.

@@ -35,6 +35,18 @@
 - **TF-NF-006** Limit attempts to 100, duration to 86,400,000 ms, and evidence references to 20.
 - **TF-NF-007** Never copy raw evidence content into audit or outbox payloads.
 
+## VIII-3 Scheduled selection
+
+- **TF-F-022** Schedule an active catalog suite with an explicit smoke, sanity, or regression policy.
+- **TF-F-023** Require the requested run suite, selection policy, and catalog suite type to match.
+- **TF-F-024** Snapshot suite identity, version, type, tags, and ordered composition when scheduling.
+- **TF-F-025** Dispatch from the persisted selection snapshot without re-reading mutable catalog data.
+- **TF-F-026** Materialize one pending case result per scheduled snapshot case atomically with the run.
+- **TF-F-027** Preserve legacy scheduled jobs that do not bind a catalog suite.
+- **TF-F-028** Expose the snapshot in job APIs and bounded identity, policy, version, and case-count evidence.
+- **TF-NF-008** Restrict this increment to smoke, sanity, and regression; performance and stress remain VIII-4.
+- **TF-NF-009** Keep due-job dispatch bounded, concurrent-worker safe, CPU-only, and independent of paid services.
+
 ## Verification catalogue
 
 - **TF-T-001** Accept a complete reusable definition and normalize identifiers and tags.
@@ -63,3 +75,11 @@
 - **TF-T-024** Verify case result, aggregate run state, audit, and outbox commit atomically.
 - **TF-T-025** Verify case APIs, RBAC, pagination, and authenticated live run projection.
 - **TF-T-026** Verify migration 0052 upgrade, downgrade, constraints, and one Alembic head.
+- **TF-T-027** Accept matching smoke, sanity, and regression selections and normalize suite IDs.
+- **TF-T-028** Reject incomplete, mismatched, inactive, performance, stress, and safety selections.
+- **TF-T-029** Verify exact job replay preserves idempotency and does not duplicate evidence.
+- **TF-T-030** Verify scheduled selection snapshots remain unchanged after catalog mutation or archival.
+- **TF-T-031** Dispatch the persisted snapshot and materialize its ordered pending cases atomically.
+- **TF-T-032** Verify job and run events expose selection metadata without copying case payloads.
+- **TF-T-033** Verify API contracts, RBAC, safe pagination, and legacy scheduler compatibility.
+- **TF-T-034** Verify migration 0053 upgrade, downgrade, foreign keys, indexes, and one Alembic head.

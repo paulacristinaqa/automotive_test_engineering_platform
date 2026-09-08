@@ -768,6 +768,8 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                     **scheduled_payload,
                     "job_id": due_job_id,
                     "run_id": due_run_id,
+                    "catalog_suite_id": suite_id,
+                    "selection_policy": "smoke",
                     "scheduled_for": "2000-01-01T00:00:00Z",
                 },
             )
@@ -789,6 +791,13 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             )
             assert generated_run.status_code == 200, generated_run.text
             assert generated_run.json()["status"] == "queued"
+            assert generated_run.json()["catalog_suite_id"] == suite_id
+            scheduled_cases = await client.get(
+                f"/api/v1/test-runs/{due_run_id}/cases", headers=admin_headers
+            )
+            assert scheduled_cases.status_code == 200, scheduled_cases.text
+            assert scheduled_cases.json()["total"] == 1
+            assert scheduled_cases.json()["items"][0]["definition_id"] == definition_id
 
             gateway_name = f"integration-gateway-{uuid4().hex[:12]}"
             gateway_response = await client.post(

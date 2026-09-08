@@ -4,7 +4,8 @@
   deterministic suite composition, RBAC, audit, events, APIs, and workbook baseline.
 - [x] **VIII-2 Execution binding** - active suite snapshots, materialized run cases, bounded results,
   deterministic aggregation, RBAC, audit, outbox, and live updates.
-- [ ] **VIII-3 Scheduler and selection** - scheduled execution, smoke, sanity, and regression selection.
+- [x] **VIII-3 Scheduler and selection** - durable scheduled execution with immutable smoke, sanity,
+  and regression suite-selection snapshots.
 - [ ] **VIII-4 Performance and stress** - load profiles, thresholds, resource budgets, and trend evidence.
 - [ ] **VIII-5 Fault injection** - reusable fault campaigns across vehicle, ECU, CAN, diagnostics, EV, and ADAS.
 - [ ] **VIII-6 Mutation testing and coverage** - mutation operators, kill rate, requirement coverage, and gaps.
@@ -12,5 +13,5 @@
 
 ## Next recommended increment
 
-VIII-3 should extend the durable scheduler with catalog-suite selection policies for smoke, sanity,
-and regression execution while preserving the VIII-2 execution snapshot.
+VIII-4 should add bounded performance and stress load profiles, acceptance thresholds, resource
+budgets, and comparable trend evidence without changing VIII-3 selection snapshots.
