@@ -64,6 +64,24 @@
 - **TF-NF-011** Keep physical mutation in native domain simulators; campaign contracts must not expose arbitrary generic command execution.
 - **TF-NF-012** Run campaign management and verification locally without GPU, paid cloud, or paid AI dependencies.
 
+## VIII-6 Mutation testing and requirement coverage
+
+- **TF-F-040** Create bounded mutation campaigns from active catalog suites and preserve immutable suite snapshots.
+- **TF-F-041** Restrict mutants to versioned operators, unique identities and order, bounded targets, parameters, and expected detection.
+- **TF-F-042** Apply idempotent creation and a draft, active, archived forward-only lifecycle with optimistic locking.
+- **TF-F-043** Create executions only from active campaigns and atomically materialize one pending result per mutant.
+- **TF-F-044** Record pending, running, killed, survived, error, and skipped outcomes with versions, duration, detecting tests, and evidence references.
+- **TF-F-045** Derive the mutation score as killed divided by killed plus survived mutants.
+- **TF-F-046** Fail the aggregate execution for required survived, error, or skipped mutants; optional outcomes remain informative.
+- **TF-F-047** Preserve exact execution replay after campaign archival while rejecting new executions.
+- **TF-F-048** Trace requirements only to known test definitions and bounded evidence references.
+- **TF-F-049** Classify each requirement deterministically as covered, partial, or gap.
+- **TF-F-050** Expose filtered coverage lists and aggregate covered, partial, and gap counts.
+- **TF-F-051** Atomically persist campaign, execution, result, and coverage audit/outbox evidence without raw parameters or evidence references.
+- **TF-NF-013** Limit campaigns to 500 mutants, parameters to 8,192 bytes, detecting tests to 200, and evidence references to 20.
+- **TF-NF-014** Treat mutation execution as reviewed orchestration data; native mutation adapters must not expose arbitrary code execution.
+- **TF-NF-015** Run campaign, scoring, traceability, and verification locally without GPU, paid cloud, or paid AI dependencies.
+
 ## Verification catalogue
 
 - **TF-T-001** Accept a complete reusable definition and normalize identifiers and tags.
@@ -114,3 +132,14 @@
 - **TF-T-046** Verify API contracts, RBAC, pagination, safe schema bounds, and stable HTTP errors.
 - **TF-T-047** Verify audit and outbox payloads expose fingerprints and counts without raw parameters or evidence references.
 - **TF-T-048** Verify migration 0054 upgrade, downgrade, constraints, indexes, and one linear Alembic head.
+- **TF-T-049** Accept the allowlisted mutation operators and reject unknown operators, duplicate identities or order, and excessive bounds.
+- **TF-T-050** Verify campaign suite snapshots, idempotency, lifecycle, optimistic locking, audit, and bounded events.
+- **TF-T-051** Create an execution snapshot and atomically materialize ordered pending mutant results.
+- **TF-T-052** Reject inactive campaigns and mismatched test-run vehicles while preserving exact replay after archival.
+- **TF-T-053** Verify valid mutant transitions, terminal evidence rules, stale versions, and stable conflicts.
+- **TF-T-054** Verify deterministic kill rate and aggregate passed and failed outcomes for required and optional mutants.
+- **TF-T-055** Create and update requirement traceability, reject unknown definitions, and classify covered, partial, and gap states.
+- **TF-T-056** Verify coverage filters, aggregate counts, pagination bounds, RBAC, and stable HTTP errors.
+- **TF-T-057** Verify audit/outbox evidence exposes counts rather than raw parameters or evidence references.
+- **TF-T-058** Verify migration 0055 upgrade, downgrade, constraints, indexes, and one linear Alembic head.
+- **TF-T-059** Exercise campaign, execution, scoring, archival replay, traceability, gap analysis, and RBAC against the real integration stack.

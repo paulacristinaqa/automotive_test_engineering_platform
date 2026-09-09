@@ -523,6 +523,26 @@ def test_fault_campaign_contracts_and_safe_bounds_are_published() -> None:
     assert result["evidence_refs"]["maxItems"] == 20
 
 
+def test_mutation_and_requirement_coverage_contracts_are_published() -> None:
+    schema = core_app.openapi()
+    paths = schema["paths"]
+    assert {"get", "post"} <= set(paths["/api/v1/mutation-campaigns"])
+    assert "patch" in paths["/api/v1/mutation-campaigns/{campaign_id}/status"]
+    assert "post" in paths["/api/v1/mutation-campaigns/{campaign_id}/executions"]
+    assert "get" in paths["/api/v1/mutation-executions"]
+    assert "get" in paths["/api/v1/mutation-executions/{execution_id}/mutants"]
+    assert "patch" in paths["/api/v1/mutation-executions/{execution_id}/mutants/{mutant_id}"]
+    assert "get" in paths["/api/v1/requirement-coverage"]
+    assert {"get", "put"} <= set(paths["/api/v1/requirement-coverage/{requirement_id}"])
+    campaign = schema["components"]["schemas"]["MutationCampaignCreate"]["properties"]
+    assert campaign["mutants"]["maxItems"] == 500
+    result = schema["components"]["schemas"]["MutantResultUpdate"]["properties"]
+    assert result["detected_by"]["maxItems"] == 200
+    assert result["evidence_refs"]["maxItems"] == 20
+    coverage = schema["components"]["schemas"]["RequirementCoverageUpsert"]["properties"]
+    assert coverage["definition_ids"]["maxItems"] == 200
+
+
 def test_electric_vehicle_battery_contracts_are_published() -> None:
     schema = core_app.openapi()
     paths = schema["paths"]

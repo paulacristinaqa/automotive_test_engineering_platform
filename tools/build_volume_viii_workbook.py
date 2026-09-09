@@ -90,10 +90,10 @@ def main() -> None:
     title.add_run("ATEP Volume VIII Test Framework Engineering Workbook")
     subtitle = doc.add_paragraph()
     subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    subtitle.add_run("Version 0.4.0   VIII 5 Fault Campaigns Implemented").bold = True
+    subtitle.add_run("Version 0.5.0   VIII 6 Mutation and Coverage Implemented").bold = True
     doc.add_paragraph(
         "This workbook records the catalog, execution-binding, scheduled-selection, and bounded "
-        "fault-campaign baseline "
+        "fault-campaign and mutation-quality baseline "
         "for ATEP. Reusable "
         "definitions describe test intent, suites preserve reviewed composition, and "
         "catalog-backed "
@@ -103,11 +103,11 @@ def main() -> None:
         doc,
         ["Field", "Value"],
         [
-            ["Status", "VIII-1, VIII-2, VIII-3, and VIII-5 implemented and verified"],
+            ["Status", "VIII-1, VIII-2, VIII-3, VIII-5, and VIII-6 implemented and verified"],
             ["Technology", "FastAPI, PostgreSQL, SQLAlchemy, Alembic, Pydantic"],
             ["Security", "test_catalog:read and test_catalog:manage"],
             ["Cost", "Local first with no paid cloud, AI, or GPU dependency"],
-            ["Next", "VIII-6 mutation testing and coverage; VIII-4 deferred"],
+            ["Next", "VIII-7 cross-platform automation; VIII-4 deferred"],
         ],
         [1.5, 5.4],
     )
@@ -119,7 +119,8 @@ def main() -> None:
         "A suite selects active definitions in an explicit order and freezes their versions. "
         "VIII-2 binds that snapshot to a run and records each case outcome. VIII-3 schedules "
         "that immutable intent for later smoke, sanity, or regression execution. VIII-5 adds "
-        "cross-domain fault campaigns with recovery plans and evidence."
+        "cross-domain fault campaigns with recovery plans and evidence. VIII-6 adds bounded "
+        "mutation scoring and explicit requirement coverage gaps."
     )
     bullets(
         doc,
@@ -131,7 +132,7 @@ def main() -> None:
             "Suites classify smoke, sanity, regression, performance, stress, and safety intent.",
             (
                 "Performance and stress remain planned but are deferred until near completion; "
-                "mutation testing and coverage are next."
+                "cross-platform automation is next."
             ),
         ],
     )
@@ -145,7 +146,7 @@ def main() -> None:
             ["FastAPI", "Bounded contracts, pagination, status filtering, and RBAC"],
             ["Domain service", "Idempotency, lifecycle, snapshots, audit, and outbox"],
             ["PostgreSQL", "Definitions, suite composition snapshots, versions, and status"],
-            ["Alembic", "Linear migrations 0051 through 0054 with reversible schema changes"],
+            ["Alembic", "Linear migrations 0051 through 0055 with reversible schema changes"],
             [
                 "Run executor",
                 "Materializes and updates ordered cases without rewriting catalog intent",
@@ -211,6 +212,8 @@ def main() -> None:
             ["Test suites", "List and detail", "test_catalog:read"],
             ["Fault campaigns", "Create, status, execute, cancel", "test_catalog:manage"],
             ["Fault campaigns", "List, detail, and results", "test_catalog:read"],
+            ["Mutation and coverage", "Create, status, execute, update", "test_catalog:manage"],
+            ["Mutation and coverage", "List, detail, and results", "test_catalog:read"],
         ],
         [1.65, 3.25, 2.0],
     )
@@ -309,7 +312,43 @@ def main() -> None:
     )
 
     doc.add_page_break()
-    doc.add_heading("11 Events and Audit", level=1)
+    doc.add_heading("11 Mutation Testing and Coverage", level=1)
+    doc.add_paragraph(
+        "VIII-6 binds an active catalog suite to a reviewed mutation campaign. Each campaign "
+        "preserves the suite snapshot and contains up to five hundred uniquely ordered mutants "
+        "using seven explicit operators. Execution materializes pending results atomically and "
+        "never exposes arbitrary source or shell execution through the API."
+    )
+    add_table(
+        doc,
+        ["Control", "Rule", "Engineering purpose"],
+        [
+            ["Operators", "Seven allowlisted values", "Keep adapters portable and reviewable"],
+            ["Parameters", "8192 bytes per mutant", "Bound structured orchestration intent"],
+            ["Killed result", "At least one detecting test", "Make detection evidence explicit"],
+            [
+                "Mutation score",
+                "Killed divided by killed plus survived",
+                "Avoid distortion by errors",
+            ],
+            [
+                "Required outcome",
+                "Survived, error, or skip fails",
+                "Protect reviewed acceptance intent",
+            ],
+            ["Evidence", "At most 20 references", "Link artifacts without copying content"],
+        ],
+        [1.5, 2.5, 2.9],
+    )
+    doc.add_paragraph(
+        "Requirement records reference known catalog definitions and external evidence. Both "
+        "present means covered, only one present means partial, and neither means gap. Collection "
+        "responses include totals for each state so dashboards and quality gates can expose "
+        "missing tests or missing evidence directly."
+    )
+
+    doc.add_page_break()
+    doc.add_heading("12 Events and Audit", level=1)
     add_table(
         doc,
         ["Mutation", "Outbox event", "Audit action"],
@@ -354,6 +393,22 @@ def main() -> None:
                 "atep.fault_campaign.execution.cancelled.v1",
                 "fault_campaign.execution_cancelled",
             ],
+            [
+                "Create mutation campaign",
+                "atep.mutation_campaign.created.v1",
+                "mutation_campaign.created",
+            ],
+            [
+                "Create mutation execution",
+                "atep.mutation_execution.created.v1",
+                "mutation_execution.created",
+            ],
+            ["Record mutant result", "atep.mutant_result.recorded.v1", "mutant_result.recorded"],
+            [
+                "Update requirement",
+                "atep.requirement_coverage.updated.v1",
+                "requirement_coverage.updated",
+            ],
         ],
         [1.65, 3.15, 2.1],
     )
@@ -365,7 +420,7 @@ def main() -> None:
     )
 
     doc.add_page_break()
-    doc.add_heading("12 Engineering Decisions", level=1)
+    doc.add_heading("13 Engineering Decisions", level=1)
     add_table(
         doc,
         ["Decision", "Rationale", "Consequence"],
@@ -407,12 +462,22 @@ def main() -> None:
                 "Make safe restoration testable",
                 "Every step has a bounded recovery plan",
             ],
+            [
+                "Allowlist mutation operators",
+                "Exclude arbitrary execution",
+                "Native adapters remain isolated in VIII-7",
+            ],
+            [
+                "Derive coverage state",
+                "Make gaps deterministic",
+                "Dashboard consumers use stable totals",
+            ],
         ],
         [1.65, 2.75, 2.5],
     )
 
     doc.add_page_break()
-    doc.add_heading("13 Verification Catalogue", level=1)
+    doc.add_heading("14 Verification Catalogue", level=1)
     add_table(
         doc,
         ["ID range", "Coverage", "Objective"],
@@ -442,12 +507,17 @@ def main() -> None:
                 "Fault campaigns",
                 "Validate safety, lifecycle, aggregation, evidence, API, and migration",
             ],
+            [
+                "TF-T-049 to 059",
+                "Mutation and coverage",
+                "Validate scoring, traceability, safety, RBAC, integration, and migration",
+            ],
         ],
         [1.55, 2.45, 2.9],
     )
 
     doc.add_page_break()
-    doc.add_heading("14 Risks and Controls", level=1)
+    doc.add_heading("15 Risks and Controls", level=1)
     add_table(
         doc,
         ["Risk", "Control", "Next action"],
@@ -485,29 +555,42 @@ def main() -> None:
                 "Defer VIII-4 until stable baselines",
                 "Run bounded CPU-only functional tests now",
             ],
+            [
+                "Unsafe mutation execution",
+                "Structured allowlist and no generic runner",
+                "Isolate native adapters in VIII-7",
+            ],
+            [
+                "False coverage confidence",
+                "Separate test links from evidence links",
+                "Track partial and gap totals",
+            ],
         ],
         [1.5, 2.55, 2.85],
     )
 
-    doc.add_heading("15 Study Exercises", level=1)
+    doc.add_heading("16 Study Exercises", level=1)
     doc.add_paragraph(
         "Create one ADAS definition and identify its invariants. Then run two required cases, "
         "explain the aggregate result, and compare an exact retry after suite archival with a new "
         "run request for the archived suite. Schedule the same suite, archive it, and explain why "
         "the stored job can still dispatch reproducibly. Finally, design one battery-temperature "
         "fault with recovery verification and explain why the campaign contract must not expose "
-        "an arbitrary shell or adapter command."
+        "an arbitrary shell or adapter command. Create two mutants, calculate a fifty percent "
+        "score, and explain why a requirement with a test but no evidence is only partially "
+        "covered."
     )
 
-    doc.add_heading("16 Next Development", level=1)
+    doc.add_heading("17 Next Development", level=1)
     doc.add_paragraph(
-        "VIII-6 will add mutation operators, kill-rate evidence, requirement coverage, and gap "
-        "analysis. VIII-4 remains planned near project completion, when stable baselines make "
+        "VIII-7 will connect Gateway and CarSystemUI orchestration to the catalog, execution, "
+        "fault, mutation, and evidence contracts. VIII-4 remains planned near project completion, "
+        "when stable baselines make "
         "performance thresholds and comparable trends meaningful."
     )
     doc.core_properties.title = "ATEP Volume VIII Test Framework Engineering Workbook"
     doc.core_properties.subject = (
-        "Versioned catalog, execution binding, scheduling, and fault campaigns"
+        "Versioned catalog, execution binding, fault campaigns, mutation testing, and coverage"
     )
     doc.core_properties.author = "ATEP Engineering"
     doc.save(OUTPUT)
