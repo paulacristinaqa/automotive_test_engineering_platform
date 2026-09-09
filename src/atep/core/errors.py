@@ -1145,6 +1145,25 @@ class CrossPlatformAutomationContractError(ApplicationError):
         )
 
 
+class AiAnalysisConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="ai_analysis_conflict",
+            message="The analysis request identifier is already used by different input.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class AiAnalysisPolicyError(ApplicationError):
+    def __init__(self, reason: str) -> None:
+        super().__init__(
+            code="ai_analysis_policy_invalid",
+            message="The analysis request violates the AI data policy.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"reason": reason},
+        )
+
+
 class ResourceNotFoundError(ApplicationError):
     def __init__(self, resource: str) -> None:
         super().__init__(

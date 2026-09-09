@@ -36,6 +36,8 @@ class PermissionName(StrEnum):
     TEST_ARTIFACTS_WRITE = "test_artifacts:write"
     TEST_CATALOG_READ = "test_catalog:read"
     TEST_CATALOG_MANAGE = "test_catalog:manage"
+    AI_ANALYSIS_READ = "ai_analysis:read"
+    AI_ANALYSIS_MANAGE = "ai_analysis:manage"
     PLATFORM_ADMIN = "platform:admin"
 
 
