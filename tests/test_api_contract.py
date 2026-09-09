@@ -806,10 +806,14 @@ def test_ai_analysis_request_contract_is_published() -> None:
     collection = paths["/api/v1/ai/analysis-requests"]
     assert {"get", "post"} <= set(collection)
     assert "get" in paths["/api/v1/ai/analysis-requests/{request_id}"]
+    executions = paths["/api/v1/ai/analysis-requests/{request_id}/executions"]
+    assert {"get", "post"} <= set(executions)
     parameters = {item["name"]: item["schema"] for item in collection["get"]["parameters"]}
     assert parameters["limit"]["maximum"] == 100
     create = schema["components"]["schemas"]["AiAnalysisRequestCreate"]
     assert create["properties"]["evidence_refs"]["maxItems"] == 50
+    execution = schema["components"]["schemas"]["AiAnalysisExecute"]
+    assert execution["properties"]["provider_id"]["default"] == "local-rules"
 
 
 def test_performance_and_stress_contract_is_published() -> None:
