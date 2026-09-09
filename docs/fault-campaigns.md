@@ -9,7 +9,8 @@ or ADAS modules.
 The Test Framework owns campaign definitions, lifecycle, ordered execution snapshots, safety
 bounds, recovery intent, progress, aggregate outcome, audit, and transactional outbox evidence.
 Domain simulators own the actual state mutation and restoration. Cross-platform automatic dispatch
-through adapters remains planned for VIII-7. No API in VIII-5 accepts an arbitrary command or code.
+through native adapters remains an isolated integration concern. No API in VIII-5 accepts an
+arbitrary command or code.
 
 ## Safety model
 

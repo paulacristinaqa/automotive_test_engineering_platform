@@ -82,6 +82,23 @@
 - **TF-NF-014** Treat mutation execution as reviewed orchestration data; native mutation adapters must not expose arbitrary code execution.
 - **TF-NF-015** Run campaign, scoring, traceability, and verification locally without GPU, paid cloud, or paid AI dependencies.
 
+## VIII-7 Cross-platform automation reporting
+
+- **TF-F-052** Create one immutable cross-platform automation report per terminal test run.
+- **TF-F-053** Correlate the report with one vehicle and one gateway module that can publish telemetry and consume commands.
+- **TF-F-054** Require referenced telemetry to originate from the selected vehicle and gateway.
+- **TF-F-055** Require referenced commands to be terminal and belong to the selected vehicle, gateway, and test run.
+- **TF-F-056** Optionally correlate terminal fault and mutation executions for the same vehicle and test run.
+- **TF-F-057** Retain bounded CarSystemUI observations containing surface, connection state, displayed status/version, client version, capture time, and optional evidence reference.
+- **TF-F-058** Reject CarSystemUI observations that differ from the authoritative test-run status or version.
+- **TF-F-059** Derive a passed, failed, or cancelled combined outcome from all correlated terminal executions.
+- **TF-F-060** Make exact report retries idempotent and conflicting report or test-run reuse stable.
+- **TF-F-061** Provide create, detail, filtered list, and safe pagination APIs protected by catalog RBAC.
+- **TF-F-062** Atomically persist the report, audit record, and `atep.cross_platform_automation.report.created.v1` outbox event.
+- **TF-NF-016** Limit telemetry and command references to 100 each and CarSystemUI observations to 50.
+- **TF-NF-017** Keep audit/outbox payloads free from raw telemetry, commands, and CarSystemUI observation collections.
+- **TF-NF-018** Run correlation and reporting locally without GPU, paid cloud, or paid AI dependencies.
+
 ## Verification catalogue
 
 - **TF-T-001** Accept a complete reusable definition and normalize identifiers and tags.
@@ -143,3 +160,12 @@
 - **TF-T-057** Verify audit/outbox evidence exposes counts rather than raw parameters or evidence references.
 - **TF-T-058** Verify migration 0055 upgrade, downgrade, constraints, indexes, and one linear Alembic head.
 - **TF-T-059** Exercise campaign, execution, scoring, archival replay, traceability, gap analysis, and RBAC against the real integration stack.
+- **TF-T-060** Accept a complete terminal report and derive its combined outcome and summary.
+- **TF-T-061** Reject nonterminal test runs, fault executions, mutation executions, and commands.
+- **TF-T-062** Reject cross-vehicle, cross-gateway, cross-run, missing, or capability-incomplete references.
+- **TF-T-063** Reject stale or inconsistent CarSystemUI status/version and timezone-free timestamps.
+- **TF-T-064** Verify exact retry, conflicting report/test-run reuse, and database uniqueness.
+- **TF-T-065** Verify collection bounds, filtered pagination, OpenAPI contracts, and RBAC.
+- **TF-T-066** Verify audit/outbox atomicity and minimized event evidence.
+- **TF-T-067** Verify migration 0056 upgrade, downgrade, foreign keys, indexes, and one linear Alembic head.
+- **TF-T-068** Exercise the complete test-run, fault, mutation, gateway telemetry/command, CarSystemUI, report, replay, and RBAC flow against the disposable integration stack.

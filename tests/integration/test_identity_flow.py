@@ -1140,7 +1140,7 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             command_payload = {
                 "command_id": command_id,
                 "target_module_id": gateway_id,
-                "test_run_id": uuid4().hex,
+                "test_run_id": catalog_run_id,
                 "kind": "set_property",
                 "parameters": {"property": "battery_level", "value": 25},
             }
@@ -1238,6 +1238,51 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                 )
                 == 3
             )
+
+            automation_report_id = f"automation-report-{uuid4().hex[:12]}"
+            automation_report_payload = {
+                "report_id": automation_report_id,
+                "vehicle_id": vehicle_identifier,
+                "test_run_id": catalog_run_id,
+                "gateway_module_id": gateway_id,
+                "fault_execution_id": fault_execution_id,
+                "mutation_execution_id": mutation_execution_id,
+                "telemetry_event_ids": [telemetry_event_id],
+                "vehicle_command_ids": [command_id],
+                "carsystemui_observations": [
+                    {
+                        "observation_id": f"ui-observation-{uuid4().hex[:12]}",
+                        "surface": "test_detail",
+                        "connection_state": "connected",
+                        "displayed_run_status": "passed",
+                        "displayed_run_version": completed_catalog_run.json()["version"],
+                        "client_version": "1.0.0-integration",
+                        "captured_at": "2026-09-09T13:00:00Z",
+                        "evidence_ref": "artifact://carsystemui-test-detail",
+                    }
+                ],
+            }
+            automation_report = await client.post(
+                "/api/v1/cross-platform-automation/reports",
+                headers=admin_headers,
+                json=automation_report_payload,
+            )
+            assert automation_report.status_code == 201, automation_report.text
+            assert automation_report.json()["outcome"] == "passed"
+            assert automation_report.json()["summary"]["mutation_score"] == 0.5
+            assert automation_report.json()["summary"]["telemetry_event_count"] == 1
+            replayed_automation_report = await client.post(
+                "/api/v1/cross-platform-automation/reports",
+                headers=admin_headers,
+                json=automation_report_payload,
+            )
+            assert replayed_automation_report.status_code == 200
+            assert replayed_automation_report.json()["duplicate"] is True
+            automation_report_page = await client.get(
+                "/api/v1/cross-platform-automation/reports", headers=admin_headers
+            )
+            assert automation_report_page.status_code == 200
+            assert automation_report_page.json()["total"] == 1
 
             role_name = f"integration-qa-{uuid4().hex[:12]}"
             role_command = {
@@ -1488,6 +1533,14 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                 client, "GET", "/api/v1/mutation-campaigns", 403, headers=user_headers
             )
             assert mutation_campaigns_denied["code"] == "permission_denied"
+            automation_reports_denied = await expected_error(
+                client,
+                "GET",
+                "/api/v1/cross-platform-automation/reports",
+                403,
+                headers=user_headers,
+            )
+            assert automation_reports_denied["code"] == "permission_denied"
             artifacts_denied = await expected_error(
                 client,
                 "GET",

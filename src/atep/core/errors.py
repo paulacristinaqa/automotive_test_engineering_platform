@@ -1126,6 +1126,25 @@ class RequirementCoverageConflictError(ApplicationError):
         )
 
 
+class CrossPlatformAutomationConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="cross_platform_automation_conflict",
+            message="The report identifier or test run is already used by different input.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class CrossPlatformAutomationContractError(ApplicationError):
+    def __init__(self, reason: str) -> None:
+        super().__init__(
+            code="cross_platform_automation_contract_invalid",
+            message="The cross-platform automation report violates its contract.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"reason": reason},
+        )
+
+
 class ResourceNotFoundError(ApplicationError):
     def __init__(self, resource: str) -> None:
         super().__init__(

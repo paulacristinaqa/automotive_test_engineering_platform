@@ -90,7 +90,7 @@ def main() -> None:
     title.add_run("ATEP Volume VIII Test Framework Engineering Workbook")
     subtitle = doc.add_paragraph()
     subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    subtitle.add_run("Version 0.5.0   VIII 6 Mutation and Coverage Implemented").bold = True
+    subtitle.add_run("Version 0.6.0   Functional Volume VIII Baseline Complete").bold = True
     doc.add_paragraph(
         "This workbook records the catalog, execution-binding, scheduled-selection, and bounded "
         "fault-campaign and mutation-quality baseline "
@@ -103,11 +103,11 @@ def main() -> None:
         doc,
         ["Field", "Value"],
         [
-            ["Status", "VIII-1, VIII-2, VIII-3, VIII-5, and VIII-6 implemented and verified"],
+            ["Status", "Functional VIII-1, VIII-2, VIII-3, VIII-5, VIII-6, and VIII-7 complete"],
             ["Technology", "FastAPI, PostgreSQL, SQLAlchemy, Alembic, Pydantic"],
             ["Security", "test_catalog:read and test_catalog:manage"],
             ["Cost", "Local first with no paid cloud, AI, or GPU dependency"],
-            ["Next", "VIII-7 cross-platform automation; VIII-4 deferred"],
+            ["Next", "VIII-4 performance and stress near project completion"],
         ],
         [1.5, 5.4],
     )
@@ -132,7 +132,7 @@ def main() -> None:
             "Suites classify smoke, sanity, regression, performance, stress, and safety intent.",
             (
                 "Performance and stress remain planned but are deferred until near completion; "
-                "cross-platform automation is next."
+                "the functional Volume VIII baseline is complete."
             ),
         ],
     )
@@ -146,7 +146,7 @@ def main() -> None:
             ["FastAPI", "Bounded contracts, pagination, status filtering, and RBAC"],
             ["Domain service", "Idempotency, lifecycle, snapshots, audit, and outbox"],
             ["PostgreSQL", "Definitions, suite composition snapshots, versions, and status"],
-            ["Alembic", "Linear migrations 0051 through 0055 with reversible schema changes"],
+            ["Alembic", "Linear migrations 0051 through 0056 with reversible schema changes"],
             [
                 "Run executor",
                 "Materializes and updates ordered cases without rewriting catalog intent",
@@ -348,7 +348,38 @@ def main() -> None:
     )
 
     doc.add_page_break()
-    doc.add_heading("12 Events and Audit", level=1)
+    doc.add_heading("12 Cross Platform Automation Reporting", level=1)
+    doc.add_paragraph(
+        "VIII-7 closes the functional baseline with one immutable report per terminal test run. "
+        "The report correlates the authoritative vehicle and run with Vehicle Gateway telemetry "
+        "and commands, optional fault and mutation executions, and the status and version that "
+        "CarSystemUI displayed. Existing REST, WebSocket, workload identity, lease, and evidence "
+        "contracts remain authoritative."
+    )
+    add_table(
+        doc,
+        ["Evidence", "Consistency rule", "Bound"],
+        [
+            ["Test run", "Terminal and owned by the vehicle", "One report per run"],
+            ["Gateway", "Telemetry publisher and command consumer", "One selected module"],
+            ["Telemetry", "Same vehicle and source gateway", "100 identifiers"],
+            ["Commands", "Terminal and same vehicle, gateway, and run", "100 identifiers"],
+            ["Fault and mutation", "Terminal and same vehicle and run", "One execution each"],
+            ["CarSystemUI", "Displayed status and version match the run", "50 observations"],
+        ],
+        [1.6, 3.7, 1.6],
+    )
+    doc.add_paragraph(
+        "A failed correlated component makes the report failed. If nothing failed but one "
+        "component "
+        "was cancelled, the report is cancelled; otherwise it passes. Exact retries return the "
+        "original report. Audit and outbox evidence retains identities, outcome, and counts "
+        "without "
+        "copying raw telemetry, commands, or UI observations."
+    )
+
+    doc.add_page_break()
+    doc.add_heading("13 Events and Audit", level=1)
     add_table(
         doc,
         ["Mutation", "Outbox event", "Audit action"],
@@ -409,6 +440,11 @@ def main() -> None:
                 "atep.requirement_coverage.updated.v1",
                 "requirement_coverage.updated",
             ],
+            [
+                "Create automation report",
+                "atep.cross_platform_automation.report.created.v1",
+                "cross_platform_automation.report_created",
+            ],
         ],
         [1.65, 3.15, 2.1],
     )
@@ -420,7 +456,7 @@ def main() -> None:
     )
 
     doc.add_page_break()
-    doc.add_heading("13 Engineering Decisions", level=1)
+    doc.add_heading("14 Engineering Decisions", level=1)
     add_table(
         doc,
         ["Decision", "Rationale", "Consequence"],
@@ -455,7 +491,7 @@ def main() -> None:
             [
                 "Keep native mutation in domains",
                 "Preserve simulator ownership",
-                "Automatic adapters remain VIII-7",
+                "The API remains orchestration-only",
             ],
             [
                 "Require recovery intent",
@@ -465,19 +501,29 @@ def main() -> None:
             [
                 "Allowlist mutation operators",
                 "Exclude arbitrary execution",
-                "Native adapters remain isolated in VIII-7",
+                "Native adapters require isolated execution",
             ],
             [
                 "Derive coverage state",
                 "Make gaps deterministic",
                 "Dashboard consumers use stable totals",
             ],
+            [
+                "One report per test run",
+                "Prevent contradictory final evidence",
+                "Exact replay is idempotent",
+            ],
+            [
+                "Validate UI version",
+                "Reject stale displayed results",
+                "Persistent run remains authoritative",
+            ],
         ],
         [1.65, 2.75, 2.5],
     )
 
     doc.add_page_break()
-    doc.add_heading("14 Verification Catalogue", level=1)
+    doc.add_heading("15 Verification Catalogue", level=1)
     add_table(
         doc,
         ["ID range", "Coverage", "Objective"],
@@ -512,12 +558,17 @@ def main() -> None:
                 "Mutation and coverage",
                 "Validate scoring, traceability, safety, RBAC, integration, and migration",
             ],
+            [
+                "TF-T-060 to 068",
+                "Cross-platform reports",
+                "Validate correlation, outcome, replay, safety, RBAC, and integration",
+            ],
         ],
         [1.55, 2.45, 2.9],
     )
 
     doc.add_page_break()
-    doc.add_heading("15 Risks and Controls", level=1)
+    doc.add_heading("16 Risks and Controls", level=1)
     add_table(
         doc,
         ["Risk", "Control", "Next action"],
@@ -548,7 +599,7 @@ def main() -> None:
             [
                 "Vehicle state not restored",
                 "Required recovery and verification",
-                "Adapters report recovery evidence in VIII-7",
+                "Reports retain recovery evidence",
             ],
             [
                 "Resource-heavy early benchmarks",
@@ -558,18 +609,28 @@ def main() -> None:
             [
                 "Unsafe mutation execution",
                 "Structured allowlist and no generic runner",
-                "Isolate native adapters in VIII-7",
+                "Require isolated native adapters",
             ],
             [
                 "False coverage confidence",
                 "Separate test links from evidence links",
                 "Track partial and gap totals",
             ],
+            [
+                "Stale cockpit evidence",
+                "Match persisted run status and version",
+                "Reject inconsistent reports",
+            ],
+            [
+                "Cross-vehicle correlation",
+                "Validate every reference before commit",
+                "Keep one authoritative vehicle context",
+            ],
         ],
         [1.5, 2.55, 2.85],
     )
 
-    doc.add_heading("16 Study Exercises", level=1)
+    doc.add_heading("17 Study Exercises", level=1)
     doc.add_paragraph(
         "Create one ADAS definition and identify its invariants. Then run two required cases, "
         "explain the aggregate result, and compare an exact retry after suite archival with a new "
@@ -578,19 +639,19 @@ def main() -> None:
         "fault with recovery verification and explain why the campaign contract must not expose "
         "an arbitrary shell or adapter command. Create two mutants, calculate a fifty percent "
         "score, and explain why a requirement with a test but no evidence is only partially "
-        "covered."
+        "covered. Build a final report and identify which reference would be rejected if it came "
+        "from another gateway or displayed an older run version."
     )
 
-    doc.add_heading("17 Next Development", level=1)
+    doc.add_heading("18 Volume Completion", level=1)
     doc.add_paragraph(
-        "VIII-7 will connect Gateway and CarSystemUI orchestration to the catalog, execution, "
-        "fault, mutation, and evidence contracts. VIII-4 remains planned near project completion, "
-        "when stable baselines make "
-        "performance thresholds and comparable trends meaningful."
+        "The functional Volume VIII baseline is complete. VIII-4 remains planned near project "
+        "completion, when stable baselines make performance thresholds and comparable trends "
+        "meaningful without unnecessary CPU or GPU use during active architecture changes."
     )
     doc.core_properties.title = "ATEP Volume VIII Test Framework Engineering Workbook"
     doc.core_properties.subject = (
-        "Versioned catalog, execution binding, fault campaigns, mutation testing, and coverage"
+        "Complete functional test framework with cross-platform automation reporting"
     )
     doc.core_properties.author = "ATEP Engineering"
     doc.save(OUTPUT)

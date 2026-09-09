@@ -13,7 +13,7 @@ decisions while preserving cross-volume traceability.
 | V | Diagnostics | Baseline complete - V-1 through V-7 | `docs/workbook-volume-v.md` | `docs/ATEP_Volume_V_Diagnostics_Engineering_Workbook.docx` |
 | VI | Electric Vehicle | Baseline complete - VI-1 through VI-7 | `docs/workbook-volume-vi.md` | `docs/ATEP_Volume_VI_Electric_Vehicle_Engineering_Workbook.docx` |
 | VII | ADAS | Baseline complete - VII-1 through VII-7 | `docs/workbook-volume-vii.md` | `docs/ATEP_Volume_VII_ADAS_Engineering_Workbook.docx` |
-| VIII | Test Framework | VIII-1 implemented | `docs/workbook-volume-viii.md` | `docs/ATEP_Volume_VIII_Test_Framework_Engineering_Workbook.docx` |
+| VIII | Test Framework | Functional VIII-1/2/3/5/6/7 baseline complete; VIII-4 deferred | `docs/workbook-volume-viii.md` | `docs/ATEP_Volume_VIII_Test_Framework_Engineering_Workbook.docx` |
 | IX | AI Test Engineer | Planned | To be created when development begins | To be created |
 | X | Dashboard | Planned | To be created when development begins | To be created |
 | XI | DevOps | Planned | To be created when development begins | To be created |

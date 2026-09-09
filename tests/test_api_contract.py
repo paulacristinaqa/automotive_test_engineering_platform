@@ -772,6 +772,25 @@ def test_catalog_execution_case_result_contracts_are_published() -> None:
     assert update["properties"]["evidence_refs"]["maxItems"] == 20
 
 
+def test_cross_platform_automation_report_contract_is_published() -> None:
+    schema = core_app.openapi()
+    paths = schema["paths"]
+    collection = paths["/api/v1/cross-platform-automation/reports"]
+    assert {"get", "post"} <= set(collection)
+    assert "get" in paths["/api/v1/cross-platform-automation/reports/{report_id}"]
+    parameters = {item["name"]: item["schema"] for item in collection["get"]["parameters"]}
+    assert parameters["limit"]["maximum"] == 100
+    assert parameters["offset"]["maximum"] == 1_000_000
+    create = schema["components"]["schemas"]["AutomationReportCreate"]
+    assert create["properties"]["telemetry_event_ids"]["maxItems"] == 100
+    assert create["properties"]["vehicle_command_ids"]["maxItems"] == 100
+    assert create["properties"]["carsystemui_observations"]["maxItems"] == 50
+    summary = schema["components"]["schemas"]["AutomationReportSummary"]
+    assert {"test_run_status", "test_run_version", "telemetry_event_count"} <= set(
+        summary["required"]
+    )
+
+
 def test_metrics_endpoint_is_operational_but_not_part_of_public_openapi() -> None:
     assert "/metrics" not in core_app.openapi()["paths"]
     response = TestClient(core_app).get("/metrics")

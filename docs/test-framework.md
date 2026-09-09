@@ -5,7 +5,8 @@ VIII-1 introduced the catalog, VIII-2 bound reviewed suites to deterministic cas
 VIII-3 connects those snapshots to the durable scheduler for smoke, sanity, and regression runs.
 VIII-5 adds bounded cross-domain fault campaigns and recovery evidence. VIII-6 adds mutation
 quality evidence and requirement traceability. Performance and stress remain intentionally deferred
-until stable final baselines exist.
+until stable final baselines exist. VIII-7 closes the functional baseline with one correlated report
+across ATEP, Vehicle Gateway, and CarSystemUI.
 
 ## API
 
@@ -36,6 +37,9 @@ until stable final baselines exist.
 - `PATCH /api/v1/mutation-executions/{execution_id}/mutants/{mutant_id}` records an outcome.
 - `PUT /api/v1/requirement-coverage/{requirement_id}` creates or updates traceability.
 - `GET /api/v1/requirement-coverage` exposes filtered items and coverage-gap totals.
+- `POST /api/v1/cross-platform-automation/reports` creates one terminal correlated report.
+- `GET /api/v1/cross-platform-automation/reports` lists reports with outcome filtering.
+- `GET /api/v1/cross-platform-automation/reports/{report_id}` returns report evidence and summary.
 
 ## Composition model
 
@@ -90,8 +94,8 @@ optional failures remain informative. Exact retries remain idempotent after camp
 
 The framework owns orchestration intent, lifecycle, safety bounds, and evidence. Digital Vehicle,
 ECU, CAN, diagnostics, EV, and ADAS simulators remain responsible for performing their native state
-mutations. Automatic adapter dispatch belongs to VIII-7; the VIII-5 API deliberately exposes no
-arbitrary command runner.
+mutations. The VIII-5 API deliberately exposes no arbitrary command runner. Native adapter
+execution remains a future isolated integration concern; the API remains orchestration-only.
 
 ## Mutation testing and coverage
 
@@ -108,8 +112,27 @@ survivor, error, or skip fails the aggregate execution, while optional outcomes 
 Requirement coverage links stable requirement IDs to known catalog definitions and evidence
 references. Both links present means covered, one kind present means partial, and neither means a
 gap. Aggregate counts make missing evidence visible without parsing documents. The current layer
-stores reviewed orchestration and results only; native mutation adapters belong to VIII-7 and must
-not introduce arbitrary code execution.
+stores reviewed orchestration and results only. Native mutation adapters require isolated execution
+and must not introduce arbitrary code execution into the API process.
+
+## Cross-platform automation reporting
+
+VIII-7 reuses the existing public REST, gateway workload identity, command lease, telemetry,
+test-run WebSocket, fault, and mutation contracts. It adds one immutable report per terminal test
+run rather than introducing another execution channel. A report names the authoritative vehicle,
+test run, gateway module, telemetry and command identifiers, optional fault and mutation executions,
+and bounded CarSystemUI observations.
+
+Every reference is validated before commit. Telemetry must originate from the selected gateway and
+vehicle. Commands must be terminal and addressed to the same gateway, vehicle, and test run. Fault
+and mutation executions must also be terminal and correlated to that run. Each CarSystemUI
+observation includes a timezone-aware capture time and must display the authoritative run status and
+version, preventing stale UI state from being recorded as successful evidence.
+
+The combined outcome is failed if any correlated component failed, cancelled if none failed but one
+was cancelled, and passed otherwise. Exact retries return the original report. The transactional
+outbox and audit record contain identities, outcome, and counts only; detailed observations and
+external evidence references remain in the report.
 
 ## Security and cost
 

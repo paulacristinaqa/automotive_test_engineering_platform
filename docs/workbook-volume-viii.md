@@ -1,7 +1,8 @@
 # Volume VIII Test Framework Engineering Workbook
 
-Version 0.5.0 records the VIII-1 catalog, VIII-2 execution binding, VIII-3 scheduled-selection,
-VIII-5 fault-campaign baseline, and VIII-6 mutation/coverage baseline. It documents
+Version 0.6.0 records the complete functional Volume VIII baseline: VIII-1 catalog, VIII-2 execution
+binding, VIII-3 scheduled selection, VIII-5 fault campaigns, VIII-6 mutation/coverage, and VIII-7
+cross-platform reporting. It documents
 architecture, contracts, lifecycle, RBAC, persistence, events, audit, deterministic case results,
 aggregate run semantics, test objectives, risks, and study exercises.
 
@@ -62,7 +63,7 @@ explicit states, and aggregate required outcomes without granting a generic comm
 - Exact execution replay remains idempotent after campaign archival.
 - Audit and outbox records contain counts and fingerprints, not raw parameters or evidence references.
 - Migration 0054 adds campaigns, executions, and step results with reversible constraints and indexes.
-- Native simulators retain ownership of state mutation; automatic adapter dispatch remains VIII-7.
+- Native simulators retain ownership of state mutation; adapter execution remains isolated from the API.
 
 ## VIII-6 outcome
 
@@ -87,6 +88,24 @@ VIII-4 performance and stress testing remains in the roadmap but is intentionall
 near project completion. Stable system baselines will make resource thresholds and trend evidence
 meaningful while avoiding unnecessary CPU/GPU use during active architecture changes.
 
-## Next increment
+## VIII-7 outcome
 
-VIII-7 will connect Gateway and CarSystemUI orchestration to the accumulated execution and evidence contracts.
+VIII-7 creates one immutable automation report that correlates the authoritative terminal test run
+with Vehicle Gateway telemetry and commands, optional fault and mutation executions, and the status
+and version actually displayed by CarSystemUI.
+
+## VIII-7 evidence
+
+- Existing REST, WebSocket, workload identity, telemetry, and command channels remain authoritative.
+- Gateway capability, source, target, vehicle, and test-run relationships are validated before commit.
+- Fault and mutation executions must be terminal and belong to the same vehicle and test run.
+- CarSystemUI observations are timezone-aware and must match the persisted run status and version.
+- Combined passed, failed, or cancelled outcome follows deterministic precedence.
+- One report per test run prevents contradictory final evidence; exact replay remains idempotent.
+- Audit/outbox evidence contains identifiers and counts without raw cross-platform collections.
+- Migration 0056 adds the report table with reversible foreign keys, uniqueness, and indexes.
+
+## Volume completion
+
+The functional Volume VIII baseline is complete. VIII-4 remains deferred until near project
+completion so performance thresholds and historical comparisons use a stable platform baseline.
