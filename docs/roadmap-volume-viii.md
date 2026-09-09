@@ -10,11 +10,13 @@
   can support load profiles, thresholds, resource budgets, and comparable trend evidence.
 - [x] **VIII-5 Fault injection** - reusable, bounded fault campaigns across vehicle, ECU, CAN,
   diagnostics, EV, and ADAS, with recovery plans and versioned evidence.
-- [ ] **VIII-6 Mutation testing and coverage** - mutation operators, kill rate, requirement coverage, and gaps.
+- [x] **VIII-6 Mutation testing and coverage** - bounded mutation operators, immutable campaign
+  snapshots, deterministic kill rate, requirement traceability, and explicit coverage gaps.
 - [ ] **VIII-7 Cross-platform automation** - Gateway and CarSystemUI orchestration, reporting, and workbook completion.
 
 ## Next recommended increment
 
-VIII-6 should add mutation operators, mutation campaigns, kill-rate evidence, requirement coverage,
-and explicit gap analysis. VIII-4 remains planned but intentionally deferred until near completion
-to avoid expensive measurements against an unstable platform baseline.
+VIII-7 should connect the Gateway and CarSystemUI to catalog, execution, fault, mutation, and
+evidence contracts for cross-platform orchestration and reporting. VIII-4 remains planned but
+intentionally deferred until near completion to avoid expensive measurements against an unstable
+platform baseline.

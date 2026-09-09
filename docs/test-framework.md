@@ -3,8 +3,9 @@
 Volume VIII turns the existing execution infrastructure into a reusable test engineering system.
 VIII-1 introduced the catalog, VIII-2 bound reviewed suites to deterministic case execution, and
 VIII-3 connects those snapshots to the durable scheduler for smoke, sanity, and regression runs.
-VIII-5 adds bounded cross-domain fault campaigns and recovery evidence. Performance and stress are
-intentionally deferred until stable final baselines exist; mutation testing and coverage remain next.
+VIII-5 adds bounded cross-domain fault campaigns and recovery evidence. VIII-6 adds mutation
+quality evidence and requirement traceability. Performance and stress remain intentionally deferred
+until stable final baselines exist.
 
 ## API
 
@@ -28,6 +29,13 @@ intentionally deferred until stable final baselines exist; mutation testing and 
 - `GET /api/v1/fault-executions/{execution_id}/steps` returns ordered step results.
 - `PATCH /api/v1/fault-executions/{execution_id}/steps/{step_id}` records injection and recovery evidence.
 - `PATCH /api/v1/fault-executions/{execution_id}/cancel` cancels an incomplete execution.
+- `POST /api/v1/mutation-campaigns` creates a suite-backed draft mutation campaign.
+- `GET /api/v1/mutation-campaigns` and the detail/status routes expose its versioned lifecycle.
+- `POST /api/v1/mutation-campaigns/{campaign_id}/executions` materializes mutant results.
+- `GET /api/v1/mutation-executions` and the detail/mutant routes expose score evidence.
+- `PATCH /api/v1/mutation-executions/{execution_id}/mutants/{mutant_id}` records an outcome.
+- `PUT /api/v1/requirement-coverage/{requirement_id}` creates or updates traceability.
+- `GET /api/v1/requirement-coverage` exposes filtered items and coverage-gap totals.
 
 ## Composition model
 
@@ -84,6 +92,24 @@ The framework owns orchestration intent, lifecycle, safety bounds, and evidence.
 ECU, CAN, diagnostics, EV, and ADAS simulators remain responsible for performing their native state
 mutations. Automatic adapter dispatch belongs to VIII-7; the VIII-5 API deliberately exposes no
 arbitrary command runner.
+
+## Mutation testing and coverage
+
+A mutation campaign binds a reviewed active test suite to up to five hundred ordered mutants. Each
+mutant uses an explicit operator allowlist and declares a target, bounded structured parameters,
+expected detection, and whether its survival is required to fail the execution. The active campaign
+is snapshotted when execution begins and pending results are materialized atomically.
+
+Results move from pending to running or skipped and then to killed, survived, error, or skipped.
+A killed mutant must name at least one detecting test. The deterministic mutation score is
+`killed / (killed + survived)`; error and skipped results do not distort that denominator. A required
+survivor, error, or skip fails the aggregate execution, while optional outcomes remain informative.
+
+Requirement coverage links stable requirement IDs to known catalog definitions and evidence
+references. Both links present means covered, one kind present means partial, and neither means a
+gap. Aggregate counts make missing evidence visible without parsing documents. The current layer
+stores reviewed orchestration and results only; native mutation adapters belong to VIII-7 and must
+not introduce arbitrary code execution.
 
 ## Security and cost
 

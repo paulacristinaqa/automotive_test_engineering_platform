@@ -1058,6 +1058,74 @@ class RoleInUseError(ApplicationError):
         )
 
 
+class MutationCampaignConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="mutation_campaign_conflict",
+            message="The mutation campaign identifier is already used by different input.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class MutationCampaignVersionConflictError(ApplicationError):
+    def __init__(self, *, current_version: int) -> None:
+        super().__init__(
+            code="mutation_campaign_version_conflict",
+            message="The mutation campaign version is stale.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_version": current_version},
+        )
+
+
+class MutationCampaignStateError(ApplicationError):
+    def __init__(self, *, current_status: str, requested_status: str) -> None:
+        super().__init__(
+            code="mutation_campaign_state_conflict",
+            message="The mutation campaign state transition is not allowed.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_status": current_status, "requested_status": requested_status},
+        )
+
+
+class MutationExecutionConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="mutation_execution_conflict",
+            message="The mutation execution identifier is already used by different input.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class MutantResultVersionConflictError(ApplicationError):
+    def __init__(self, *, current_version: int) -> None:
+        super().__init__(
+            code="mutant_result_version_conflict",
+            message="The mutant result version is stale.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_version": current_version},
+        )
+
+
+class MutantResultStateError(ApplicationError):
+    def __init__(self, *, current_status: str, requested_status: str) -> None:
+        super().__init__(
+            code="mutant_result_state_conflict",
+            message="The mutant result state transition is not allowed.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_status": current_status, "requested_status": requested_status},
+        )
+
+
+class RequirementCoverageConflictError(ApplicationError):
+    def __init__(self, *, current_version: int | None = None) -> None:
+        super().__init__(
+            code="requirement_coverage_conflict",
+            message="The requirement coverage update conflicts with persisted state.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"current_version": current_version} if current_version else None,
+        )
+
+
 class ResourceNotFoundError(ApplicationError):
     def __init__(self, resource: str) -> None:
         super().__init__(

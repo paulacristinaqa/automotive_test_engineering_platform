@@ -372,7 +372,7 @@ operational guidance, and review worksheets.
 | V | Diagnostics | Baseline complete — increments V-1 through V-7 implemented |
 | VI | Electric Vehicle | Baseline complete — increments VI-1 through VI-7 implemented |
 | VII | ADAS | Baseline complete - VII-1 through VII-7, including cross-platform evidence |
-| VIII | Test Framework | VIII-1 catalog, VIII-2 execution binding, VIII-3 scheduling, and VIII-5 fault campaigns implemented; VIII-4 deferred |
+| VIII | Test Framework | VIII-1/2/3 catalog and execution, VIII-5 fault campaigns, and VIII-6 mutation/coverage implemented; VIII-4 deferred |
 | IX | AI Test Engineer | Planned |
 | X | Dashboard | Planned |
 | XI | DevOps | Planned |

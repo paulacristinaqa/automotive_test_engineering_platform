@@ -737,6 +737,148 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             )
             assert archived_rejection["code"] == "fault_campaign_state_conflict"
 
+            mutation_campaign_id = f"battery-mutation-{uuid4().hex[:12]}"
+            mutation_execution_id = f"mutation-run-{uuid4().hex[:12]}"
+            mutation_campaign = await client.post(
+                "/api/v1/mutation-campaigns",
+                headers=admin_headers,
+                json={
+                    "campaign_id": mutation_campaign_id,
+                    "catalog_suite_id": suite_id,
+                    "name": "Battery safety mutation baseline",
+                    "description": "Bounded mutation evidence for the active battery suite.",
+                    "tags": ["battery", "safety"],
+                    "mutants": [
+                        {
+                            "mutant_id": "shift-temperature-boundary",
+                            "order": 1,
+                            "operator": "boundary_shift",
+                            "target": "battery.temperature_warning_threshold",
+                            "parameters": {"delta_celsius": 1},
+                            "expected_detection": "The battery warning test fails",
+                            "required": True,
+                        },
+                        {
+                            "mutant_id": "invert-warning-guard",
+                            "order": 2,
+                            "operator": "conditional_negation",
+                            "target": "battery.warning_guard",
+                            "parameters": {},
+                            "expected_detection": "The warning invariant fails",
+                            "required": False,
+                        },
+                    ],
+                },
+            )
+            assert mutation_campaign.status_code == 201, mutation_campaign.text
+            activated_mutation_campaign = await client.patch(
+                f"/api/v1/mutation-campaigns/{mutation_campaign_id}/status",
+                headers=admin_headers,
+                json={"expected_version": 1, "status": "active"},
+            )
+            assert activated_mutation_campaign.status_code == 200, activated_mutation_campaign.text
+            mutation_execution_payload = {
+                "execution_id": mutation_execution_id,
+                "vehicle_id": vehicle_identifier,
+                "test_run_id": catalog_run_id,
+            }
+            mutation_execution = await client.post(
+                f"/api/v1/mutation-campaigns/{mutation_campaign_id}/executions",
+                headers=admin_headers,
+                json=mutation_execution_payload,
+            )
+            assert mutation_execution.status_code == 201, mutation_execution.text
+            assert mutation_execution.json()["total_mutants"] == 2
+            mutation_results = await client.get(
+                f"/api/v1/mutation-executions/{mutation_execution_id}/mutants",
+                headers=admin_headers,
+            )
+            assert mutation_results.status_code == 200, mutation_results.text
+            assert mutation_results.json()["total"] == 2
+            for mutant_id, terminal_status, detected_by in (
+                ("shift-temperature-boundary", "killed", [definition_id]),
+                ("invert-warning-guard", "survived", []),
+            ):
+                running_mutant = await client.patch(
+                    f"/api/v1/mutation-executions/{mutation_execution_id}/mutants/{mutant_id}",
+                    headers=admin_headers,
+                    json={"expected_version": 1, "status": "running"},
+                )
+                assert running_mutant.status_code == 200, running_mutant.text
+                completed_mutant = await client.patch(
+                    f"/api/v1/mutation-executions/{mutation_execution_id}/mutants/{mutant_id}",
+                    headers=admin_headers,
+                    json={
+                        "expected_version": 2,
+                        "status": terminal_status,
+                        "duration_ms": 125,
+                        "detected_by": detected_by,
+                        "evidence_refs": ["artifact://mutation-report"],
+                    },
+                )
+                assert completed_mutant.status_code == 200, completed_mutant.text
+            completed_mutation_execution = await client.get(
+                f"/api/v1/mutation-executions/{mutation_execution_id}",
+                headers=admin_headers,
+            )
+            assert completed_mutation_execution.status_code == 200
+            assert completed_mutation_execution.json()["status"] == "passed"
+            assert completed_mutation_execution.json()["mutation_score"] == 0.5
+
+            covered_requirement = await client.put(
+                "/api/v1/requirement-coverage/EV-F-001",
+                headers=admin_headers,
+                json={
+                    "title": "Battery warning remains observable",
+                    "criticality": "asil_b",
+                    "definition_ids": [definition_id],
+                    "evidence_refs": ["artifact://mutation-report"],
+                },
+            )
+            assert covered_requirement.status_code == 201, covered_requirement.text
+            assert covered_requirement.json()["status"] == "covered"
+            gap_requirement = await client.put(
+                "/api/v1/requirement-coverage/EV-F-002",
+                headers=admin_headers,
+                json={
+                    "title": "Battery isolation response is verified",
+                    "criticality": "asil_c",
+                    "definition_ids": [],
+                    "evidence_refs": [],
+                },
+            )
+            assert gap_requirement.status_code == 201, gap_requirement.text
+            assert gap_requirement.json()["status"] == "gap"
+            coverage_page = await client.get("/api/v1/requirement-coverage", headers=admin_headers)
+            assert coverage_page.status_code == 200, coverage_page.text
+            assert coverage_page.json()["covered"] == 1
+            assert coverage_page.json()["gaps"] == 1
+
+            archived_mutation_campaign = await client.patch(
+                f"/api/v1/mutation-campaigns/{mutation_campaign_id}/status",
+                headers=admin_headers,
+                json={"expected_version": 2, "status": "archived"},
+            )
+            assert archived_mutation_campaign.status_code == 200
+            replayed_mutation_execution = await client.post(
+                f"/api/v1/mutation-campaigns/{mutation_campaign_id}/executions",
+                headers=admin_headers,
+                json=mutation_execution_payload,
+            )
+            assert replayed_mutation_execution.status_code == 200
+            archived_mutation_rejection = await expected_error(
+                client,
+                "POST",
+                f"/api/v1/mutation-campaigns/{mutation_campaign_id}/executions",
+                409,
+                headers=admin_headers,
+                json={
+                    **mutation_execution_payload,
+                    "execution_id": f"mutation-run-{uuid4().hex[:12]}",
+                },
+            )
+            assert archived_mutation_rejection["code"] == "mutation_campaign_state_conflict"
+
             artifact_id = uuid4().hex
             artifact_content = b'{"result":"passed","temperature_celsius":47.8}'
             artifact_upload = await client.post(
@@ -1342,6 +1484,10 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                 client, "GET", "/api/v1/fault-campaigns", 403, headers=user_headers
             )
             assert fault_campaigns_denied["code"] == "permission_denied"
+            mutation_campaigns_denied = await expected_error(
+                client, "GET", "/api/v1/mutation-campaigns", 403, headers=user_headers
+            )
+            assert mutation_campaigns_denied["code"] == "permission_denied"
             artifacts_denied = await expected_error(
                 client,
                 "GET",

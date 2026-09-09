@@ -1,7 +1,7 @@
 # Volume VIII Test Framework Engineering Workbook
 
-Version 0.4.0 records the VIII-1 catalog, VIII-2 execution binding, VIII-3 scheduled-selection,
-and VIII-5 fault-campaign baseline. It documents
+Version 0.5.0 records the VIII-1 catalog, VIII-2 execution binding, VIII-3 scheduled-selection,
+VIII-5 fault-campaign baseline, and VIII-6 mutation/coverage baseline. It documents
 architecture, contracts, lifecycle, RBAC, persistence, events, audit, deterministic case results,
 aggregate run semantics, test objectives, risks, and study exercises.
 
@@ -64,6 +64,23 @@ explicit states, and aggregate required outcomes without granting a generic comm
 - Migration 0054 adds campaigns, executions, and step results with reversible constraints and indexes.
 - Native simulators retain ownership of state mutation; automatic adapter dispatch remains VIII-7.
 
+## VIII-6 outcome
+
+VIII-6 introduces reviewed mutation campaigns backed by active suite snapshots, deterministic
+mutant-result aggregation, and a requirement traceability register that makes coverage gaps explicit.
+It records portable evidence without executing arbitrary source transformations in the API process.
+
+## VIII-6 evidence
+
+- Seven explicit operators replace free-form mutation commands.
+- Campaigns contain up to 500 unique ordered mutants and preserve the source suite snapshot.
+- Execution creation atomically materializes pending results and remains replay-safe after archival.
+- Killed results identify detecting tests; bounded evidence references stay out of audit/outbox payloads.
+- Mutation score uses killed and survived results only; required survivors, errors, or skips fail the run.
+- Requirements reference known catalog definitions and classify deterministically as covered, partial, or gap.
+- Coverage collection responses include aggregate counts for immediate gap analysis.
+- Migration 0055 adds campaign, execution, result, and coverage tables with reversible constraints and indexes.
+
 ## Deferred increment
 
 VIII-4 performance and stress testing remains in the roadmap but is intentionally postponed until
@@ -72,4 +89,4 @@ meaningful while avoiding unnecessary CPU/GPU use during active architecture cha
 
 ## Next increment
 
-VIII-6 will add mutation operators, kill-rate evidence, requirement coverage, and gap analysis.
+VIII-7 will connect Gateway and CarSystemUI orchestration to the accumulated execution and evidence contracts.
