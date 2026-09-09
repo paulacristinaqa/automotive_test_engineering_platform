@@ -810,3 +810,14 @@ def test_ai_analysis_request_contract_is_published() -> None:
     assert parameters["limit"]["maximum"] == 100
     create = schema["components"]["schemas"]["AiAnalysisRequestCreate"]
     assert create["properties"]["evidence_refs"]["maxItems"] == 50
+
+
+def test_performance_and_stress_contract_is_published() -> None:
+    schema = core_app.openapi()
+    paths = schema["paths"]
+    assert {"get", "post"} <= set(paths["/api/v1/performance/profiles"])
+    assert {"get", "post"} <= set(paths["/api/v1/performance/profiles/{profile_id}/executions"])
+    profile = schema["components"]["schemas"]["PerformanceProfileCreate"]
+    assert profile["properties"]["stages"]["maxItems"] == 12
+    limits = schema["components"]["schemas"]["ResourceLimits"]
+    assert limits["properties"]["memory_mb"]["maximum"] == 4096

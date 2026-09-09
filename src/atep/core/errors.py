@@ -1164,6 +1164,25 @@ class AiAnalysisPolicyError(ApplicationError):
         )
 
 
+class PerformanceEvidenceConflictError(ApplicationError):
+    def __init__(self, resource: str) -> None:
+        super().__init__(
+            code="performance_evidence_conflict",
+            message=f"The performance {resource} identifier is already used by different input.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class PerformanceEvidenceContractError(ApplicationError):
+    def __init__(self, reason: str) -> None:
+        super().__init__(
+            code="performance_evidence_contract_invalid",
+            message="The performance evidence violates its bounded contract.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"reason": reason},
+        )
+
+
 class ResourceNotFoundError(ApplicationError):
     def __init__(self, resource: str) -> None:
         super().__init__(

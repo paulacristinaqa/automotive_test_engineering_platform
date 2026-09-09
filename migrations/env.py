@@ -21,6 +21,7 @@ from atep.events import models as event_models  # noqa: F401
 from atep.fault_campaigns import models as fault_campaign_models  # noqa: F401
 from atep.identity import models as identity_models  # noqa: F401
 from atep.mutation_analysis import models as mutation_analysis_models  # noqa: F401
+from atep.performance_testing import models as performance_testing_models  # noqa: F401
 from atep.registry import models as registry_models  # noqa: F401
 from atep.test_catalog import models as test_catalog_models  # noqa: F401
 from atep.test_jobs import models as test_job_models  # noqa: F401
