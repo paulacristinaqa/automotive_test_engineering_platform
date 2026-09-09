@@ -8,6 +8,7 @@ import structlog
 from fastapi import Depends, FastAPI, Request, Response
 
 from atep.adas.router import router as adas_router
+from atep.ai_engine.router import router as ai_engine_router
 from atep.api.health import router as health_router
 from atep.artifacts.router import router as artifacts_router
 from atep.artifacts.storage import FilesystemArtifactStore, InstrumentedArtifactStore
@@ -123,6 +124,7 @@ app.include_router(can_network_router, prefix="/api/v1", dependencies=rate_limit
 app.include_router(diagnostics_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(electric_vehicle_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(adas_router, prefix="/api/v1", dependencies=rate_limited)
+app.include_router(ai_engine_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(vehicle_gateway_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(simulation_sessions_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(test_runs_router, prefix="/api/v1", dependencies=rate_limited)

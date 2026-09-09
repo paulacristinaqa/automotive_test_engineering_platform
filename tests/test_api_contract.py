@@ -798,3 +798,15 @@ def test_metrics_endpoint_is_operational_but_not_part_of_public_openapi() -> Non
     assert response.headers["content-type"].startswith("text/plain")
     assert "atep_build_info" in response.text
     assert len(response.headers["x-trace-id"]) == 32
+
+
+def test_ai_analysis_request_contract_is_published() -> None:
+    schema = core_app.openapi()
+    paths = schema["paths"]
+    collection = paths["/api/v1/ai/analysis-requests"]
+    assert {"get", "post"} <= set(collection)
+    assert "get" in paths["/api/v1/ai/analysis-requests/{request_id}"]
+    parameters = {item["name"]: item["schema"] for item in collection["get"]["parameters"]}
+    assert parameters["limit"]["maximum"] == 100
+    create = schema["components"]["schemas"]["AiAnalysisRequestCreate"]
+    assert create["properties"]["evidence_refs"]["maxItems"] == 50

@@ -1284,6 +1284,31 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             assert automation_report_page.status_code == 200
             assert automation_report_page.json()["total"] == 1
 
+            ai_request_payload = {
+                "request_id": f"ai-analysis-{uuid4().hex[:12]}",
+                "task": "root_cause",
+                "subject_type": "automation_report",
+                "subject_id": automation_report_id,
+                "evidence_refs": ["artifact://carsystemui-test-detail"],
+                "context": {"dtc_codes": ["P0A80"]},
+                "instructions": "Rank evidence-backed hypotheses.",
+            }
+            ai_request = await client.post(
+                "/api/v1/ai/analysis-requests", headers=admin_headers, json=ai_request_payload
+            )
+            assert ai_request.status_code == 201, ai_request.text
+            assert ai_request.json()["provider_policy"] == "local_only"
+            replayed_ai_request = await client.post(
+                "/api/v1/ai/analysis-requests", headers=admin_headers, json=ai_request_payload
+            )
+            assert replayed_ai_request.status_code == 200
+            assert replayed_ai_request.json()["duplicate"] is True
+            ai_request_page = await client.get(
+                "/api/v1/ai/analysis-requests", headers=admin_headers
+            )
+            assert ai_request_page.status_code == 200
+            assert ai_request_page.json()["total"] == 1
+
             role_name = f"integration-qa-{uuid4().hex[:12]}"
             role_command = {
                 "name": role_name,
@@ -1541,6 +1566,14 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                 headers=user_headers,
             )
             assert automation_reports_denied["code"] == "permission_denied"
+            ai_requests_denied = await expected_error(
+                client,
+                "GET",
+                "/api/v1/ai/analysis-requests",
+                403,
+                headers=user_headers,
+            )
+            assert ai_requests_denied["code"] == "permission_denied"
             artifacts_denied = await expected_error(
                 client,
                 "GET",
