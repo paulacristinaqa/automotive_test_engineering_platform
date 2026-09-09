@@ -356,6 +356,8 @@ companion project also passes 27 unit tests, Android lint, and debug APK assembl
 - [Volume VI — Electric Vehicle formatted workbook](docs/ATEP_Volume_VI_Electric_Vehicle_Engineering_Workbook.docx)
 - [Volume VII — ADAS editable source](docs/workbook-volume-vii.md)
 - [Volume VII — ADAS formatted workbook](docs/ATEP_Volume_VII_ADAS_Engineering_Workbook.docx)
+- [Volume VIII — Test Framework editable source](docs/workbook-volume-viii.md)
+- [Volume VIII — Test Framework formatted workbook](docs/ATEP_Volume_VIII_Test_Framework_Engineering_Workbook.docx)
 
 The workbook is a living English-language engineering record containing requirements,
 architecture decisions, implementation evidence, test objectives, risks, technical debt,
@@ -372,7 +374,7 @@ operational guidance, and review worksheets.
 | V | Diagnostics | Baseline complete — increments V-1 through V-7 implemented |
 | VI | Electric Vehicle | Baseline complete — increments VI-1 through VI-7 implemented |
 | VII | ADAS | Baseline complete - VII-1 through VII-7, including cross-platform evidence |
-| VIII | Test Framework | VIII-1/2/3 catalog and execution, VIII-5 fault campaigns, and VIII-6 mutation/coverage implemented; VIII-4 deferred |
+| VIII | Test Framework | Functional VIII-1/2/3/5/6/7 baseline complete, including cross-platform reporting; VIII-4 deferred |
 | IX | AI Test Engineer | Planned |
 | X | Dashboard | Planned |
 | XI | DevOps | Planned |

@@ -10,6 +10,7 @@ from atep.artifacts import models as artifact_models  # noqa: F401
 from atep.audit import models as audit_models  # noqa: F401
 from atep.can_network import models as can_network_models  # noqa: F401
 from atep.core.config import get_settings
+from atep.cross_platform_automation import models as cross_platform_automation_models  # noqa: F401
 from atep.db.base import Base
 from atep.diagnostics import models as diagnostic_models  # noqa: F401
 from atep.ecus import models as ecu_models  # noqa: F401

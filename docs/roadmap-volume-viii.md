@@ -12,11 +12,11 @@
   diagnostics, EV, and ADAS, with recovery plans and versioned evidence.
 - [x] **VIII-6 Mutation testing and coverage** - bounded mutation operators, immutable campaign
   snapshots, deterministic kill rate, requirement traceability, and explicit coverage gaps.
-- [ ] **VIII-7 Cross-platform automation** - Gateway and CarSystemUI orchestration, reporting, and workbook completion.
+- [x] **VIII-7 Cross-platform automation** - correlated Gateway and CarSystemUI evidence,
+  terminal orchestration validation, deterministic reporting, RBAC, audit, events, and workbook completion.
 
-## Next recommended increment
+## Volume status
 
-VIII-7 should connect the Gateway and CarSystemUI to catalog, execution, fault, mutation, and
-evidence contracts for cross-platform orchestration and reporting. VIII-4 remains planned but
-intentionally deferred until near completion to avoid expensive measurements against an unstable
-platform baseline.
+The functional Volume VIII baseline is complete. VIII-4 remains planned but intentionally deferred
+until near project completion, when stable baselines can support meaningful load profiles,
+thresholds, resource budgets, and comparable historical evidence.
