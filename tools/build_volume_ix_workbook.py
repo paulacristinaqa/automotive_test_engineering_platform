@@ -71,20 +71,20 @@ def build() -> None:
     title.add_run("ATEP Volume IX AI Test Engineer Engineering Workbook")
     intro = doc.add_paragraph()
     intro.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    intro.add_run("Version 0.1.0  Provider Neutral Foundation").bold = True
+    intro.add_run("Version 0.2.0  Deterministic Analysis Workers").bold = True
     doc.add_paragraph(
-        "This workbook records the first governed AI boundary for ATEP. IX-1 captures analysis "
-        "intent without invoking a model, requiring a paid service, downloading model weights, "
-        "or using a GPU."
+        "This workbook records the governed AI boundary and deterministic analysis worker for "
+        "ATEP. IX-1 captures analysis intent and IX-2 produces structured advisory results "
+        "without a paid service, model download, network call, or GPU."
     )
     table(
         doc,
         ["Field", "Value"],
         [
-            ["Status", "IX-1 implemented"],
+            ["Status", "IX-1 and IX-2 implemented"],
             ["Cost", "Local first and no paid dependency"],
-            ["Migration", "0057_ai_analysis_foundation"],
-            ["Next", "IX-2 deterministic local analysis workers"],
+            ["Migrations", "0057 foundation and 0059 workers"],
+            ["Next", "IX-3 log intelligence"],
         ],
         [1.6, 5.2],
     )
@@ -92,8 +92,8 @@ def build() -> None:
     doc.add_paragraph(
         "FastAPI accepts bounded provider-neutral requests. A domain service applies idempotency "
         "and data-classification policy. PostgreSQL preserves queued intent, while RBAC, audit, "
-        "and outbox "
-        "evidence provide a traceable boundary. Model execution deliberately follows in IX-2."
+        "and outbox evidence provide a traceable boundary. A synchronous application worker uses "
+        "versioned local rules behind the same interface reserved for future adapters."
     )
     table(
         doc,
@@ -101,8 +101,9 @@ def build() -> None:
         [
             ["API", "Validation, pagination, filtering, and RBAC"],
             ["Domain service", "Policy, idempotency, audit, and outbox"],
-            ["PostgreSQL", "Immutable request intent and status"],
-            ["Future worker", "Local rules first, optional provider adapters later"],
+            ["PostgreSQL", "Immutable request intent, attempts, results, and lifecycle"],
+            ["Local worker", "Deterministic versioned rules and safe failure handling"],
+            ["Adapter boundary", "Common interface with unknown providers disabled"],
         ],
         [1.7, 5.1],
     )
@@ -133,11 +134,37 @@ def build() -> None:
                 "Log analysis, failure explanation, test suggestion, root cause, risk analysis",
             ],
             ["Subjects", "Test run, automation report, fault execution, mutation execution"],
-            ["Lifecycle", "IX-1 creates queued requests; IX-2 owns execution and results"],
+            ["Lifecycle", "Queued, running, succeeded, or failed with three attempts maximum"],
         ],
         [1.55, 5.25],
     )
-    doc.add_heading("4 Verification Catalogue", level=1)
+    doc.add_heading("4 Deterministic Worker", level=1)
+    doc.add_paragraph(
+        "The local-rules-v1 adapter evaluates only structured facts supplied in the governed "
+        "request. It identifies DTC presence, positive failure counts, and failed performance "
+        "thresholds. A no-match result states that no deterministic signal was found instead of "
+        "inventing a conclusion."
+    )
+    table(
+        doc,
+        ["Control", "Bound", "Engineering purpose"],
+        [
+            ["Attempts", "Three per request", "Bound retries and resource exposure"],
+            ["Execution identity", "Idempotent", "Make worker delivery retry safe"],
+            ["Evidence", "Request references only", "Keep conclusions reviewable"],
+            ["Failure", "Stable adapter_failure", "Avoid leaking internal exception details"],
+            ["Authority", "Advisory output", "Prevent direct state mutation"],
+        ],
+        [1.55, 2.05, 3.2],
+    )
+    doc.add_heading("5 Provider Policy and Cost", level=1)
+    doc.add_paragraph(
+        "Only local-rules is enabled. Unknown providers are rejected before execution. Future "
+        "external adapters must satisfy the request provider policy and data classification; "
+        "restricted data can never leave the local boundary. IX-2 requires no API key, model, "
+        "cloud account, network access, paid service, or GPU."
+    )
+    doc.add_heading("6 Verification Catalogue", level=1)
     table(
         doc,
         ["ID", "Objective"],
@@ -149,10 +176,14 @@ def build() -> None:
             ["AI-T-005", "Verify minimized audit and event evidence"],
             ["AI-T-006", "Verify RBAC and OpenAPI contracts"],
             ["AI-T-007", "Apply migration through hosted Docker integration"],
+            ["AI-T-008 to 009", "Verify deterministic rules and complete lifecycle"],
+            ["AI-T-010 to 011", "Verify retries, replay, adapter policy, and conflicts"],
+            ["AI-T-012 to 013", "Verify cited output, minimized evidence, API, and RBAC"],
+            ["AI-T-014", "Apply migration 0059 through hosted Docker integration"],
         ],
         [1.4, 5.4],
     )
-    doc.add_heading("5 Risks and Next Development", level=1)
+    doc.add_heading("7 Risks and Next Development", level=1)
     table(
         doc,
         ["Risk", "Control"],
@@ -160,15 +191,17 @@ def build() -> None:
             ["Sensitive data egress", "Classification and provider policy gate"],
             ["Hallucinated authority", "Advisory-only boundary and future citations"],
             ["Unexpected cost", "No provider call and local-only default"],
-            ["Resource consumption", "No model or GPU in IX-1"],
+            ["Resource consumption", "No model or GPU in IX-1 or IX-2"],
             ["Prompt leakage", "Minimized audit and outbox metadata"],
+            ["Unbounded retries", "Three immutable attempts maximum"],
+            ["Worker exception leakage", "Stable error code without exception text"],
         ],
         [2.2, 4.6],
     )
     doc.add_paragraph(
-        "IX-2 will add deterministic local rules, worker lifecycle, retries, and result contracts "
-        "before any optional LLM adapter. This order keeps the platform testable, free to run, "
-        "and provider neutral."
+        "IX-3 will add bounded log parsing, clustering, event timelines, anomaly evidence, and "
+        "grounded failure explanations. It will preserve the local-first, provider-neutral, "
+        "advisory-only boundary established here."
     )
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     doc.save(OUTPUT)

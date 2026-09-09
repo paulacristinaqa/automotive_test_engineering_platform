@@ -76,6 +76,7 @@ class AiAnalysisRequestResponse(BaseModel):
     context: dict[str, Any]
     instructions: str
     status: str
+    attempt_count: int
     duplicate: bool = False
     requested_by_user_id: UUID
     created_at: datetime
@@ -83,6 +84,58 @@ class AiAnalysisRequestResponse(BaseModel):
 
 class AiAnalysisRequestPage(BaseModel):
     items: list[AiAnalysisRequestResponse]
+    total: int
+    limit: int
+    offset: int
+
+
+class AiAnalysisExecute(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    execution_id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{7,63}$")
+    provider_id: str = Field(default="local-rules", pattern=r"^[a-z0-9][a-z0-9-]{2,63}$")
+
+
+class AiFinding(BaseModel):
+    code: str = Field(min_length=3, max_length=64, pattern=r"^[A-Z][A-Z0-9_]+$")
+    severity: str = Field(pattern=r"^(info|low|medium|high|critical)$")
+    message: str = Field(min_length=1, max_length=1000)
+    evidence_refs: list[str] = Field(default_factory=list, max_length=10)
+
+
+class AiAnalysisResult(BaseModel):
+    summary: str = Field(min_length=1, max_length=2000)
+    findings: list[AiFinding] = Field(default_factory=list, max_length=50)
+    recommendations: list[str] = Field(default_factory=list, max_length=20)
+    confidence: float = Field(ge=0, le=1)
+
+    @field_validator("recommendations")
+    @classmethod
+    def bounded_recommendations(cls, value: list[str]) -> list[str]:
+        if any(not item or len(item) > 1000 for item in value):
+            raise ValueError("recommendations must contain 1 to 1000 characters")
+        return value
+
+
+class AiAnalysisExecutionResponse(BaseModel):
+    id: UUID
+    execution_id: str
+    request_id: str
+    attempt: int
+    provider_id: str
+    provider_kind: str
+    status: str
+    rule_version: str
+    result: AiAnalysisResult
+    error_code: str | None
+    duplicate: bool = False
+    executed_by_user_id: UUID
+    started_at: datetime
+    completed_at: datetime
+
+
+class AiAnalysisExecutionPage(BaseModel):
+    items: list[AiAnalysisExecutionResponse]
     total: int
     limit: int
     offset: int

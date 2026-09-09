@@ -4,12 +4,23 @@ from fastapi import APIRouter, Depends, Path, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atep.ai_engine.schemas import (
+    AiAnalysisExecute,
+    AiAnalysisExecutionPage,
+    AiAnalysisExecutionResponse,
     AiAnalysisRequestCreate,
     AiAnalysisRequestPage,
     AiAnalysisRequestResponse,
     AiTask,
 )
-from atep.ai_engine.service import create_request, list_requests, request_response, require_request
+from atep.ai_engine.service import (
+    create_request,
+    execute_request,
+    execution_response,
+    list_executions,
+    list_requests,
+    request_response,
+    require_request,
+)
 from atep.db.session import get_session
 from atep.identity.dependencies import require_permissions
 from atep.identity.models import User
@@ -63,3 +74,51 @@ async def get_request_endpoint(
     _: Annotated[User, Depends(read_access)],
 ) -> AiAnalysisRequestResponse:
     return request_response(await require_request(session, request_id))
+
+
+@router.post(
+    "/analysis-requests/{request_id}/executions",
+    response_model=AiAnalysisExecutionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def execute_request_endpoint(
+    request_id: Annotated[str, request_path],
+    command: AiAnalysisExecute,
+    http_request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(manage_access)],
+) -> AiAnalysisExecutionResponse:
+    analysis = await require_request(session, request_id, for_update=True)
+    execution, duplicate = await execute_request(
+        session,
+        request=analysis,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(http_request),
+    )
+    await session.commit()
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+    return execution_response(execution, request=analysis, duplicate=duplicate)
+
+
+@router.get(
+    "/analysis-requests/{request_id}/executions",
+    response_model=AiAnalysisExecutionPage,
+)
+async def list_executions_endpoint(
+    request_id: Annotated[str, request_path],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(read_access)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
+) -> AiAnalysisExecutionPage:
+    analysis = await require_request(session, request_id)
+    rows, total = await list_executions(session, request=analysis, limit=limit, offset=offset)
+    return AiAnalysisExecutionPage(
+        items=[execution_response(item, request=analysis) for item in rows],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )

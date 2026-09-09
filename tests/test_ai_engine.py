@@ -10,13 +10,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from atep.ai_engine.models import AiAnalysisRequest
 from atep.ai_engine.schemas import (
+    AiAnalysisExecute,
     AiAnalysisRequestCreate,
+    AiAnalysisResult,
     DataClassification,
     ProviderPolicy,
 )
-from atep.ai_engine.service import create_request
+from atep.ai_engine.service import create_request, execute_request
 from atep.audit.models import AuditRecord
-from atep.core.errors import AiAnalysisConflictError, AiAnalysisPolicyError
+from atep.core.errors import (
+    AiAnalysisConflictError,
+    AiAnalysisExecutionError,
+    AiAnalysisPolicyError,
+)
 from atep.events.models import OutboxEvent
 from atep.identity.permissions import PermissionName
 
@@ -138,3 +144,104 @@ async def test_policy_and_changed_replay_are_rejected() -> None:
 def test_ai_permissions_are_explicit() -> None:
     assert PermissionName.AI_ANALYSIS_READ.value == "ai_analysis:read"
     assert PermissionName.AI_ANALYSIS_MANAGE.value == "ai_analysis:manage"
+
+
+@pytest.mark.asyncio
+async def test_local_worker_derives_cited_deterministic_result() -> None:
+    request, _ = await create_request(
+        cast(AsyncSession, FakeSession()),
+        command=command(),
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    session = FakeSession()
+    execution, duplicate = await execute_request(
+        cast(AsyncSession, session),
+        request=request,
+        command=AiAnalysisExecute(execution_id="ai-execution-001"),
+        actor_user_id=uuid4(),
+        correlation_id=uuid4(),
+    )
+    assert duplicate is False
+    assert request.status == "succeeded"
+    assert request.attempt_count == 1
+    assert execution.status == "succeeded"
+    assert execution.rule_version == "local-rules-v1"
+    assert execution.result["findings"][0]["code"] == "DTC_PRESENT"
+    assert execution.result["findings"][0]["evidence_refs"] == ["artifact://sanitized-log-001"]
+    event = next(item for item in session.added if isinstance(item, OutboxEvent))
+    assert event.event_type == "atep.ai.analysis.completed.v1"
+    assert "result" not in event.payload
+
+
+class FailingAdapter:
+    provider_id = "failing-local"
+    provider_kind = "local"
+    version = "failing-v1"
+
+    def analyze(self, **_: Any) -> AiAnalysisResult:
+        raise RuntimeError("secret worker detail")
+
+
+@pytest.mark.asyncio
+async def test_failed_worker_is_retryable_but_attempts_are_bounded() -> None:
+    request, _ = await create_request(
+        cast(AsyncSession, FakeSession()),
+        command=command(),
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    execution, _ = await execute_request(
+        cast(AsyncSession, FakeSession()),
+        request=request,
+        command=AiAnalysisExecute(execution_id="ai-execution-failed", provider_id="failing-local"),
+        actor_user_id=uuid4(),
+        correlation_id=None,
+        adapters={"failing-local": FailingAdapter()},
+    )
+    assert execution.status == "failed"
+    assert execution.error_code == "adapter_failure"
+    assert "secret" not in str(execution.result)
+    request.attempt_count = 3
+    with pytest.raises(AiAnalysisExecutionError) as attempt_error:
+        await execute_request(
+            cast(AsyncSession, FakeSession()),
+            request=request,
+            command=AiAnalysisExecute(execution_id="ai-execution-retry"),
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+    assert attempt_error.value.details == {
+        "reason": "the request has reached the three-attempt limit"
+    }
+
+
+@pytest.mark.asyncio
+async def test_disabled_external_provider_and_succeeded_rerun_are_rejected() -> None:
+    request, _ = await create_request(
+        cast(AsyncSession, FakeSession()),
+        command=command(),
+        actor_user_id=uuid4(),
+        correlation_id=None,
+    )
+    with pytest.raises(AiAnalysisPolicyError) as policy_error:
+        await execute_request(
+            cast(AsyncSession, FakeSession()),
+            request=request,
+            command=AiAnalysisExecute(
+                execution_id="ai-execution-external", provider_id="external-provider"
+            ),
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+    assert policy_error.value.details == {"reason": "the requested provider adapter is disabled"}
+    request.status = "succeeded"
+    with pytest.raises(AiAnalysisExecutionError) as status_error:
+        await execute_request(
+            cast(AsyncSession, FakeSession()),
+            request=request,
+            command=AiAnalysisExecute(execution_id="ai-execution-second"),
+            actor_user_id=uuid4(),
+            correlation_id=None,
+        )
+    assert status_error.value.details == {"reason": "a succeeded request cannot be executed again"}

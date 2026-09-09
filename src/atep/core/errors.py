@@ -1164,6 +1164,25 @@ class AiAnalysisPolicyError(ApplicationError):
         )
 
 
+class AiAnalysisExecutionError(ApplicationError):
+    def __init__(self, reason: str) -> None:
+        super().__init__(
+            code="ai_analysis_execution_invalid",
+            message="The analysis request cannot be executed.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"reason": reason},
+        )
+
+
+class AiAnalysisExecutionConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="ai_analysis_execution_conflict",
+            message="The analysis execution identifier is already used by different input.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
 class PerformanceEvidenceConflictError(ApplicationError):
     def __init__(self, resource: str) -> None:
         super().__init__(

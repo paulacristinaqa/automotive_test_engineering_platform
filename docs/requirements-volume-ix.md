@@ -22,6 +22,20 @@
   before transmitting data.
 - **AI-NF-004** AI output shall be advisory and shall never directly mutate vehicle or test state.
 
+## IX-2 functional requirements
+
+- **AI-F-010** Execute queued analysis requests through a versioned deterministic local rule adapter.
+- **AI-F-011** Store one immutable execution record per bounded attempt and update request lifecycle.
+- **AI-F-012** Limit requests to three attempts and allow retries only after a failed attempt.
+- **AI-F-013** Return structured summaries, findings, recommendations, confidence, and evidence references.
+- **AI-F-014** Make exact execution retries idempotent and changed identifier reuse a stable conflict.
+- **AI-F-015** Keep provider adapters behind one common interface and disable unknown adapters.
+- **AI-F-016** Enforce provider policy and data classification before any external adapter invocation.
+- **AI-F-017** Persist minimized completion audit and outbox evidence atomically with each attempt.
+- **AI-NF-005** The local adapter shall require no model, API key, network access, paid service, or GPU.
+- **AI-NF-006** Adapter failures shall expose a stable code without leaking internal exception details.
+- **AI-NF-007** Results shall remain advisory and cite only evidence supplied with the request.
+
 ## Verification catalogue
 
 - **AI-T-001** Validate task, subject, identifier, context, and evidence bounds.
@@ -31,3 +45,10 @@
 - **AI-T-005** Verify minimized audit and outbox evidence.
 - **AI-T-006** Verify explicit RBAC permissions and OpenAPI routes.
 - **AI-T-007** Apply migration 0057 through Docker integration.
+- **AI-T-008** Verify deterministic DTC, failure-count, and threshold rules and no-match behavior.
+- **AI-T-009** Verify queued, running, succeeded, and failed lifecycle outcomes.
+- **AI-T-010** Verify retry bounds, execution replay, and stable identifier conflicts.
+- **AI-T-011** Reject disabled adapters and policy-invalid external processing.
+- **AI-T-012** Verify structured cited output and minimized audit/outbox evidence.
+- **AI-T-013** Verify execution APIs, RBAC, pagination, and OpenAPI contracts.
+- **AI-T-014** Apply migration 0059 through hosted Docker integration.

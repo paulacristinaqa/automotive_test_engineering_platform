@@ -1338,6 +1338,7 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             )
             assert ai_request.status_code == 201, ai_request.text
             assert ai_request.json()["provider_policy"] == "local_only"
+            ai_request_id = ai_request.json()["request_id"]
             replayed_ai_request = await client.post(
                 "/api/v1/ai/analysis-requests", headers=admin_headers, json=ai_request_payload
             )
@@ -1348,6 +1349,31 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             )
             assert ai_request_page.status_code == 200
             assert ai_request_page.json()["total"] == 1
+            ai_execution_payload = {
+                "execution_id": f"ai-execution-{uuid4().hex[:12]}",
+                "provider_id": "local-rules",
+            }
+            ai_execution = await client.post(
+                f"/api/v1/ai/analysis-requests/{ai_request_id}/executions",
+                headers=admin_headers,
+                json=ai_execution_payload,
+            )
+            assert ai_execution.status_code == 201, ai_execution.text
+            assert ai_execution.json()["status"] == "succeeded"
+            assert ai_execution.json()["result"]["findings"][0]["code"] == "DTC_PRESENT"
+            replayed_ai_execution = await client.post(
+                f"/api/v1/ai/analysis-requests/{ai_request_id}/executions",
+                headers=admin_headers,
+                json=ai_execution_payload,
+            )
+            assert replayed_ai_execution.status_code == 200
+            assert replayed_ai_execution.json()["duplicate"] is True
+            ai_execution_page = await client.get(
+                f"/api/v1/ai/analysis-requests/{ai_request_id}/executions",
+                headers=admin_headers,
+            )
+            assert ai_execution_page.status_code == 200
+            assert ai_execution_page.json()["total"] == 1
 
             role_name = f"integration-qa-{uuid4().hex[:12]}"
             role_command = {
@@ -1622,6 +1648,14 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                 headers=user_headers,
             )
             assert ai_requests_denied["code"] == "permission_denied"
+            ai_executions_denied = await expected_error(
+                client,
+                "GET",
+                f"/api/v1/ai/analysis-requests/{ai_request_id}/executions",
+                403,
+                headers=user_headers,
+            )
+            assert ai_executions_denied["code"] == "permission_denied"
             artifacts_denied = await expected_error(
                 client,
                 "GET",
