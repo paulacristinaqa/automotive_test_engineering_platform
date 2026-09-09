@@ -1284,6 +1284,46 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             assert automation_report_page.status_code == 200
             assert automation_report_page.json()["total"] == 1
 
+            performance_profile_id = f"performance-profile-{uuid4().hex[:12]}"
+            performance_profile = await client.post(
+                "/api/v1/performance/profiles",
+                headers=admin_headers,
+                json={
+                    "profile_id": performance_profile_id,
+                    "name": "Integration API baseline",
+                    "workload_type": "performance",
+                    "target": "public-api",
+                    "stages": [
+                        {
+                            "duration_seconds": 60,
+                            "virtual_users": 10,
+                            "requests_per_second": 20,
+                        }
+                    ],
+                    "thresholds": [{"metric": "p95_latency_ms", "operator": "max", "value": 250}],
+                    "resource_limits": {
+                        "cpu_cores": 2,
+                        "memory_mb": 1024,
+                        "gpu_allowed": False,
+                    },
+                },
+            )
+            assert performance_profile.status_code == 201, performance_profile.text
+            performance_execution = await client.post(
+                f"/api/v1/performance/profiles/{performance_profile_id}/executions",
+                headers=admin_headers,
+                json={
+                    "execution_id": f"performance-execution-{uuid4().hex[:12]}",
+                    "test_run_id": catalog_run_id,
+                    "sample_count": 1200,
+                    "duration_seconds": 60,
+                    "metrics": {"p95_latency_ms": 210},
+                    "evidence_refs": ["artifact://integration-performance-summary"],
+                },
+            )
+            assert performance_execution.status_code == 201, performance_execution.text
+            assert performance_execution.json()["outcome"] == "passed"
+
             ai_request_payload = {
                 "request_id": f"ai-analysis-{uuid4().hex[:12]}",
                 "task": "root_cause",
@@ -1566,6 +1606,14 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                 headers=user_headers,
             )
             assert automation_reports_denied["code"] == "permission_denied"
+            performance_denied = await expected_error(
+                client,
+                "GET",
+                "/api/v1/performance/profiles",
+                403,
+                headers=user_headers,
+            )
+            assert performance_denied["code"] == "permission_denied"
             ai_requests_denied = await expected_error(
                 client,
                 "GET",

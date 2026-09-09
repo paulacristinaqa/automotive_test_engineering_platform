@@ -6,8 +6,8 @@
   deterministic aggregation, RBAC, audit, outbox, and live updates.
 - [x] **VIII-3 Scheduler and selection** - durable scheduled execution with immutable smoke, sanity,
   and regression suite-selection snapshots.
-- [ ] **VIII-4 Performance and stress** - deferred until near project completion, when stable baselines
-  can support load profiles, thresholds, resource budgets, and comparable trend evidence.
+- [x] **VIII-4 Performance and stress** - bounded load profiles, explicit resource limits,
+  threshold evaluation, immutable evidence, and comparable historical baselines.
 - [x] **VIII-5 Fault injection** - reusable, bounded fault campaigns across vehicle, ECU, CAN,
   diagnostics, EV, and ADAS, with recovery plans and versioned evidence.
 - [x] **VIII-6 Mutation testing and coverage** - bounded mutation operators, immutable campaign
@@ -17,6 +17,5 @@
 
 ## Volume status
 
-The functional Volume VIII baseline is complete. VIII-4 remains planned but intentionally deferred
-until near project completion, when stable baselines can support meaningful load profiles,
-thresholds, resource budgets, and comparable historical evidence.
+The complete Volume VIII baseline is implemented. Performance and stress execution remains isolated
+from the API and bounded by profile resource budgets; hosted CI is preferred for meaningful loads.

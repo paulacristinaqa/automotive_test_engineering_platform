@@ -90,10 +90,10 @@ def main() -> None:
     title.add_run("ATEP Volume VIII Test Framework Engineering Workbook")
     subtitle = doc.add_paragraph()
     subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    subtitle.add_run("Version 0.6.0   Functional Volume VIII Baseline Complete").bold = True
+    subtitle.add_run("Version 0.7.0   Complete Volume VIII Baseline").bold = True
     doc.add_paragraph(
-        "This workbook records the catalog, execution-binding, scheduled-selection, and bounded "
-        "fault-campaign and mutation-quality baseline "
+        "This workbook records the catalog, execution-binding, scheduled-selection, bounded "
+        "performance evidence, fault-campaign, and mutation-quality baseline "
         "for ATEP. Reusable "
         "definitions describe test intent, suites preserve reviewed composition, and "
         "catalog-backed "
@@ -103,11 +103,11 @@ def main() -> None:
         doc,
         ["Field", "Value"],
         [
-            ["Status", "Functional VIII-1, VIII-2, VIII-3, VIII-5, VIII-6, and VIII-7 complete"],
+            ["Status", "VIII-1 through VIII-7 complete"],
             ["Technology", "FastAPI, PostgreSQL, SQLAlchemy, Alembic, Pydantic"],
             ["Security", "test_catalog:read and test_catalog:manage"],
             ["Cost", "Local first with no paid cloud, AI, or GPU dependency"],
-            ["Next", "VIII-4 performance and stress near project completion"],
+            ["Next", "Volume IX AI Test Engineer increments"],
         ],
         [1.5, 5.4],
     )
@@ -118,7 +118,8 @@ def main() -> None:
         "test's preconditions, actions, inputs, expectations, classification, and resource budget. "
         "A suite selects active definitions in an explicit order and freezes their versions. "
         "VIII-2 binds that snapshot to a run and records each case outcome. VIII-3 schedules "
-        "that immutable intent for later smoke, sanity, or regression execution. VIII-5 adds "
+        "that immutable intent for later smoke, sanity, or regression execution. VIII-4 adds "
+        "bounded performance and stress evidence with historical comparison. VIII-5 adds "
         "cross-domain fault campaigns with recovery plans and evidence. VIII-6 adds bounded "
         "mutation scoring and explicit requirement coverage gaps."
     )
@@ -131,8 +132,8 @@ def main() -> None:
             ),
             "Suites classify smoke, sanity, regression, performance, stress, and safety intent.",
             (
-                "Performance and stress remain planned but are deferred until near completion; "
-                "the functional Volume VIII baseline is complete."
+                "Performance and stress now use bounded profiles, deterministic thresholds, "
+                "and comparable evidence; the complete Volume VIII baseline is implemented."
             ),
         ],
     )
@@ -146,7 +147,7 @@ def main() -> None:
             ["FastAPI", "Bounded contracts, pagination, status filtering, and RBAC"],
             ["Domain service", "Idempotency, lifecycle, snapshots, audit, and outbox"],
             ["PostgreSQL", "Definitions, suite composition snapshots, versions, and status"],
-            ["Alembic", "Linear migrations 0051 through 0056 with reversible schema changes"],
+            ["Alembic", "Linear migrations 0051 through 0058 with reversible schema changes"],
             [
                 "Run executor",
                 "Materializes and updates ordered cases without rewriting catalog intent",
@@ -154,6 +155,10 @@ def main() -> None:
             [
                 "Fault campaigns",
                 "Snapshots bounded injection and recovery intent without arbitrary commands",
+            ],
+            [
+                "Performance evidence",
+                "Stores bounded profiles, deterministic thresholds, and historical comparisons",
             ],
         ],
         [1.55, 5.35],
@@ -284,7 +289,28 @@ def main() -> None:
     )
 
     doc.add_page_break()
-    doc.add_heading("10 Fault Campaigns", level=1)
+    doc.add_heading("10 Performance and Stress", level=1)
+    doc.add_paragraph(
+        "VIII-4 stores bounded workload profiles and immutable measured evidence without running a "
+        "load generator in FastAPI. Every execution links to a terminal test run and passes only "
+        "when all configured minimum and maximum thresholds pass."
+    )
+    add_table(
+        doc,
+        ["Control", "Bound", "Purpose"],
+        [
+            ["Duration", "3600 seconds total", "Bound execution exposure"],
+            ["Virtual users", "500 per stage", "Prevent unsafe concurrency"],
+            ["Request rate", "1000 per second", "Protect shared services"],
+            ["CPU and memory", "4 cores and 4096 MB", "Keep resource budgets explicit"],
+            ["GPU", "Always disabled", "Protect workstation resources"],
+            ["Baseline", "Same profile only", "Make trends comparable"],
+        ],
+        [1.6, 2.0, 3.3],
+    )
+
+    doc.add_page_break()
+    doc.add_heading("11 Fault Campaigns", level=1)
     doc.add_paragraph(
         "VIII-5 defines reusable campaigns across Digital Vehicle, ECU, CAN, diagnostics, "
         "Electric Vehicle, and ADAS. Each step selects a domain-specific allowlisted action, "
@@ -312,7 +338,7 @@ def main() -> None:
     )
 
     doc.add_page_break()
-    doc.add_heading("11 Mutation Testing and Coverage", level=1)
+    doc.add_heading("12 Mutation Testing and Coverage", level=1)
     doc.add_paragraph(
         "VIII-6 binds an active catalog suite to a reviewed mutation campaign. Each campaign "
         "preserves the suite snapshot and contains up to five hundred uniquely ordered mutants "
@@ -348,7 +374,7 @@ def main() -> None:
     )
 
     doc.add_page_break()
-    doc.add_heading("12 Cross Platform Automation Reporting", level=1)
+    doc.add_heading("13 Cross Platform Automation Reporting", level=1)
     doc.add_paragraph(
         "VIII-7 closes the functional baseline with one immutable report per terminal test run. "
         "The report correlates the authoritative vehicle and run with Vehicle Gateway telemetry "
@@ -379,7 +405,7 @@ def main() -> None:
     )
 
     doc.add_page_break()
-    doc.add_heading("13 Events and Audit", level=1)
+    doc.add_heading("14 Events and Audit", level=1)
     add_table(
         doc,
         ["Mutation", "Outbox event", "Audit action"],
@@ -441,6 +467,16 @@ def main() -> None:
                 "requirement_coverage.updated",
             ],
             [
+                "Create performance profile",
+                "atep.performance.profile.created.v1",
+                "performance.profile_created",
+            ],
+            [
+                "Record performance execution",
+                "atep.performance.execution.recorded.v1",
+                "performance.execution_recorded",
+            ],
+            [
                 "Create automation report",
                 "atep.cross_platform_automation.report.created.v1",
                 "cross_platform_automation.report_created",
@@ -456,7 +492,7 @@ def main() -> None:
     )
 
     doc.add_page_break()
-    doc.add_heading("14 Engineering Decisions", level=1)
+    doc.add_heading("15 Engineering Decisions", level=1)
     add_table(
         doc,
         ["Decision", "Rationale", "Consequence"],
@@ -523,7 +559,7 @@ def main() -> None:
     )
 
     doc.add_page_break()
-    doc.add_heading("15 Verification Catalogue", level=1)
+    doc.add_heading("16 Verification Catalogue", level=1)
     add_table(
         doc,
         ["ID range", "Coverage", "Objective"],
@@ -563,12 +599,17 @@ def main() -> None:
                 "Cross-platform reports",
                 "Validate correlation, outcome, replay, safety, RBAC, and integration",
             ],
+            [
+                "TF-T-069 to 073",
+                "Performance and stress",
+                "Validate resource bounds, thresholds, baselines, evidence, and migration",
+            ],
         ],
         [1.55, 2.45, 2.9],
     )
 
     doc.add_page_break()
-    doc.add_heading("16 Risks and Controls", level=1)
+    doc.add_heading("17 Risks and Controls", level=1)
     add_table(
         doc,
         ["Risk", "Control", "Next action"],
@@ -603,8 +644,8 @@ def main() -> None:
             ],
             [
                 "Resource-heavy early benchmarks",
-                "Defer VIII-4 until stable baselines",
-                "Run bounded CPU-only functional tests now",
+                "Enforce profile budgets and hosted CI",
+                "Keep local tests contract-only and GPU-free",
             ],
             [
                 "Unsafe mutation execution",
@@ -630,7 +671,7 @@ def main() -> None:
         [1.5, 2.55, 2.85],
     )
 
-    doc.add_heading("17 Study Exercises", level=1)
+    doc.add_heading("18 Study Exercises", level=1)
     doc.add_paragraph(
         "Create one ADAS definition and identify its invariants. Then run two required cases, "
         "explain the aggregate result, and compare an exact retry after suite archival with a new "
@@ -643,11 +684,12 @@ def main() -> None:
         "from another gateway or displayed an older run version."
     )
 
-    doc.add_heading("18 Volume Completion", level=1)
+    doc.add_heading("19 Volume Completion", level=1)
     doc.add_paragraph(
-        "The functional Volume VIII baseline is complete. VIII-4 remains planned near project "
-        "completion, when stable baselines make performance thresholds and comparable trends "
-        "meaningful without unnecessary CPU or GPU use during active architecture changes."
+        "The complete Volume VIII baseline is implemented. Performance and stress evidence uses "
+        "bounded profiles, deterministic thresholds, and comparable historical baselines. "
+        "Meaningful "
+        "loads remain isolated from the API and prefer hosted CI to protect workstation resources."
     )
     doc.core_properties.title = "ATEP Volume VIII Test Framework Engineering Workbook"
     doc.core_properties.subject = (

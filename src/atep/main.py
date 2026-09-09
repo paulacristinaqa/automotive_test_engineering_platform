@@ -37,6 +37,7 @@ from atep.identity.roles_router import router as roles_router
 from atep.identity.router import router as identity_router
 from atep.identity.users_router import router as users_router
 from atep.mutation_analysis.router import router as mutation_analysis_router
+from atep.performance_testing.router import router as performance_testing_router
 from atep.registry.reconciler import run_registry_reconciler
 from atep.registry.router import router as registry_router
 from atep.test_catalog.router import router as test_catalog_router
@@ -134,6 +135,7 @@ app.include_router(artifacts_router, prefix="/api/v1", dependencies=rate_limited
 app.include_router(test_catalog_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(fault_campaigns_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(mutation_analysis_router, prefix="/api/v1", dependencies=rate_limited)
+app.include_router(performance_testing_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(cross_platform_automation_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(test_runs_websocket_router, prefix="/api/v1")
 install_exception_handlers(app)

@@ -1,6 +1,6 @@
 # Volume VIII Test Framework Engineering Workbook
 
-Version 0.6.0 records the complete functional Volume VIII baseline: VIII-1 catalog, VIII-2 execution
+Version 0.7.0 records the complete Volume VIII baseline: VIII-1 catalog, VIII-2 execution
 binding, VIII-3 scheduled selection, VIII-5 fault campaigns, VIII-6 mutation/coverage, and VIII-7
 cross-platform reporting. It documents
 architecture, contracts, lifecycle, RBAC, persistence, events, audit, deterministic case results,
@@ -82,11 +82,20 @@ It records portable evidence without executing arbitrary source transformations 
 - Coverage collection responses include aggregate counts for immediate gap analysis.
 - Migration 0055 adds campaign, execution, result, and coverage tables with reversible constraints and indexes.
 
-## Deferred increment
+## VIII-4 outcome
 
-VIII-4 performance and stress testing remains in the roadmap but is intentionally postponed until
-near project completion. Stable system baselines will make resource thresholds and trend evidence
-meaningful while avoiding unnecessary CPU/GPU use during active architecture changes.
+VIII-4 adds bounded performance and stress profiles, deterministic threshold evaluation, immutable
+execution evidence, and same-profile historical comparisons. Profiles cap duration, virtual users,
+request rate, CPU, and memory, and always prohibit GPU use. Load generation remains outside the API.
+
+## VIII-4 evidence
+
+- Profiles contain at most twelve stages and one hour of total workload intent.
+- Executions reference terminal test runs and portable evidence rather than raw load artifacts.
+- Every configured minimum or maximum threshold contributes to the deterministic outcome.
+- Same-profile baselines preserve current value, baseline value, and signed metric delta.
+- Audit and outbox events contain outcome and counts without raw metrics or evidence references.
+- Migration 0058 adds profiles and executions with reversible constraints and indexes.
 
 ## VIII-7 outcome
 
@@ -107,5 +116,5 @@ and version actually displayed by CarSystemUI.
 
 ## Volume completion
 
-The functional Volume VIII baseline is complete. VIII-4 remains deferred until near project
-completion so performance thresholds and historical comparisons use a stable platform baseline.
+The complete Volume VIII baseline is implemented. Meaningful load generation remains bounded and
+isolated from the API, with hosted CI preferred to protect workstation CPU and GPU resources.

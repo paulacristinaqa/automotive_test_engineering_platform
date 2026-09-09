@@ -82,6 +82,23 @@
 - **TF-NF-014** Treat mutation execution as reviewed orchestration data; native mutation adapters must not expose arbitrary code execution.
 - **TF-NF-015** Run campaign, scoring, traceability, and verification locally without GPU, paid cloud, or paid AI dependencies.
 
+## VIII-4 Performance and stress
+
+- **TF-F-063** Store immutable performance and stress profiles with staged workload intent.
+- **TF-F-064** Bound CPU, memory, duration, virtual users, and request rate; prohibit GPU use.
+- **TF-F-065** Evaluate explicit minimum and maximum thresholds deterministically.
+- **TF-F-066** Link every measurement to a terminal test run and portable evidence references.
+- **TF-F-067** Compare an execution with a prior execution using the same profile.
+- **TF-F-068** Make exact retries idempotent and changed identifier reuse a stable conflict.
+- **TF-F-069** Create audit and outbox evidence atomically without raw metrics or artifacts.
+- **TF-NF-019** Never execute a load generator inside the FastAPI process.
+- **TF-NF-020** Prefer hosted CI for meaningful loads and keep local verification contract-only.
+- **TF-T-069** Reject GPU, excessive duration, users, request rate, CPU, or memory.
+- **TF-T-070** Derive passed and failed outcomes from all configured thresholds.
+- **TF-T-071** Reject non-terminal test runs and missing threshold metrics.
+- **TF-T-072** Store signed metric deltas against a same-profile baseline.
+- **TF-T-073** Verify replay, RBAC, migration, pagination, audit, and outbox behavior.
+
 ## VIII-7 Cross-platform automation reporting
 
 - **TF-F-052** Create one immutable cross-platform automation report per terminal test run.

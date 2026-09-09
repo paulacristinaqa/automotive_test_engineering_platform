@@ -376,7 +376,7 @@ operational guidance, and review worksheets.
 | V | Diagnostics | Baseline complete — increments V-1 through V-7 implemented |
 | VI | Electric Vehicle | Baseline complete — increments VI-1 through VI-7 implemented |
 | VII | ADAS | Baseline complete - VII-1 through VII-7, including cross-platform evidence |
-| VIII | Test Framework | Functional VIII-1/2/3/5/6/7 baseline complete, including cross-platform reporting; VIII-4 deferred |
+| VIII | Test Framework | Complete — VIII-1 through VIII-7, including bounded performance and stress evidence |
 | IX | AI Test Engineer | IX-1 provider-neutral foundation implemented |
 | X | Dashboard | Planned |
 | XI | DevOps | Planned |
