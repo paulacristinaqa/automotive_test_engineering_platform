@@ -360,6 +360,11 @@ companion project also passes 27 unit tests, Android lint, and debug APK assembl
 - [Volume VIII — Test Framework formatted workbook](docs/ATEP_Volume_VIII_Test_Framework_Engineering_Workbook.docx)
 - [Volume IX — AI Test Engineer editable source](docs/workbook-volume-ix.md)
 - [Volume IX — AI Test Engineer formatted workbook](docs/ATEP_Volume_IX_AI_Test_Engineer_Engineering_Workbook.docx)
+- [Volume X — Dashboard architecture](docs/dashboard.md)
+- [Volume X — Dashboard requirements](docs/requirements-volume-x.md)
+- [Volume X — Dashboard roadmap](docs/roadmap-volume-x.md)
+- [Volume X — Dashboard editable workbook](docs/workbook-volume-x.md)
+- [Volume X — Dashboard formatted workbook](docs/ATEP_Volume_X_Dashboard_Engineering_Workbook.docx)
 
 The workbook is a living English-language engineering record containing requirements,
 architecture decisions, implementation evidence, test objectives, risks, technical debt,
@@ -378,6 +383,7 @@ operational guidance, and review worksheets.
 | VII | ADAS | Baseline complete - VII-1 through VII-7, including cross-platform evidence |
 | VIII | Test Framework | Complete — VIII-1 through VIII-7, including bounded performance and stress evidence |
 | IX | AI Test Engineer | Complete IX-1 through IX-7 with cross-platform cited AI evidence |
+| X | Dashboard | In progress - X-1 backend overview and governed KPI contract complete |
 | X | Dashboard | Planned |
 | XI | DevOps | Planned |
 | XII | Enterprise Features | Planned |

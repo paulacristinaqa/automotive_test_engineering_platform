@@ -1557,6 +1557,17 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                 json=dashboard_projection_payload,
             )
             assert dashboard_projection.status_code == 201, dashboard_projection.text
+            dashboard_overview = await client.get(
+                "/api/v1/dashboard/overview?window_hours=720&evidence_limit=5",
+                headers=admin_headers,
+            )
+            assert dashboard_overview.status_code == 200, dashboard_overview.text
+            dashboard_body = dashboard_overview.json()
+            assert dashboard_body["contract_version"] == "dashboard-overview-v1"
+            assert dashboard_body["window_hours"] == 720
+            assert dashboard_body["kpis"]["test_runs_total"] >= 0
+            assert "dashboard_ai_evidence_total" in dashboard_body["kpis"]
+            assert isinstance(dashboard_body["evidence_cards"], list)
             projection_page = await client.get(
                 "/api/v1/ai/evidence-projections?consumer=carsystemui&severity=critical",
                 headers=admin_headers,
@@ -1961,6 +1972,14 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                 headers=user_headers,
             )
             assert ai_evidence_denied["code"] == "permission_denied"
+            dashboard_denied = await expected_error(
+                client,
+                "GET",
+                "/api/v1/dashboard/overview",
+                403,
+                headers=user_headers,
+            )
+            assert dashboard_denied["code"] == "permission_denied"
             artifacts_denied = await expected_error(
                 client,
                 "GET",
