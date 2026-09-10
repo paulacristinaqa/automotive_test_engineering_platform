@@ -1523,6 +1523,52 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             assert chat_page.status_code == 200
             assert chat_page.json()["total"] == 1
 
+            carsystemui_projection_id = f"ai-evidence-projection-{uuid4().hex[:12]}"
+            projection_payload = {
+                "projection_id": carsystemui_projection_id,
+                "consumer": "carsystemui",
+                "source_type": "root_cause_risk",
+                "source_id": root_risk_id,
+            }
+            projection = await client.post(
+                "/api/v1/ai/evidence-projections",
+                headers=admin_headers,
+                json=projection_payload,
+            )
+            assert projection.status_code == 201, projection.text
+            assert projection.json()["severity"] == "critical"
+            assert projection.json()["advisory"] is True
+            assert projection.json()["citations"] == ["artifact://carsystemui-test-detail"]
+            replayed_projection = await client.post(
+                "/api/v1/ai/evidence-projections",
+                headers=admin_headers,
+                json=projection_payload,
+            )
+            assert replayed_projection.status_code == 200
+            assert replayed_projection.json()["duplicate"] is True
+            dashboard_projection_payload = {
+                **projection_payload,
+                "projection_id": f"ai-evidence-projection-{uuid4().hex[:12]}",
+                "consumer": "dashboard",
+            }
+            dashboard_projection = await client.post(
+                "/api/v1/ai/evidence-projections",
+                headers=admin_headers,
+                json=dashboard_projection_payload,
+            )
+            assert dashboard_projection.status_code == 201, dashboard_projection.text
+            projection_page = await client.get(
+                "/api/v1/ai/evidence-projections?consumer=carsystemui&severity=critical",
+                headers=admin_headers,
+            )
+            assert projection_page.status_code == 200
+            assert projection_page.json()["total"] == 1
+            projection_detail = await client.get(
+                f"/api/v1/ai/evidence-projections/{carsystemui_projection_id}",
+                headers=admin_headers,
+            )
+            assert projection_detail.status_code == 200
+
             suggestion_request_id = f"ai-suggestion-request-{uuid4().hex[:12]}"
             suggestion_request = await client.post(
                 "/api/v1/ai/analysis-requests",
@@ -1907,6 +1953,14 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                 headers=user_headers,
             )
             assert chat_denied["code"] == "permission_denied"
+            ai_evidence_denied = await expected_error(
+                client,
+                "GET",
+                "/api/v1/ai/evidence-projections?consumer=carsystemui",
+                403,
+                headers=user_headers,
+            )
+            assert ai_evidence_denied["code"] == "permission_denied"
             artifacts_denied = await expected_error(
                 client,
                 "GET",

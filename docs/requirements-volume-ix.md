@@ -99,6 +99,20 @@
 - **AI-NF-018** Keep questions, answers, citations, and conversation titles out of audit and outbox payloads.
 - **AI-NF-019** Keep every response advisory and unable to mutate vehicle, test, catalog, or schedule state.
 
+## IX-7 functional requirements
+
+- **AI-F-057** Create immutable evidence projections for `carsystemui` or `dashboard` consumers.
+- **AI-F-058** Derive projections only from persisted analysis executions, log analyses, test suggestions, root-cause risk analyses, or chat exchanges.
+- **AI-F-059** Preserve the source analysis request subject, status, severity, and governed citations.
+- **AI-F-060** Expose an allowlisted headline and bounded summary without source context, prompts, signals, or raw logs.
+- **AI-F-061** Enforce the originating owner boundary before projecting a private chat exchange.
+- **AI-F-062** Version the client contract independently as `ai-evidence-v1`.
+- **AI-F-063** Make projection retries idempotent and reject changed identifier reuse.
+- **AI-F-064** Provide create, detail, filtered list, pagination, RBAC, audit, and outbox APIs.
+- **AI-NF-020** Limit summaries to 1,000 characters and citations to 20 unique references.
+- **AI-NF-021** Keep projections advisory, immutable, and free of vehicle or test mutation operations.
+- **AI-NF-022** Keep summaries and citations out of audit and outbox payloads.
+
 ## Verification catalogue
 
 - **AI-T-001** Validate task, subject, identifier, context, and evidence bounds.
@@ -147,3 +161,9 @@
 - **AI-T-044** Verify 50-exchange enforcement, expiration, and content purge evidence.
 - **AI-T-045** Verify APIs, pagination, RBAC, and minimized audit and outbox metadata.
 - **AI-T-046** Apply migration 0063 and the complete chat workflow through hosted Docker integration.
+- **AI-T-047** Verify supported consumers, source types, identifier bounds, and contract version.
+- **AI-T-048** Verify deterministic source derivation and allowlisted output fields.
+- **AI-T-049** Verify citations, summary bounds, advisory state, and private-chat ownership.
+- **AI-T-050** Verify projection replay, changed-input conflict, filters, pagination, and RBAC.
+- **AI-T-051** Verify minimized audit and outbox evidence excludes summaries and citations.
+- **AI-T-052** Apply migration 0064 and both consumer flows through hosted Docker integration.

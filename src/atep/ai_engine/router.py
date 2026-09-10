@@ -3,6 +3,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Path, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from atep.ai_engine.evidence_projection import (
+    create_projection,
+    list_projections,
+    projection_response,
+    require_projection,
+)
 from atep.ai_engine.grounded_chat import (
     conversation_response,
     create_conversation,
@@ -43,6 +49,9 @@ from atep.ai_engine.schemas import (
     AiChatExchangePage,
     AiChatExchangeResponse,
     AiChatPurgeResponse,
+    AiEvidenceProjectionCreate,
+    AiEvidenceProjectionPage,
+    AiEvidenceProjectionResponse,
     AiLogAnalysisCreate,
     AiLogAnalysisPage,
     AiLogAnalysisResponse,
@@ -556,3 +565,68 @@ async def list_chat_exchanges_endpoint(
         limit=limit,
         offset=offset,
     )
+
+
+@router.post(
+    "/evidence-projections",
+    response_model=AiEvidenceProjectionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_evidence_projection_endpoint(
+    command: AiEvidenceProjectionCreate,
+    http_request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(manage_access)],
+) -> AiEvidenceProjectionResponse:
+    projection, analysis_request, duplicate = await create_projection(
+        session,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(http_request),
+    )
+    await session.commit()
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+    return projection_response(projection, request=analysis_request, duplicate=duplicate)
+
+
+@router.get("/evidence-projections", response_model=AiEvidenceProjectionPage)
+async def list_evidence_projections_endpoint(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(read_access)],
+    consumer: Annotated[str, Query(pattern=r"^(carsystemui|dashboard)$")],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
+    subject_type: Annotated[
+        str | None,
+        Query(pattern=r"^(test_run|automation_report|fault_execution|mutation_execution)$"),
+    ] = None,
+    subject_id: Annotated[str | None, Query(min_length=8, max_length=80)] = None,
+    severity: Annotated[str | None, Query(pattern=r"^(info|low|medium|high|critical)$")] = None,
+) -> AiEvidenceProjectionPage:
+    rows, total = await list_projections(
+        session,
+        consumer=consumer,
+        subject_type=subject_type,
+        subject_id=subject_id,
+        severity=severity,
+        limit=limit,
+        offset=offset,
+    )
+    return AiEvidenceProjectionPage(
+        items=[projection_response(item, request=request) for item, request in rows],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/evidence-projections/{projection_id}", response_model=AiEvidenceProjectionResponse)
+async def get_evidence_projection_endpoint(
+    projection_id: Annotated[str, request_path],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(read_access)],
+) -> AiEvidenceProjectionResponse:
+    projection, analysis_request = await require_projection(session, projection_id)
+    return projection_response(projection, request=analysis_request)

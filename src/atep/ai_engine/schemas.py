@@ -469,3 +469,42 @@ class AiChatExchangePage(BaseModel):
 class AiChatPurgeResponse(BaseModel):
     purged_conversation_count: int
     purged_exchange_count: int
+
+
+class AiEvidenceProjectionCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    projection_id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{7,63}$")
+    consumer: str = Field(pattern=r"^(carsystemui|dashboard)$")
+    source_type: str = Field(
+        pattern=r"^(analysis_execution|log_analysis|test_suggestion|root_cause_risk|chat_exchange)$"
+    )
+    source_id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{7,63}$")
+
+
+class AiEvidenceProjectionResponse(BaseModel):
+    id: UUID
+    projection_id: str
+    request_id: str
+    consumer: str
+    source_type: str
+    source_id: str
+    subject_type: str
+    subject_id: str
+    status: str
+    severity: str
+    headline: str
+    summary: str
+    citations: list[str]
+    contract_version: str
+    advisory: bool = True
+    duplicate: bool = False
+    created_by_user_id: UUID
+    created_at: datetime
+
+
+class AiEvidenceProjectionPage(BaseModel):
+    items: list[AiEvidenceProjectionResponse]
+    total: int
+    limit: int
+    offset: int

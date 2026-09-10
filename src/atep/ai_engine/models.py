@@ -195,3 +195,30 @@ class AiChatExchange(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     citations: Mapped[list[str]] = mapped_column(JSON)
     rule_version: Mapped[str] = mapped_column(String(32))
     limitations: Mapped[list[str]] = mapped_column(JSON)
+
+
+class AiEvidenceProjection(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ai_evidence_projections"
+    __table_args__ = (
+        UniqueConstraint("projection_id", name="uq_ai_evidence_projections_projection_id"),
+    )
+
+    projection_id: Mapped[str] = mapped_column(String(64), index=True)
+    projection_hash: Mapped[str] = mapped_column(String(64))
+    request_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("ai_analysis_requests.id", ondelete="CASCADE"), index=True
+    )
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    consumer: Mapped[str] = mapped_column(String(24), index=True)
+    source_type: Mapped[str] = mapped_column(String(32), index=True)
+    source_id: Mapped[str] = mapped_column(String(64), index=True)
+    subject_type: Mapped[str] = mapped_column(String(32), index=True)
+    subject_id: Mapped[str] = mapped_column(String(80), index=True)
+    status: Mapped[str] = mapped_column(String(24), index=True)
+    severity: Mapped[str] = mapped_column(String(16), index=True)
+    headline: Mapped[str] = mapped_column(String(160))
+    summary: Mapped[str] = mapped_column(Text)
+    citations: Mapped[list[str]] = mapped_column(JSON)
+    contract_version: Mapped[str] = mapped_column(String(16))
