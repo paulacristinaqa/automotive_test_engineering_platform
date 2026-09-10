@@ -1,7 +1,7 @@
 # ATEP Volume IX AI Test Engineer Engineering Workbook
 
-Version 0.2.0 records the IX-1 provider-neutral foundation and IX-2 deterministic analysis workers.
-It separates governed analysis intent from provider execution and keeps a no-cost local baseline.
+Version 0.3.0 records the IX-1 provider-neutral foundation, IX-2 deterministic workers, and IX-3
+log intelligence. It keeps governed analysis and evidence processing local and reproducible.
 
 ## Scope and architecture
 
@@ -9,6 +9,8 @@ FastAPI validates bounded requests. The domain service enforces idempotency and 
 PostgreSQL stores immutable queued intent. RBAC protects creation and retrieval. Audit and outbox
 records provide minimized traceability. A versioned local rule adapter now produces structured,
 evidence-linked advisory results without invoking an AI provider.
+IX-3 adds bounded parsing, sanitization, chronological timelines, stable message clustering,
+deterministic anomaly signals, and explanations tied to source line numbers.
 
 ## Engineering decisions
 
@@ -30,6 +32,8 @@ evidence-linked advisory results without invoking an AI provider.
 - Hosted Docker integration proves migration 0057 on PostgreSQL.
 - Worker tests verify deterministic findings, lifecycle, retry limits, safe failures, and replay.
 - Hosted Docker integration proves migration 0059 and execution persistence on PostgreSQL.
+- Log tests verify parsing, redaction, clustering, anomalies, grounded explanations, and bounds.
+- Hosted Docker integration proves migration 0060 and log evidence persistence on PostgreSQL.
 
 ## IX-2 outcome
 
@@ -39,5 +43,5 @@ the request evidence. It requires no model, API key, paid account, network, or G
 
 ## Next increment
 
-IX-3 adds bounded log parsing, clustering, event timelines, anomaly evidence, and grounded failure
-explanations while preserving the same privacy and cost controls.
+IX-4 adds requirement-aware test suggestions with human review, rejection evidence, and controlled
+promotion into the test catalog. No generated suggestion may activate or execute itself.

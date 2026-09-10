@@ -1183,6 +1183,25 @@ class AiAnalysisExecutionConflictError(ApplicationError):
         )
 
 
+class AiLogAnalysisConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="ai_log_analysis_conflict",
+            message="The log analysis identifier is already used by different input.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class AiLogAnalysisContractError(ApplicationError):
+    def __init__(self, reason: str) -> None:
+        super().__init__(
+            code="ai_log_analysis_contract_invalid",
+            message="The log analysis violates its bounded contract.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"reason": reason},
+        )
+
+
 class PerformanceEvidenceConflictError(ApplicationError):
     def __init__(self, resource: str) -> None:
         super().__init__(

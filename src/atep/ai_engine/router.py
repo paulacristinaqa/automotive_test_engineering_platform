@@ -3,6 +3,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Path, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from atep.ai_engine.log_intelligence import (
+    create_log_analysis,
+    list_log_analyses,
+    log_analysis_response,
+    require_log_analysis,
+)
 from atep.ai_engine.schemas import (
     AiAnalysisExecute,
     AiAnalysisExecutionPage,
@@ -10,6 +16,9 @@ from atep.ai_engine.schemas import (
     AiAnalysisRequestCreate,
     AiAnalysisRequestPage,
     AiAnalysisRequestResponse,
+    AiLogAnalysisCreate,
+    AiLogAnalysisPage,
+    AiLogAnalysisResponse,
     AiTask,
 )
 from atep.ai_engine.service import (
@@ -122,3 +131,59 @@ async def list_executions_endpoint(
         limit=limit,
         offset=offset,
     )
+
+
+@router.post(
+    "/analysis-requests/{request_id}/log-intelligence",
+    response_model=AiLogAnalysisResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_log_analysis_endpoint(
+    request_id: Annotated[str, request_path],
+    command: AiLogAnalysisCreate,
+    http_request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(manage_access)],
+) -> AiLogAnalysisResponse:
+    analysis_request = await require_request(session, request_id, for_update=True)
+    analysis, duplicate = await create_log_analysis(
+        session,
+        request=analysis_request,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(http_request),
+    )
+    await session.commit()
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+    return log_analysis_response(analysis, request=analysis_request, duplicate=duplicate)
+
+
+@router.get("/log-analyses", response_model=AiLogAnalysisPage)
+async def list_log_analyses_endpoint(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(read_access)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
+    source: Annotated[
+        str | None, Query(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
+    ] = None,
+) -> AiLogAnalysisPage:
+    rows, total = await list_log_analyses(session, limit=limit, offset=offset, source=source)
+    return AiLogAnalysisPage(
+        items=[log_analysis_response(item, request=request) for item, request in rows],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/log-analyses/{analysis_id}", response_model=AiLogAnalysisResponse)
+async def get_log_analysis_endpoint(
+    analysis_id: Annotated[str, request_path],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(read_access)],
+) -> AiLogAnalysisResponse:
+    analysis, analysis_request = await require_log_analysis(session, analysis_id)
+    return log_analysis_response(analysis, request=analysis_request)
