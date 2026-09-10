@@ -15,10 +15,10 @@ class ExecuteResult:
         self.value = value
 
     def all(self) -> list[tuple[str, int]]:
-        return self.value
+        return cast(list[tuple[str, int]], self.value)
 
     def one(self) -> tuple[int, float | None]:
-        return self.value
+        return cast(tuple[int, float | None], self.value)
 
 
 class ScalarResult:
