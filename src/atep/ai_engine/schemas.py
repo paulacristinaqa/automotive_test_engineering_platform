@@ -283,3 +283,114 @@ class AiTestSuggestionPage(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class AiRiskSignal(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str = Field(min_length=3, max_length=64, pattern=r"^[A-Z][A-Z0-9_]+$")
+    component: str = Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
+    symptom: str = Field(min_length=1, max_length=500)
+    severity: str = Field(pattern=r"^(info|low|medium|high|critical)$")
+    occurrence_count: int = Field(ge=1, le=10_000)
+    confidence: float = Field(ge=0, le=1)
+    detectability: float = Field(ge=0, le=1)
+    evidence_refs: list[str] = Field(min_length=1, max_length=10)
+
+    @field_validator("evidence_refs")
+    @classmethod
+    def bounded_signal_evidence(cls, value: list[str]) -> list[str]:
+        normalized = [item.strip() for item in value]
+        if any(not item or len(item) > 500 for item in normalized):
+            raise ValueError("evidence references must contain 1 to 500 characters")
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("evidence references must be unique")
+        return normalized
+
+
+class AiRootCauseRiskCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    analysis_id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{7,63}$")
+    horizon_hours: int = Field(default=24, ge=1, le=720)
+    signals: list[AiRiskSignal] = Field(min_length=1, max_length=50)
+
+    @field_validator("signals")
+    @classmethod
+    def unique_signal_codes(cls, value: list[AiRiskSignal]) -> list[AiRiskSignal]:
+        codes = [item.code for item in value]
+        if len(codes) != len(set(codes)):
+            raise ValueError("signal codes must be unique")
+        return value
+
+
+class AiRootCauseHypothesis(BaseModel):
+    rank: int = Field(ge=1, le=50)
+    code: str
+    component: str
+    statement: str
+    support_score: float = Field(ge=0, le=100)
+    evidence_refs: list[str]
+    limitations: list[str]
+
+
+class AiPredictionEvaluationCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    evaluation_id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{7,63}$")
+    expected_version: int = Field(ge=1)
+    actual_failure: bool
+    confirmed_hypothesis_code: str | None = Field(
+        default=None, min_length=3, max_length=64, pattern=r"^[A-Z][A-Z0-9_]+$"
+    )
+    evidence_refs: list[str] = Field(min_length=1, max_length=20)
+
+    @field_validator("evidence_refs")
+    @classmethod
+    def bounded_evaluation_evidence(cls, value: list[str]) -> list[str]:
+        normalized = [item.strip() for item in value]
+        if any(not item or len(item) > 500 for item in normalized):
+            raise ValueError("evidence references must contain 1 to 500 characters")
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("evidence references must be unique")
+        return normalized
+
+
+class AiRootCauseRiskResponse(BaseModel):
+    id: UUID
+    analysis_id: str
+    request_id: str
+    horizon_hours: int
+    signals: list[AiRiskSignal]
+    hypotheses: list[AiRootCauseHypothesis]
+    risk_score: int
+    risk_band: str
+    predicted_failure: bool
+    limitations: list[str]
+    version: int
+    duplicate: bool = False
+    created_by_user_id: UUID
+    evaluation_id: str | None
+    evaluated_by_user_id: UUID | None
+    actual_failure: bool | None
+    confirmed_hypothesis_code: str | None
+    evaluation_evidence_refs: list[str] | None
+    prediction_correct: bool | None
+    brier_score: float | None
+    evaluated_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AiRootCauseRiskPage(BaseModel):
+    items: list[AiRootCauseRiskResponse]
+    total: int
+    limit: int
+    offset: int
+
+
+class AiPredictionMetrics(BaseModel):
+    evaluated_count: int
+    correct_count: int
+    accuracy: float | None
+    mean_brier_score: float | None

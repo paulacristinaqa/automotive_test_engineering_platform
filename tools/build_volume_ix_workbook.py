@@ -71,22 +71,22 @@ def build() -> None:
     title.add_run("ATEP Volume IX AI Test Engineer Engineering Workbook")
     intro = doc.add_paragraph()
     intro.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    intro.add_run("Version 0.4.0  Governed Test Suggestions").bold = True
+    intro.add_run("Version 0.5.0  Explainable Root Cause and Risk").bold = True
     doc.add_paragraph(
         "This workbook records the governed AI boundary and deterministic analysis worker for "
         "ATEP. IX-1 captures analysis intent, IX-2 produces structured advisory results, and "
         "IX-3 converts bounded logs into sanitized timelines and anomaly evidence, while IX-4 "
-        "adds reviewed test suggestions without a "
+        "adds reviewed test suggestions, and IX-5 adds explainable risk evidence without a "
         "paid service, model download, network call, or GPU."
     )
     table(
         doc,
         ["Field", "Value"],
         [
-            ["Status", "IX-1 through IX-4 implemented"],
+            ["Status", "IX-1 through IX-5 implemented"],
             ["Cost", "Local first and no paid dependency"],
-            ["Migrations", "0057 foundation, 0059 workers, 0060 logs, 0061 suggestions"],
-            ["Next", "IX-5 root cause and risk"],
+            ["Migrations", "0057 foundation through 0062 root cause and risk"],
+            ["Next", "IX-6 grounded internal chat"],
         ],
         [1.6, 5.2],
     )
@@ -108,6 +108,7 @@ def build() -> None:
             ["Adapter boundary", "Common interface with unknown providers disabled"],
             ["Log intelligence", "Sanitization, timeline, clustering, anomalies, and explanation"],
             ["Test generation", "Requirement-aware draft, human review, and catalog promotion"],
+            ["Root cause and risk", "Evidence ranking, risk score, and prediction evaluation"],
         ],
         [1.7, 5.1],
     )
@@ -209,7 +210,25 @@ def build() -> None:
         ],
         [1.5, 2.15, 3.15],
     )
-    doc.add_heading("8 Verification Catalogue", level=1)
+    doc.add_heading("8 Root Cause and Risk", level=1)
+    doc.add_paragraph(
+        "IX-5 ranks bounded signals that cite only evidence governed by the request. A transparent "
+        "formula combines the highest hypothesis support, severity impact, and inverse "
+        "detectability. The result prioritizes investigation and never asserts causality."
+    )
+    table(
+        doc,
+        ["Control", "Rule", "Engineering purpose"],
+        [
+            ["Signals", "1 to 50 unique codes", "Bound processing and ambiguity"],
+            ["Evidence", "Request references only", "Prevent unsupported conclusions"],
+            ["Risk", "Fixed 0 to 100 formula", "Make prioritization reproducible"],
+            ["Outcome", "Versioned observed evidence", "Measure prediction quality"],
+            ["Metrics", "Accuracy and Brier score", "Compare historical performance"],
+        ],
+        [1.5, 2.15, 3.15],
+    )
+    doc.add_heading("9 Verification Catalogue", level=1)
     table(
         doc,
         ["ID", "Objective"],
@@ -232,10 +251,13 @@ def build() -> None:
             ["AI-T-023 to 025", "Verify generation bounds, replay, review, and rejection evidence"],
             ["AI-T-026 to 029", "Verify promotion gate, draft catalog state, APIs, and RBAC"],
             ["AI-T-030", "Apply migration 0061 through hosted Docker integration"],
+            ["AI-T-031 to 034", "Verify signal policy, ranking, risk formula, and limitations"],
+            ["AI-T-035 to 037", "Verify evaluation, Brier score, metrics, APIs, and RBAC"],
+            ["AI-T-038", "Apply migration 0062 through hosted Docker integration"],
         ],
         [1.4, 5.4],
     )
-    doc.add_heading("9 Risks and Next Development", level=1)
+    doc.add_heading("10 Risks and Next Development", level=1)
     table(
         doc,
         ["Risk", "Control"],
@@ -243,13 +265,15 @@ def build() -> None:
             ["Sensitive data egress", "Classification and provider policy gate"],
             ["Hallucinated authority", "Advisory-only boundary and future citations"],
             ["Unexpected cost", "No provider call and local-only default"],
-            ["Resource consumption", "No model or GPU in IX-1 through IX-4"],
+            ["Resource consumption", "No model or GPU in IX-1 through IX-5"],
             ["Prompt leakage", "Minimized audit and outbox metadata"],
             ["Unbounded retries", "Three immutable attempts maximum"],
             ["Worker exception leakage", "Stable error code without exception text"],
             ["Sensitive log values", "Sanitize before persistence and omit rejected text"],
             ["False causal claim", "Report signals, citations, and explicit limitations"],
             ["Unsafe generated test", "Human review and inactive catalog promotion"],
+            ["False root cause", "Rank associations with explicit causal limitations"],
+            ["Misread risk score", "Document fixed formula and non-probability meaning"],
         ],
         [2.2, 4.6],
     )

@@ -66,6 +66,23 @@
 - **AI-NF-012** Keep audit and outbox payloads free of candidate steps, objectives, and review text.
 - **AI-NF-013** Preserve traceability from request and requirements through the promoted definition.
 
+## IX-5 functional requirements
+
+- **AI-F-036** Accept one to 50 bounded signals for a governed root-cause or risk request.
+- **AI-F-037** Require every signal to cite evidence governed by its analysis request.
+- **AI-F-038** Rank hypotheses deterministically by severity, occurrence, and confidence.
+- **AI-F-039** State explicitly that evidence association and ranking do not prove causality.
+- **AI-F-040** Calculate a transparent 0 to 100 risk score from probability support, impact, and detectability.
+- **AI-F-041** Classify risk as low, medium, high, or critical with fixed boundaries.
+- **AI-F-042** Record an observed outcome and optional confirmed ranked hypothesis with evidence.
+- **AI-F-043** Calculate prediction correctness and Brier score for each evaluated analysis.
+- **AI-F-044** Aggregate evaluated count, accuracy, and mean Brier score across historical evidence.
+- **AI-F-045** Make analysis and evaluation retries idempotent and reject changed reuse.
+- **AI-F-046** Provide create, evaluate, detail, list, filter, metrics, RBAC, audit, and outbox APIs.
+- **AI-NF-014** Keep ranking, risk scoring, and evaluation deterministic, local, and versionable.
+- **AI-NF-015** Keep raw symptoms, signal collections, hypotheses, and evaluation evidence out of events.
+- **AI-NF-016** Treat risk scores as prioritization aids rather than calibrated safety probabilities.
+
 ## Verification catalogue
 
 - **AI-T-001** Validate task, subject, identifier, context, and evidence bounds.
@@ -98,3 +115,11 @@
 - **AI-T-028** Verify promotion replay and changed definition identifiers remain safe.
 - **AI-T-029** Verify APIs, RBAC, pagination, status filters, and minimized integration evidence.
 - **AI-T-030** Apply migration 0061 and the complete workflow through hosted Docker integration.
+- **AI-T-031** Verify signal bounds, unique codes, evidence governance, and supported task policy.
+- **AI-T-032** Verify deterministic hypothesis ranking and stable tie-breaking.
+- **AI-T-033** Verify the documented risk formula and fixed band boundaries.
+- **AI-T-034** Verify causal limitations and advisory-only behavior.
+- **AI-T-035** Verify versioned evaluation, confirmed-hypothesis validation, and evidence governance.
+- **AI-T-036** Verify prediction correctness, Brier score, replay, and changed-input conflicts.
+- **AI-T-037** Verify APIs, filters, historical metrics, RBAC, and minimized event evidence.
+- **AI-T-038** Apply migration 0062 and the complete workflow through hosted Docker integration.

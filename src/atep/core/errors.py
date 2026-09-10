@@ -1221,6 +1221,25 @@ class AiTestSuggestionStateError(ApplicationError):
         )
 
 
+class AiRootCauseRiskConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="ai_root_cause_risk_conflict",
+            message="The root cause and risk identifier is already used by different input.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class AiRootCauseRiskContractError(ApplicationError):
+    def __init__(self, reason: str) -> None:
+        super().__init__(
+            code="ai_root_cause_risk_contract_invalid",
+            message="The root cause and risk analysis violates its governed contract.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"reason": reason},
+        )
+
+
 class PerformanceEvidenceConflictError(ApplicationError):
     def __init__(self, resource: str) -> None:
         super().__init__(

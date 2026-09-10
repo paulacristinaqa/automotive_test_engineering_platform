@@ -111,3 +111,40 @@ class AiTestSuggestion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         PGUUID(as_uuid=True), ForeignKey("test_definitions.id", ondelete="RESTRICT"), nullable=True
     )
     promoted_definition_external_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+class AiRootCauseRiskAnalysis(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ai_root_cause_risk_analyses"
+    __table_args__ = (
+        UniqueConstraint("analysis_id", name="uq_ai_root_cause_risk_analyses_analysis_id"),
+        UniqueConstraint("request_id", name="uq_ai_root_cause_risk_analyses_request_id"),
+        UniqueConstraint("evaluation_id", name="uq_ai_root_cause_risk_analyses_evaluation_id"),
+    )
+
+    analysis_id: Mapped[str] = mapped_column(String(64), index=True)
+    input_hash: Mapped[str] = mapped_column(String(64))
+    request_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("ai_analysis_requests.id", ondelete="CASCADE"), index=True
+    )
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    horizon_hours: Mapped[int] = mapped_column(Integer)
+    signals: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    hypotheses: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    risk_score: Mapped[int] = mapped_column(Integer, index=True)
+    risk_band: Mapped[str] = mapped_column(String(16), index=True)
+    predicted_failure: Mapped[bool] = mapped_column(default=False)
+    limitations: Mapped[list[str]] = mapped_column(JSON)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    evaluation_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    evaluation_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    evaluated_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
+    )
+    actual_failure: Mapped[bool | None] = mapped_column(nullable=True)
+    confirmed_hypothesis_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    evaluation_evidence_refs: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    prediction_correct: Mapped[bool | None] = mapped_column(nullable=True)
+    brier_score: Mapped[float | None] = mapped_column(nullable=True)
+    evaluated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

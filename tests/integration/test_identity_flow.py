@@ -1412,6 +1412,64 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             )
             assert log_analysis_detail.status_code == 200
 
+            root_risk_id = f"root-risk-{uuid4().hex[:12]}"
+            root_risk_payload = {
+                "analysis_id": root_risk_id,
+                "horizon_hours": 24,
+                "signals": [
+                    {
+                        "code": "BMS_DTC_PRESENT",
+                        "component": "bms",
+                        "symptom": "Battery degradation DTC with repeated thermal anomalies",
+                        "severity": "critical",
+                        "occurrence_count": 5,
+                        "confidence": 0.8,
+                        "detectability": 0.3,
+                        "evidence_refs": ["artifact://carsystemui-test-detail"],
+                    }
+                ],
+            }
+            root_risk = await client.post(
+                f"/api/v1/ai/analysis-requests/{ai_request_id}/root-cause-risk",
+                headers=admin_headers,
+                json=root_risk_payload,
+            )
+            assert root_risk.status_code == 201, root_risk.text
+            assert root_risk.json()["risk_band"] == "critical"
+            assert root_risk.json()["hypotheses"][0]["code"] == "BMS_DTC_PRESENT"
+            replayed_root_risk = await client.post(
+                f"/api/v1/ai/analysis-requests/{ai_request_id}/root-cause-risk",
+                headers=admin_headers,
+                json=root_risk_payload,
+            )
+            assert replayed_root_risk.status_code == 200
+            assert replayed_root_risk.json()["duplicate"] is True
+            root_risk_evaluation = await client.post(
+                f"/api/v1/ai/root-cause-risk/{root_risk_id}/evaluation",
+                headers=admin_headers,
+                json={
+                    "evaluation_id": f"prediction-evaluation-{uuid4().hex[:12]}",
+                    "expected_version": 1,
+                    "actual_failure": True,
+                    "confirmed_hypothesis_code": "BMS_DTC_PRESENT",
+                    "evidence_refs": ["artifact://carsystemui-test-detail"],
+                },
+            )
+            assert root_risk_evaluation.status_code == 200, root_risk_evaluation.text
+            assert root_risk_evaluation.json()["prediction_correct"] is True
+            assert 0 <= root_risk_evaluation.json()["brier_score"] <= 1
+            root_risk_page = await client.get(
+                "/api/v1/ai/root-cause-risk?risk_band=critical", headers=admin_headers
+            )
+            assert root_risk_page.status_code == 200
+            assert root_risk_page.json()["total"] == 1
+            prediction_metrics = await client.get(
+                "/api/v1/ai/root-cause-risk/prediction-metrics", headers=admin_headers
+            )
+            assert prediction_metrics.status_code == 200
+            assert prediction_metrics.json()["evaluated_count"] == 1
+            assert prediction_metrics.json()["accuracy"] == 1.0
+
             suggestion_request_id = f"ai-suggestion-request-{uuid4().hex[:12]}"
             suggestion_request = await client.post(
                 "/api/v1/ai/analysis-requests",
@@ -1780,6 +1838,14 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                 headers=user_headers,
             )
             assert suggestions_denied["code"] == "permission_denied"
+            root_risk_denied = await expected_error(
+                client,
+                "GET",
+                "/api/v1/ai/root-cause-risk",
+                403,
+                headers=user_headers,
+            )
+            assert root_risk_denied["code"] == "permission_denied"
             artifacts_denied = await expected_error(
                 client,
                 "GET",

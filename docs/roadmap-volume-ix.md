@@ -5,11 +5,11 @@
 - [x] **IX-2 Analysis workers** - deterministic local rules, provider adapters, lifecycle, retries, and results.
 - [x] **IX-3 Log intelligence** - parsing, clustering, timelines, anomaly evidence, and failure explanation.
 - [x] **IX-4 Test generation** - requirement-aware suggestions, review workflow, and catalog promotion.
-- [ ] **IX-5 Root cause and risk** - evidence-ranked hypotheses, risk scoring, and prediction evaluation.
+- [x] **IX-5 Root cause and risk** - evidence-ranked hypotheses, risk scoring, and prediction evaluation.
 - [ ] **IX-6 Internal chat** - grounded conversations, citations, access boundaries, and retention.
 - [ ] **IX-7 Cross-platform AI evidence** - CarSystemUI explanations, dashboard consumption, and workbook completion.
 
 ## Next recommended increment
 
-IX-5 should rank evidence-linked root-cause hypotheses, calculate explainable risk scores, and
-measure prediction quality without allowing inferred causes to mutate vehicle or test state.
+IX-6 should add grounded internal conversations with evidence citations, access boundaries,
+bounded retention, and no authority to change vehicle or test state.
