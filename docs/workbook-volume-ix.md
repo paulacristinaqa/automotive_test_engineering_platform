@@ -1,7 +1,7 @@
 # ATEP Volume IX AI Test Engineer Engineering Workbook
 
-Version 0.6.0 records IX-1 through IX-6, including private grounded conversations, governed
-citations, sensitive-text sanitization, and bounded retention. Processing remains local.
+Version 0.7.0 completes IX-1 through IX-7 with immutable cited evidence projections for
+CarSystemUI and dashboard consumers. Processing remains local.
 
 ## Scope and architecture
 
@@ -17,6 +17,8 @@ IX-5 ranks bounded signals, calculates a fixed 0 to 100 risk score, and compares
 with an observed outcome using correctness and Brier score.
 IX-6 binds each private conversation to one analysis request. Its deterministic responses cite
 only request-governed evidence and cannot mutate operational state.
+IX-7 converts persisted AI results into a stable allowlisted client contract while keeping source
+context, prompts, raw logs, signal collections, and operational mutation outside the projection.
 
 ## Engineering decisions
 
@@ -48,6 +50,8 @@ only request-governed evidence and cannot mutate operational state.
 - Hosted Docker integration proves migration 0062 and historical prediction metrics on PostgreSQL.
 - Chat tests verify ownership, citation policy, sanitization, replay, expiration, and message limits.
 - Hosted Docker integration proves migration 0063 and cited exchange persistence on PostgreSQL.
+- Projection tests verify source derivation, client filters, private-chat ownership, and minimization.
+- Hosted Docker integration proves migration 0064 for CarSystemUI and dashboard consumers.
 
 ## IX-2 outcome
 
@@ -75,6 +79,14 @@ belong to the request, and expiry cleanup removes exchange content while retaini
 evidence. The local rule response identifies its limits and never represents a citation as verified
 content or a causal conclusion.
 
+## IX-7 outcome
+
+An authorized producer creates an immutable `ai-evidence-v1` projection from a persisted AI source.
+The projection contains subject identity, status, severity, a bounded headline and summary, and up
+to 20 citations. Separate `carsystemui` and `dashboard` feeds support subject and severity filters.
+The contract is advisory and contains no write operation for vehicle, test, catalog, or schedule
+state. Audit and events omit summaries and citations.
+
 ## Next increment
 
-IX-7 exposes cited AI evidence to CarSystemUI and future dashboard consumers.
+Volume X can build dashboard views on the completed versioned evidence feed.

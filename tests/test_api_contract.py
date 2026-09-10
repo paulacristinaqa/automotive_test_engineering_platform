@@ -847,6 +847,13 @@ def test_ai_analysis_request_contract_is_published() -> None:
     assert chat_create["properties"]["retention_days"]["maximum"] == 30
     exchange_create = schema["components"]["schemas"]["AiChatExchangeCreate"]
     assert exchange_create["properties"]["evidence_refs"]["maxItems"] == 10
+    evidence_projections = paths["/api/v1/ai/evidence-projections"]
+    assert {"get", "post"} <= set(evidence_projections)
+    assert "get" in paths["/api/v1/ai/evidence-projections/{projection_id}"]
+    projection_create = schema["components"]["schemas"]["AiEvidenceProjectionCreate"]
+    assert "carsystemui" in projection_create["properties"]["consumer"]["pattern"]
+    projection_response = schema["components"]["schemas"]["AiEvidenceProjectionResponse"]
+    assert projection_response["properties"]["advisory"]["default"] is True
 
 
 def test_performance_and_stress_contract_is_published() -> None:

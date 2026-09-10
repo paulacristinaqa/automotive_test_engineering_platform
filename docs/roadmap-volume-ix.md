@@ -7,9 +7,9 @@
 - [x] **IX-4 Test generation** - requirement-aware suggestions, review workflow, and catalog promotion.
 - [x] **IX-5 Root cause and risk** - evidence-ranked hypotheses, risk scoring, and prediction evaluation.
 - [x] **IX-6 Internal chat** - grounded conversations, citations, access boundaries, and retention.
-- [ ] **IX-7 Cross-platform AI evidence** - CarSystemUI explanations, dashboard consumption, and workbook completion.
+- [x] **IX-7 Cross-platform AI evidence** - CarSystemUI explanations, dashboard consumption, and workbook completion.
 
 ## Next recommended increment
 
-IX-7 should expose cited AI evidence to CarSystemUI and future dashboard consumers without giving
-either client authority to bypass ATEP access, evidence, or mutation boundaries.
+Volume IX is complete. The next planned volume is Volume X Dashboard, which can consume the
+versioned `ai-evidence-v1` projections without bypassing ATEP access or mutation boundaries.

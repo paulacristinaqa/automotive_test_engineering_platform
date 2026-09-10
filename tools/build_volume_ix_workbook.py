@@ -58,7 +58,7 @@ def build() -> None:
     section.right_margin = Inches(0.75)
     styles = doc.styles
     styles["Normal"].font.name = "Aptos"
-    styles["Normal"].font.size = Pt(10)
+    styles["Normal"].font.size = Pt(9.5)
     for name in ("Title", "Heading 1", "Heading 2"):
         styles[name].font.color.rgb = RGBColor(0, 0, 0)
         styles[name].font.name = "Aptos"
@@ -71,23 +71,24 @@ def build() -> None:
     title.add_run("ATEP Volume IX AI Test Engineer Engineering Workbook")
     intro = doc.add_paragraph()
     intro.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    intro.add_run("Version 0.6.0  Grounded Internal Chat").bold = True
+    intro.add_run("Version 0.7.0  Cross Platform AI Evidence").bold = True
     doc.add_paragraph(
         "This workbook records the governed AI boundary and deterministic analysis worker for "
         "ATEP. IX-1 captures analysis intent, IX-2 produces structured advisory results, and "
         "IX-3 converts bounded logs into sanitized timelines and anomaly evidence, while IX-4 "
         "adds reviewed test suggestions, IX-5 adds explainable risk evidence, and IX-6 adds "
-        "private grounded conversations without a paid service, model download, network call, "
-        "or GPU."
+        "private grounded conversations, and IX-7 completes versioned evidence feeds for "
+        "CarSystemUI and dashboard consumers without a paid service, model download, network "
+        "call, or GPU."
     )
     table(
         doc,
         ["Field", "Value"],
         [
-            ["Status", "IX-1 through IX-6 implemented"],
+            ["Status", "Volume IX complete through IX-7"],
             ["Cost", "Local first and no paid dependency"],
-            ["Migrations", "0057 foundation through 0063 grounded chat"],
-            ["Next", "IX-7 cross-platform AI evidence"],
+            ["Migrations", "0057 foundation through 0064 evidence projections"],
+            ["Next", "Volume X dashboard consumption"],
         ],
         [1.6, 5.2],
     )
@@ -111,6 +112,7 @@ def build() -> None:
             ["Test generation", "Requirement-aware draft, human review, and catalog promotion"],
             ["Root cause and risk", "Evidence ranking, risk score, and prediction evaluation"],
             ["Internal chat", "Private cited exchanges with bounded retention"],
+            ["Evidence projections", "Versioned read-only cards for vehicle UI and dashboard"],
         ],
         [1.7, 5.1],
     )
@@ -250,7 +252,27 @@ def build() -> None:
         ],
         [1.5, 2.15, 3.15],
     )
-    doc.add_heading("10 Verification Catalogue", level=1)
+    doc.add_heading("10 Cross Platform AI Evidence", level=1)
+    doc.add_paragraph(
+        "IX-7 derives immutable client cards from persisted AI sources. The allowlisted contract "
+        "contains subject, status, severity, bounded explanatory text, and governed citations. "
+        "It excludes source context, prompts, raw logs, signal collections, and every operational "
+        "mutation path."
+    )
+    table(
+        doc,
+        ["Control", "Rule", "Engineering purpose"],
+        [
+            ["Consumers", "CarSystemUI or dashboard", "Keep client contracts explicit"],
+            ["Sources", "Five persisted AI types", "Prevent arbitrary client-authored claims"],
+            ["Summary", "1000 characters maximum", "Bound payload and disclosure"],
+            ["Citations", "20 unique refs maximum", "Preserve reviewable grounding"],
+            ["Contract", "ai-evidence-v1", "Support independent client evolution"],
+            ["Lifecycle", "Immutable snapshot", "Preserve historical evidence"],
+        ],
+        [1.5, 2.15, 3.15],
+    )
+    doc.add_heading("11 Verification Catalogue", level=1)
     table(
         doc,
         ["ID", "Objective"],
@@ -279,10 +301,13 @@ def build() -> None:
             ["AI-T-039 to 042", "Verify bounds, ownership, grounding, and sanitization"],
             ["AI-T-043 to 045", "Verify replay, retention, APIs, RBAC, and minimized events"],
             ["AI-T-046", "Apply migration 0063 through hosted Docker integration"],
+            ["AI-T-047 to 049", "Verify sources, derivation, bounds, and private ownership"],
+            ["AI-T-050 to 051", "Verify replay, filters, RBAC, and minimized evidence"],
+            ["AI-T-052", "Apply migration 0064 and both client feeds through Docker"],
         ],
         [1.4, 5.4],
     )
-    doc.add_heading("11 Risks and Next Development", level=1)
+    doc.add_heading("12 Risks and Next Development", level=1)
     table(
         doc,
         ["Risk", "Control"],
@@ -290,7 +315,7 @@ def build() -> None:
             ["Sensitive data egress", "Classification and provider policy gate"],
             ["Hallucinated authority", "Advisory-only boundary and future citations"],
             ["Unexpected cost", "No provider call and local-only default"],
-            ["Resource consumption", "No model or GPU in IX-1 through IX-6"],
+            ["Resource consumption", "No model or GPU in IX-1 through IX-7"],
             ["Prompt leakage", "Minimized audit and outbox metadata"],
             ["Unbounded retries", "Three immutable attempts maximum"],
             ["Worker exception leakage", "Stable error code without exception text"],
@@ -302,6 +327,9 @@ def build() -> None:
             ["Cross-user chat access", "Owner-scoped non-disclosing retrieval"],
             ["Stale conversation data", "Bounded retention and auditable content purge"],
             ["Unsupported chat claim", "Request-governed citations and explicit limitations"],
+            ["Client data overexposure", "Allowlisted immutable projection contract"],
+            ["Private chat projection", "Originating owner verification"],
+            ["Client contract drift", "Independent ai-evidence-v1 version"],
         ],
         [2.2, 4.6],
     )
