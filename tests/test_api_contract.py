@@ -828,6 +828,15 @@ def test_ai_analysis_request_contract_is_published() -> None:
     assert suggestion["properties"]["requirement_refs"]["minItems"] == 1
     assert suggestion["properties"]["requirement_refs"]["maxItems"] == 20
     assert suggestion["properties"]["evidence_refs"]["maxItems"] == 20
+    assert "post" in paths["/api/v1/ai/analysis-requests/{request_id}/root-cause-risk"]
+    assert "get" in paths["/api/v1/ai/root-cause-risk"]
+    assert "get" in paths["/api/v1/ai/root-cause-risk/{analysis_id}"]
+    assert "post" in paths["/api/v1/ai/root-cause-risk/{analysis_id}/evaluation"]
+    assert "get" in paths["/api/v1/ai/root-cause-risk/prediction-metrics"]
+    root_risk = schema["components"]["schemas"]["AiRootCauseRiskCreate"]
+    assert root_risk["properties"]["signals"]["minItems"] == 1
+    assert root_risk["properties"]["signals"]["maxItems"] == 50
+    assert root_risk["properties"]["horizon_hours"]["maximum"] == 720
 
 
 def test_performance_and_stress_contract_is_published() -> None:

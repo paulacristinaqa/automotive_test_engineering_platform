@@ -1,7 +1,7 @@
 # ATEP Volume IX AI Test Engineer Engineering Workbook
 
-Version 0.4.0 records IX-1 through IX-4, including governed test suggestions, human review, and
-controlled promotion. Analysis and evidence processing remain local and reproducible.
+Version 0.5.0 records IX-1 through IX-5, including evidence-ranked root-cause hypotheses,
+explainable risk scoring, and historical prediction evaluation. Processing remains local.
 
 ## Scope and architecture
 
@@ -13,6 +13,8 @@ IX-3 adds bounded parsing, sanitization, chronological timelines, stable message
 deterministic anomaly signals, and explanations tied to source line numbers.
 IX-4 converts governed requirement and evidence references into catalog-compatible drafts. Review
 and promotion are separate versioned operations, and promotion creates an inactive catalog draft.
+IX-5 ranks bounded signals, calculates a fixed 0 to 100 risk score, and compares each prediction
+with an observed outcome using correctness and Brier score.
 
 ## Engineering decisions
 
@@ -39,6 +41,9 @@ and promotion are separate versioned operations, and promotion creates an inacti
 - Suggestion tests verify bounds, deterministic drafts, review states, rejection evidence, and replay.
 - Promotion tests prove that only approved suggestions become inactive catalog definitions.
 - Hosted Docker integration proves migration 0061 and end-to-end traceability on PostgreSQL.
+- Root-cause tests verify evidence governance, deterministic ranking, causal limitations, and replay.
+- Risk tests verify the documented formula, stable bands, versioned outcomes, and Brier scoring.
+- Hosted Docker integration proves migration 0062 and historical prediction metrics on PostgreSQL.
 
 ## IX-2 outcome
 
@@ -52,6 +57,12 @@ Suggestions preserve requirement and evidence references, a bounded candidate, a
 authorized reviewer must approve or reject with a comment. A separate promotion creates a test
 definition in `draft`; generated content never activates, schedules, or executes itself.
 
+## IX-5 outcome
+
+Signals cite only governed evidence. Hypotheses are ranked for investigation but never asserted as
+causes. The score combines probability support, impact, and inverse detectability. Evaluations
+preserve the observed outcome and provide accuracy and mean Brier score for historical comparison.
+
 ## Next increment
 
-IX-5 adds evidence-ranked root-cause hypotheses, explainable risk scoring, and prediction evaluation.
+IX-6 adds grounded internal chat with citations, access boundaries, and bounded retention.

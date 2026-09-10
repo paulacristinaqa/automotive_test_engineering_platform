@@ -9,6 +9,14 @@ from atep.ai_engine.log_intelligence import (
     log_analysis_response,
     require_log_analysis,
 )
+from atep.ai_engine.root_cause_risk import (
+    analysis_response,
+    create_analysis,
+    evaluate_prediction,
+    list_analyses,
+    prediction_metrics,
+    require_analysis,
+)
 from atep.ai_engine.schemas import (
     AiAnalysisExecute,
     AiAnalysisExecutionPage,
@@ -19,6 +27,11 @@ from atep.ai_engine.schemas import (
     AiLogAnalysisCreate,
     AiLogAnalysisPage,
     AiLogAnalysisResponse,
+    AiPredictionEvaluationCreate,
+    AiPredictionMetrics,
+    AiRootCauseRiskCreate,
+    AiRootCauseRiskPage,
+    AiRootCauseRiskResponse,
     AiTask,
     AiTestSuggestionCreate,
     AiTestSuggestionPage,
@@ -306,3 +319,92 @@ async def promote_test_suggestion_endpoint(
     if duplicate:
         response.status_code = status.HTTP_200_OK
     return suggestion_response(suggestion, request=analysis_request, duplicate=duplicate)
+
+
+@router.post(
+    "/analysis-requests/{request_id}/root-cause-risk",
+    response_model=AiRootCauseRiskResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_root_cause_risk_endpoint(
+    request_id: Annotated[str, request_path],
+    command: AiRootCauseRiskCreate,
+    http_request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(manage_access)],
+) -> AiRootCauseRiskResponse:
+    analysis_request = await require_request(session, request_id, for_update=True)
+    analysis, duplicate = await create_analysis(
+        session,
+        request=analysis_request,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(http_request),
+    )
+    await session.commit()
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+    return analysis_response(analysis, request=analysis_request, duplicate=duplicate)
+
+
+@router.get("/root-cause-risk", response_model=AiRootCauseRiskPage)
+async def list_root_cause_risk_endpoint(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(read_access)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
+    risk_band: Annotated[str | None, Query(pattern=r"^(low|medium|high|critical)$")] = None,
+) -> AiRootCauseRiskPage:
+    rows, total = await list_analyses(session, limit=limit, offset=offset, risk_band=risk_band)
+    return AiRootCauseRiskPage(
+        items=[analysis_response(item, request=request) for item, request in rows],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/root-cause-risk/prediction-metrics", response_model=AiPredictionMetrics)
+async def get_prediction_metrics_endpoint(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(read_access)],
+) -> AiPredictionMetrics:
+    return await prediction_metrics(session)
+
+
+@router.get("/root-cause-risk/{analysis_id}", response_model=AiRootCauseRiskResponse)
+async def get_root_cause_risk_endpoint(
+    analysis_id: Annotated[str, request_path],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(read_access)],
+) -> AiRootCauseRiskResponse:
+    analysis, analysis_request = await require_analysis(session, analysis_id)
+    return analysis_response(analysis, request=analysis_request)
+
+
+@router.post(
+    "/root-cause-risk/{analysis_id}/evaluation",
+    response_model=AiRootCauseRiskResponse,
+)
+async def evaluate_root_cause_risk_endpoint(
+    analysis_id: Annotated[str, request_path],
+    command: AiPredictionEvaluationCreate,
+    http_request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(manage_access)],
+) -> AiRootCauseRiskResponse:
+    analysis, analysis_request = await require_analysis(session, analysis_id, for_update=True)
+    analysis, duplicate = await evaluate_prediction(
+        session,
+        analysis=analysis,
+        request=analysis_request,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(http_request),
+    )
+    await session.commit()
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+    return analysis_response(analysis, request=analysis_request, duplicate=duplicate)
