@@ -1,6 +1,6 @@
 # ATEP Volume X Dashboard Engineering Workbook
 
-Version 0.1.0 records X-1, the dashboard backend foundation.
+Version 0.2.0 records X-1 and X-2, including daily test-quality history and failed-case drill-down.
 
 ## Scope and architecture
 
@@ -18,6 +18,8 @@ frontend framework prematurely.
 - Include citations but exclude prompts, raw logs, and source context.
 - Keep requirement coverage as a documented current snapshot.
 - Avoid materialized copies until measured query demand justifies them.
+- Produce complete UTC day sequences so chart clients do not invent missing buckets.
+- Limit failure observations to 500 characters while preserving evidence references.
 
 ## Tests and objectives
 
@@ -28,6 +30,8 @@ frontend framework prematurely.
 - Full regression tests protect all preceding volumes.
 - PostgreSQL integration validates the endpoint and RBAC against the deployed schema.
 - Ruff and mypy protect formatting and type contracts.
+- Trend tests verify UTC bucketing, zero-activity days, outcome counts, and pass rates.
+- Failure tests verify filtering, ordering, pagination, evidence mapping, and truncation.
 
 ## Risks and controls
 
@@ -38,9 +42,9 @@ governed dashboard projections and a bounded citation list.
 
 ## Cost and resource profile
 
-X-1 reuses FastAPI and PostgreSQL, performs no external network call, and requires no paid API,
-cloud account, model, or GPU. Tests are CPU-light and use small deterministic fixtures.
+X-1 and X-2 reuse FastAPI and PostgreSQL, perform no external network call, and require no paid
+API, cloud account, model, or GPU. Tests are CPU-light and use small deterministic fixtures.
 
 ## Next increment
 
-X-2 will add bounded historical test-quality trends and failure drill-down contracts.
+X-3 will add bounded vehicle, ECU, CAN, and diagnostics operational views.

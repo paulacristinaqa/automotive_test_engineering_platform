@@ -75,6 +75,20 @@ def test_dashboard_overview_contract_has_safe_query_limits() -> None:
     assert response_schema == {"$ref": "#/components/schemas/DashboardOverview"}
 
 
+def test_dashboard_test_quality_contracts_have_safe_limits() -> None:
+    paths = core_app.openapi()["paths"]
+    trend_operation = paths["/api/v1/dashboard/test-quality/trends"]["get"]
+    trend_parameters = {item["name"]: item["schema"] for item in trend_operation["parameters"]}
+    assert trend_parameters["window_days"]["minimum"] == 1
+    assert trend_parameters["window_days"]["maximum"] == 90
+    assert trend_parameters["window_days"]["default"] == 7
+    failure_operation = paths["/api/v1/dashboard/test-quality/failures"]["get"]
+    failure_parameters = {item["name"]: item["schema"] for item in failure_operation["parameters"]}
+    assert failure_parameters["window_hours"]["maximum"] == 2160
+    assert failure_parameters["limit"]["maximum"] == 100
+    assert failure_parameters["offset"]["maximum"] == 1_000_000
+
+
 def test_role_catalogue_contracts_and_safe_pagination_are_published() -> None:
     schema = core_app.openapi()
     paths = schema["paths"]

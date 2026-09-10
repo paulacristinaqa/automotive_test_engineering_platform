@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +12,10 @@ from atep.dashboard.schemas import (
     DashboardKpis,
     DashboardOverview,
     StatusCount,
+    TestFailureDetail,
+    TestFailurePage,
+    TestQualityTrendPoint,
+    TestQualityTrends,
 )
 from atep.mutation_analysis.models import MutationExecution, RequirementCoverage
 from atep.test_runs.models import TestCaseResult, TestRun
@@ -27,6 +32,138 @@ def _items(values: dict[str, int]) -> list[StatusCount]:
 
 def _rate(numerator: int, denominator: int) -> float | None:
     return round(numerator * 100 / denominator, 2) if denominator else None
+
+
+def _day_start(value: datetime) -> datetime:
+    return value.astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def quality_trends_from_rows(
+    *,
+    generated_at: datetime,
+    window_days: int,
+    run_rows: Sequence[tuple[datetime, str, int]],
+    case_rows: Sequence[tuple[datetime, str, int]],
+) -> TestQualityTrends:
+    last_day = _day_start(generated_at)
+    window_start = last_day - timedelta(days=window_days - 1)
+    values: dict[datetime, dict[str, dict[str, int]]] = {}
+    for index in range(window_days):
+        values[window_start + timedelta(days=index)] = {"runs": {}, "cases": {}}
+    for bucket, status, count in run_rows:
+        day = _day_start(bucket)
+        if day in values:
+            values[day]["runs"][status] = int(count)
+    for bucket, status, count in case_rows:
+        day = _day_start(bucket)
+        if day in values:
+            values[day]["cases"][status] = int(count)
+    points: list[TestQualityTrendPoint] = []
+    for bucket, groups in values.items():
+        runs = groups["runs"]
+        cases = groups["cases"]
+        case_total = sum(cases.values())
+        points.append(
+            TestQualityTrendPoint(
+                bucket_start=bucket,
+                test_runs_total=sum(runs.values()),
+                test_runs_passed=runs.get("passed", 0),
+                test_runs_failed=runs.get("failed", 0),
+                test_cases_total=case_total,
+                test_cases_passed=cases.get("passed", 0),
+                test_cases_failed=cases.get("failed", 0),
+                test_case_pass_rate=_rate(cases.get("passed", 0), case_total),
+            )
+        )
+    return TestQualityTrends(
+        generated_at=generated_at,
+        window_start=window_start,
+        window_days=window_days,
+        points=points,
+        limitations=[
+            "Buckets use UTC calendar days and recorded lifecycle timestamps.",
+            "Historical trends describe recorded test evidence and do not infer certification.",
+        ],
+    )
+
+
+async def build_quality_trends(session: AsyncSession, *, window_days: int) -> TestQualityTrends:
+    generated_at = datetime.now(UTC)
+    window_start = _day_start(generated_at) - timedelta(days=window_days - 1)
+    run_day = func.date_trunc("day", TestRun.created_at)
+    run_rows = (
+        await session.execute(
+            select(run_day, TestRun.status, func.count())
+            .where(TestRun.created_at >= window_start)
+            .group_by(run_day, TestRun.status)
+        )
+    ).all()
+    case_day = func.date_trunc("day", TestCaseResult.updated_at)
+    case_rows = (
+        await session.execute(
+            select(case_day, TestCaseResult.status, func.count())
+            .where(TestCaseResult.updated_at >= window_start)
+            .group_by(case_day, TestCaseResult.status)
+        )
+    ).all()
+    return quality_trends_from_rows(
+        generated_at=generated_at,
+        window_days=window_days,
+        run_rows=cast(Sequence[tuple[datetime, str, int]], run_rows),
+        case_rows=cast(Sequence[tuple[datetime, str, int]], case_rows),
+    )
+
+
+async def list_test_failures(
+    session: AsyncSession,
+    *,
+    window_hours: int,
+    suite: str | None,
+    limit: int,
+    offset: int,
+) -> TestFailurePage:
+    window_start = datetime.now(UTC) - timedelta(hours=window_hours)
+    filters = [TestCaseResult.status == "failed", TestCaseResult.updated_at >= window_start]
+    if suite is not None:
+        filters.append(TestRun.suite == suite)
+    total = int(
+        await session.scalar(
+            select(func.count(TestCaseResult.id))
+            .join(TestRun, TestRun.id == TestCaseResult.test_run_id)
+            .where(*filters)
+        )
+        or 0
+    )
+    rows = (
+        await session.execute(
+            select(TestCaseResult, TestRun)
+            .join(TestRun, TestRun.id == TestCaseResult.test_run_id)
+            .where(*filters)
+            .order_by(TestCaseResult.updated_at.desc(), TestCaseResult.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+    ).all()
+    items: list[TestFailureDetail] = []
+    for result, run in rows:
+        observation = result.observed
+        items.append(
+            TestFailureDetail(
+                result_id=str(result.id),
+                test_run_id=str(run.id),
+                run_id=run.run_id,
+                case_id=result.case_id,
+                definition_id=result.definition_id,
+                suite=run.suite,
+                attempt=result.attempt,
+                duration_ms=result.duration_ms,
+                observation=observation[:500] if observation is not None else None,
+                observation_truncated=observation is not None and len(observation) > 500,
+                evidence_refs=list(result.evidence_refs),
+                failed_at=result.updated_at,
+            )
+        )
+    return TestFailurePage(items=items, total=total, limit=limit, offset=offset)
 
 
 async def build_overview(
