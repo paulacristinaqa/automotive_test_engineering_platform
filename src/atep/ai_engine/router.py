@@ -3,6 +3,18 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Path, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from atep.ai_engine.grounded_chat import (
+    conversation_response,
+    create_conversation,
+    create_exchange,
+    exchange_response,
+    list_conversations,
+    purge_expired,
+    require_conversation,
+)
+from atep.ai_engine.grounded_chat import (
+    list_exchanges as list_chat_exchanges,
+)
 from atep.ai_engine.log_intelligence import (
     create_log_analysis,
     list_log_analyses,
@@ -24,6 +36,13 @@ from atep.ai_engine.schemas import (
     AiAnalysisRequestCreate,
     AiAnalysisRequestPage,
     AiAnalysisRequestResponse,
+    AiChatConversationCreate,
+    AiChatConversationPage,
+    AiChatConversationResponse,
+    AiChatExchangeCreate,
+    AiChatExchangePage,
+    AiChatExchangeResponse,
+    AiChatPurgeResponse,
     AiLogAnalysisCreate,
     AiLogAnalysisPage,
     AiLogAnalysisResponse,
@@ -408,3 +427,132 @@ async def evaluate_root_cause_risk_endpoint(
     if duplicate:
         response.status_code = status.HTTP_200_OK
     return analysis_response(analysis, request=analysis_request, duplicate=duplicate)
+
+
+@router.post(
+    "/analysis-requests/{request_id}/chat-conversations",
+    response_model=AiChatConversationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_chat_conversation_endpoint(
+    request_id: Annotated[str, request_path],
+    command: AiChatConversationCreate,
+    http_request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(manage_access)],
+) -> AiChatConversationResponse:
+    analysis_request = await require_request(session, request_id)
+    conversation, duplicate = await create_conversation(
+        session,
+        request=analysis_request,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(http_request),
+    )
+    await session.commit()
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+    return conversation_response(conversation, request=analysis_request, duplicate=duplicate)
+
+
+@router.get("/chat-conversations", response_model=AiChatConversationPage)
+async def list_chat_conversations_endpoint(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(read_access)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
+    conversation_status: Annotated[
+        str | None, Query(alias="status", pattern=r"^(active|expired)$")
+    ] = None,
+) -> AiChatConversationPage:
+    rows, total = await list_conversations(
+        session,
+        actor_user_id=actor.id,
+        limit=limit,
+        offset=offset,
+        status=conversation_status,
+    )
+    return AiChatConversationPage(
+        items=[conversation_response(item, request=request) for item, request in rows],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.post("/chat-conversations/purge-expired", response_model=AiChatPurgeResponse)
+async def purge_expired_chat_conversations_endpoint(
+    http_request: Request,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(manage_access)],
+) -> AiChatPurgeResponse:
+    result = await purge_expired(
+        session,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(http_request),
+    )
+    await session.commit()
+    return result
+
+
+@router.get("/chat-conversations/{conversation_id}", response_model=AiChatConversationResponse)
+async def get_chat_conversation_endpoint(
+    conversation_id: Annotated[str, request_path],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(read_access)],
+) -> AiChatConversationResponse:
+    conversation, analysis_request = await require_conversation(
+        session, conversation_id, actor_user_id=actor.id
+    )
+    return conversation_response(conversation, request=analysis_request)
+
+
+@router.post(
+    "/chat-conversations/{conversation_id}/exchanges",
+    response_model=AiChatExchangeResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_chat_exchange_endpoint(
+    conversation_id: Annotated[str, request_path],
+    command: AiChatExchangeCreate,
+    http_request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(manage_access)],
+) -> AiChatExchangeResponse:
+    conversation, analysis_request = await require_conversation(
+        session, conversation_id, actor_user_id=actor.id, for_update=True
+    )
+    exchange, duplicate = await create_exchange(
+        session,
+        conversation=conversation,
+        request=analysis_request,
+        command=command,
+        actor_user_id=actor.id,
+        correlation_id=request_correlation_id(http_request),
+    )
+    await session.commit()
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+    return exchange_response(exchange, duplicate=duplicate)
+
+
+@router.get("/chat-conversations/{conversation_id}/exchanges", response_model=AiChatExchangePage)
+async def list_chat_exchanges_endpoint(
+    conversation_id: Annotated[str, request_path],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    actor: Annotated[User, Depends(read_access)],
+    limit: Annotated[int, Query(ge=1, le=50)] = 50,
+    offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
+) -> AiChatExchangePage:
+    conversation, _ = await require_conversation(session, conversation_id, actor_user_id=actor.id)
+    rows, total = await list_chat_exchanges(
+        session, conversation=conversation, limit=limit, offset=offset
+    )
+    return AiChatExchangePage(
+        items=[exchange_response(item) for item in rows],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )

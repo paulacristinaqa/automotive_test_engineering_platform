@@ -148,3 +148,50 @@ class AiRootCauseRiskAnalysis(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     prediction_correct: Mapped[bool | None] = mapped_column(nullable=True)
     brier_score: Mapped[float | None] = mapped_column(nullable=True)
     evaluated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AiChatConversation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ai_chat_conversations"
+    __table_args__ = (
+        UniqueConstraint("conversation_id", name="uq_ai_chat_conversations_conversation_id"),
+    )
+
+    conversation_id: Mapped[str] = mapped_column(String(64), index=True)
+    creation_hash: Mapped[str] = mapped_column(String(64))
+    request_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("ai_analysis_requests.id", ondelete="CASCADE"), index=True
+    )
+    owner_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    title: Mapped[str] = mapped_column(String(120))
+    retention_days: Mapped[int] = mapped_column(Integer)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    status: Mapped[str] = mapped_column(String(16), index=True, default="active")
+    message_count: Mapped[int] = mapped_column(Integer, default=0)
+    purged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AiChatExchange(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ai_chat_exchanges"
+    __table_args__ = (
+        UniqueConstraint("exchange_id", name="uq_ai_chat_exchanges_exchange_id"),
+        UniqueConstraint(
+            "conversation_id", "sequence", name="uq_ai_chat_exchanges_conversation_sequence"
+        ),
+    )
+
+    exchange_id: Mapped[str] = mapped_column(String(64), index=True)
+    exchange_hash: Mapped[str] = mapped_column(String(64))
+    conversation_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("ai_chat_conversations.id", ondelete="CASCADE"), index=True
+    )
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    sequence: Mapped[int] = mapped_column(Integer)
+    question: Mapped[str] = mapped_column(Text)
+    answer: Mapped[str] = mapped_column(Text)
+    citations: Mapped[list[str]] = mapped_column(JSON)
+    rule_version: Mapped[str] = mapped_column(String(32))
+    limitations: Mapped[list[str]] = mapped_column(JSON)

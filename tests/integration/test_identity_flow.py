@@ -1470,6 +1470,59 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             assert prediction_metrics.json()["evaluated_count"] == 1
             assert prediction_metrics.json()["accuracy"] == 1.0
 
+            chat_conversation_id = f"grounded-chat-{uuid4().hex[:12]}"
+            chat_conversation_payload = {
+                "conversation_id": chat_conversation_id,
+                "title": "Battery failure evidence review",
+                "retention_days": 7,
+            }
+            chat_conversation = await client.post(
+                f"/api/v1/ai/analysis-requests/{ai_request_id}/chat-conversations",
+                headers=admin_headers,
+                json=chat_conversation_payload,
+            )
+            assert chat_conversation.status_code == 201, chat_conversation.text
+            assert chat_conversation.json()["status"] == "active"
+            replayed_chat = await client.post(
+                f"/api/v1/ai/analysis-requests/{ai_request_id}/chat-conversations",
+                headers=admin_headers,
+                json=chat_conversation_payload,
+            )
+            assert replayed_chat.status_code == 200
+            assert replayed_chat.json()["duplicate"] is True
+            exchange_payload = {
+                "exchange_id": f"grounded-exchange-{uuid4().hex[:12]}",
+                "question": "What root-cause evidence should be reviewed? token=do-not-store",
+                "evidence_refs": ["artifact://carsystemui-test-detail"],
+            }
+            chat_exchange = await client.post(
+                f"/api/v1/ai/chat-conversations/{chat_conversation_id}/exchanges",
+                headers=admin_headers,
+                json=exchange_payload,
+            )
+            assert chat_exchange.status_code == 201, chat_exchange.text
+            assert chat_exchange.json()["citations"] == ["artifact://carsystemui-test-detail"]
+            assert "do-not-store" not in chat_exchange.json()["question"]
+            assert "does not prove causality" in chat_exchange.json()["answer"]
+            replayed_exchange = await client.post(
+                f"/api/v1/ai/chat-conversations/{chat_conversation_id}/exchanges",
+                headers=admin_headers,
+                json=exchange_payload,
+            )
+            assert replayed_exchange.status_code == 200
+            assert replayed_exchange.json()["duplicate"] is True
+            chat_exchange_page = await client.get(
+                f"/api/v1/ai/chat-conversations/{chat_conversation_id}/exchanges",
+                headers=admin_headers,
+            )
+            assert chat_exchange_page.status_code == 200
+            assert chat_exchange_page.json()["total"] == 1
+            chat_page = await client.get(
+                "/api/v1/ai/chat-conversations?status=active", headers=admin_headers
+            )
+            assert chat_page.status_code == 200
+            assert chat_page.json()["total"] == 1
+
             suggestion_request_id = f"ai-suggestion-request-{uuid4().hex[:12]}"
             suggestion_request = await client.post(
                 "/api/v1/ai/analysis-requests",
@@ -1846,6 +1899,14 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                 headers=user_headers,
             )
             assert root_risk_denied["code"] == "permission_denied"
+            chat_denied = await expected_error(
+                client,
+                "GET",
+                "/api/v1/ai/chat-conversations",
+                403,
+                headers=user_headers,
+            )
+            assert chat_denied["code"] == "permission_denied"
             artifacts_denied = await expected_error(
                 client,
                 "GET",

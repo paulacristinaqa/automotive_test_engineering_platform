@@ -1,7 +1,7 @@
 # ATEP Volume IX AI Test Engineer Engineering Workbook
 
-Version 0.5.0 records IX-1 through IX-5, including evidence-ranked root-cause hypotheses,
-explainable risk scoring, and historical prediction evaluation. Processing remains local.
+Version 0.6.0 records IX-1 through IX-6, including private grounded conversations, governed
+citations, sensitive-text sanitization, and bounded retention. Processing remains local.
 
 ## Scope and architecture
 
@@ -15,6 +15,8 @@ IX-4 converts governed requirement and evidence references into catalog-compatib
 and promotion are separate versioned operations, and promotion creates an inactive catalog draft.
 IX-5 ranks bounded signals, calculates a fixed 0 to 100 risk score, and compares each prediction
 with an observed outcome using correctness and Brier score.
+IX-6 binds each private conversation to one analysis request. Its deterministic responses cite
+only request-governed evidence and cannot mutate operational state.
 
 ## Engineering decisions
 
@@ -44,6 +46,8 @@ with an observed outcome using correctness and Brier score.
 - Root-cause tests verify evidence governance, deterministic ranking, causal limitations, and replay.
 - Risk tests verify the documented formula, stable bands, versioned outcomes, and Brier scoring.
 - Hosted Docker integration proves migration 0062 and historical prediction metrics on PostgreSQL.
+- Chat tests verify ownership, citation policy, sanitization, replay, expiration, and message limits.
+- Hosted Docker integration proves migration 0063 and cited exchange persistence on PostgreSQL.
 
 ## IX-2 outcome
 
@@ -63,6 +67,14 @@ Signals cite only governed evidence. Hypotheses are ranked for investigation but
 causes. The score combines probability support, impact, and inverse detectability. Evaluations
 preserve the observed outcome and provide accuracy and mean Brier score for historical comparison.
 
+## IX-6 outcome
+
+Only the analysis request owner can create or retrieve its conversation. Each conversation retains
+at most 50 exchanges for one to 30 days. Questions are sanitized before persistence, citations must
+belong to the request, and expiry cleanup removes exchange content while retaining minimized audit
+evidence. The local rule response identifies its limits and never represents a citation as verified
+content or a causal conclusion.
+
 ## Next increment
 
-IX-6 adds grounded internal chat with citations, access boundaries, and bounded retention.
+IX-7 exposes cited AI evidence to CarSystemUI and future dashboard consumers.

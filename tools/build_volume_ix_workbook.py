@@ -71,22 +71,23 @@ def build() -> None:
     title.add_run("ATEP Volume IX AI Test Engineer Engineering Workbook")
     intro = doc.add_paragraph()
     intro.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    intro.add_run("Version 0.5.0  Explainable Root Cause and Risk").bold = True
+    intro.add_run("Version 0.6.0  Grounded Internal Chat").bold = True
     doc.add_paragraph(
         "This workbook records the governed AI boundary and deterministic analysis worker for "
         "ATEP. IX-1 captures analysis intent, IX-2 produces structured advisory results, and "
         "IX-3 converts bounded logs into sanitized timelines and anomaly evidence, while IX-4 "
-        "adds reviewed test suggestions, and IX-5 adds explainable risk evidence without a "
-        "paid service, model download, network call, or GPU."
+        "adds reviewed test suggestions, IX-5 adds explainable risk evidence, and IX-6 adds "
+        "private grounded conversations without a paid service, model download, network call, "
+        "or GPU."
     )
     table(
         doc,
         ["Field", "Value"],
         [
-            ["Status", "IX-1 through IX-5 implemented"],
+            ["Status", "IX-1 through IX-6 implemented"],
             ["Cost", "Local first and no paid dependency"],
-            ["Migrations", "0057 foundation through 0062 root cause and risk"],
-            ["Next", "IX-6 grounded internal chat"],
+            ["Migrations", "0057 foundation through 0063 grounded chat"],
+            ["Next", "IX-7 cross-platform AI evidence"],
         ],
         [1.6, 5.2],
     )
@@ -109,6 +110,7 @@ def build() -> None:
             ["Log intelligence", "Sanitization, timeline, clustering, anomalies, and explanation"],
             ["Test generation", "Requirement-aware draft, human review, and catalog promotion"],
             ["Root cause and risk", "Evidence ranking, risk score, and prediction evaluation"],
+            ["Internal chat", "Private cited exchanges with bounded retention"],
         ],
         [1.7, 5.1],
     )
@@ -228,7 +230,27 @@ def build() -> None:
         ],
         [1.5, 2.15, 3.15],
     )
-    doc.add_heading("9 Verification Catalogue", level=1)
+    doc.add_heading("9 Grounded Internal Chat", level=1)
+    doc.add_paragraph(
+        "IX-6 binds each conversation to an analysis request and its owner. Answers cite only "
+        "evidence governed by that request, identify the limits of citation and causality, and "
+        "have no authority to mutate operational state. Sensitive values are sanitized before "
+        "questions are persisted."
+    )
+    table(
+        doc,
+        ["Control", "Rule", "Engineering purpose"],
+        [
+            ["Ownership", "Request owner only", "Prevent cross-user evidence disclosure"],
+            ["Citations", "One to ten governed refs", "Reject unsupported grounding"],
+            ["Conversation", "50 exchanges maximum", "Bound storage and processing"],
+            ["Retention", "One to 30 days", "Limit stored conversational content"],
+            ["Sanitization", "Secrets, email, bearer, VIN", "Reduce sensitive persistence"],
+            ["Authority", "Advisory and read-only", "Prevent operational mutation"],
+        ],
+        [1.5, 2.15, 3.15],
+    )
+    doc.add_heading("10 Verification Catalogue", level=1)
     table(
         doc,
         ["ID", "Objective"],
@@ -254,10 +276,13 @@ def build() -> None:
             ["AI-T-031 to 034", "Verify signal policy, ranking, risk formula, and limitations"],
             ["AI-T-035 to 037", "Verify evaluation, Brier score, metrics, APIs, and RBAC"],
             ["AI-T-038", "Apply migration 0062 through hosted Docker integration"],
+            ["AI-T-039 to 042", "Verify bounds, ownership, grounding, and sanitization"],
+            ["AI-T-043 to 045", "Verify replay, retention, APIs, RBAC, and minimized events"],
+            ["AI-T-046", "Apply migration 0063 through hosted Docker integration"],
         ],
         [1.4, 5.4],
     )
-    doc.add_heading("10 Risks and Next Development", level=1)
+    doc.add_heading("11 Risks and Next Development", level=1)
     table(
         doc,
         ["Risk", "Control"],
@@ -265,7 +290,7 @@ def build() -> None:
             ["Sensitive data egress", "Classification and provider policy gate"],
             ["Hallucinated authority", "Advisory-only boundary and future citations"],
             ["Unexpected cost", "No provider call and local-only default"],
-            ["Resource consumption", "No model or GPU in IX-1 through IX-5"],
+            ["Resource consumption", "No model or GPU in IX-1 through IX-6"],
             ["Prompt leakage", "Minimized audit and outbox metadata"],
             ["Unbounded retries", "Three immutable attempts maximum"],
             ["Worker exception leakage", "Stable error code without exception text"],
@@ -274,6 +299,9 @@ def build() -> None:
             ["Unsafe generated test", "Human review and inactive catalog promotion"],
             ["False root cause", "Rank associations with explicit causal limitations"],
             ["Misread risk score", "Document fixed formula and non-probability meaning"],
+            ["Cross-user chat access", "Owner-scoped non-disclosing retrieval"],
+            ["Stale conversation data", "Bounded retention and auditable content purge"],
+            ["Unsupported chat claim", "Request-governed citations and explicit limitations"],
         ],
         [2.2, 4.6],
     )

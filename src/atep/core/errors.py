@@ -1240,6 +1240,25 @@ class AiRootCauseRiskContractError(ApplicationError):
         )
 
 
+class AiChatConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="ai_chat_conflict",
+            message="The chat identifier is already used by different input.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class AiChatContractError(ApplicationError):
+    def __init__(self, reason: str) -> None:
+        super().__init__(
+            code="ai_chat_contract_invalid",
+            message="The internal chat operation violates its governed contract.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"reason": reason},
+        )
+
+
 class PerformanceEvidenceConflictError(ApplicationError):
     def __init__(self, resource: str) -> None:
         super().__init__(
