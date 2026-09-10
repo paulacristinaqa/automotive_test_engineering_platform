@@ -1412,6 +1412,77 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             )
             assert log_analysis_detail.status_code == 200
 
+            suggestion_request_id = f"ai-suggestion-request-{uuid4().hex[:12]}"
+            suggestion_request = await client.post(
+                "/api/v1/ai/analysis-requests",
+                headers=admin_headers,
+                json={
+                    "request_id": suggestion_request_id,
+                    "task": "test_suggestion",
+                    "subject_type": "test_run",
+                    "subject_id": catalog_run_id,
+                    "evidence_refs": [f"log-analysis://{log_analysis_id}"],
+                    "instructions": "Create an inactive reviewable draft only.",
+                },
+            )
+            assert suggestion_request.status_code == 201, suggestion_request.text
+            suggestion_id = f"test-suggestion-{uuid4().hex[:12]}"
+            suggestion_payload = {
+                "suggestion_id": suggestion_id,
+                "requirement_refs": ["EV-F-THERMAL-001"],
+                "evidence_refs": ["artifact://carsystemui-test-detail"],
+                "name": "BMS thermal warning regression",
+                "objective": "Raise battery temperature and verify warning evidence.",
+                "domain": "electric_vehicle",
+                "level": "system",
+                "automation_mode": "hybrid",
+                "timeout_seconds": 600,
+            }
+            suggestion = await client.post(
+                f"/api/v1/ai/analysis-requests/{suggestion_request_id}/test-suggestions",
+                headers=admin_headers,
+                json=suggestion_payload,
+            )
+            assert suggestion.status_code == 201, suggestion.text
+            assert suggestion.json()["status"] == "draft"
+            replayed_suggestion = await client.post(
+                f"/api/v1/ai/analysis-requests/{suggestion_request_id}/test-suggestions",
+                headers=admin_headers,
+                json=suggestion_payload,
+            )
+            assert replayed_suggestion.status_code == 200
+            assert replayed_suggestion.json()["duplicate"] is True
+            review = await client.post(
+                f"/api/v1/ai/test-suggestions/{suggestion_id}/review",
+                headers=admin_headers,
+                json={
+                    "expected_version": 1,
+                    "decision": "approve",
+                    "comment": "Requirement and evidence reviewed for catalog drafting.",
+                },
+            )
+            assert review.status_code == 200, review.text
+            assert review.json()["status"] == "approved"
+            promoted_definition_id = f"ai-bms-thermal-{uuid4().hex[:12]}"
+            promotion = await client.post(
+                f"/api/v1/ai/test-suggestions/{suggestion_id}/promotion",
+                headers=admin_headers,
+                json={"expected_version": 2, "definition_id": promoted_definition_id},
+            )
+            assert promotion.status_code == 200, promotion.text
+            assert promotion.json()["status"] == "promoted"
+            promoted_definition = await client.get(
+                f"/api/v1/test-definitions/{promoted_definition_id}",
+                headers=admin_headers,
+            )
+            assert promoted_definition.status_code == 200, promoted_definition.text
+            assert promoted_definition.json()["status"] == "draft"
+            suggestion_page = await client.get(
+                "/api/v1/ai/test-suggestions?status=promoted", headers=admin_headers
+            )
+            assert suggestion_page.status_code == 200
+            assert suggestion_page.json()["total"] == 1
+
             role_name = f"integration-qa-{uuid4().hex[:12]}"
             role_command = {
                 "name": role_name,
@@ -1701,6 +1772,14 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                 headers=user_headers,
             )
             assert log_analyses_denied["code"] == "permission_denied"
+            suggestions_denied = await expected_error(
+                client,
+                "GET",
+                "/api/v1/ai/test-suggestions",
+                403,
+                headers=user_headers,
+            )
+            assert suggestions_denied["code"] == "permission_denied"
             artifacts_denied = await expected_error(
                 client,
                 "GET",

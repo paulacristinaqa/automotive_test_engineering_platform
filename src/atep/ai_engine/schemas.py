@@ -214,3 +214,72 @@ class AiLogAnalysisPage(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class AiTestSuggestionCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    suggestion_id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{7,63}$")
+    requirement_refs: list[str] = Field(min_length=1, max_length=20)
+    evidence_refs: list[str] = Field(default_factory=list, max_length=20)
+    name: str = Field(min_length=1, max_length=160)
+    objective: str = Field(min_length=1, max_length=2000)
+    domain: str = Field(
+        pattern=r"^(core|digital_vehicle|ecu|can|diagnostics|electric_vehicle|adas|integration)$"
+    )
+    level: str = Field(pattern=r"^(unit|component|integration|system|end_to_end)$")
+    automation_mode: str = Field(default="automated", pattern=r"^(automated|manual|hybrid)$")
+    timeout_seconds: int = Field(default=300, ge=1, le=86400)
+
+    @field_validator("requirement_refs", "evidence_refs")
+    @classmethod
+    def bounded_unique_refs(cls, value: list[str]) -> list[str]:
+        normalized = [item.strip() for item in value]
+        if any(not item or len(item) > 500 for item in normalized):
+            raise ValueError("references must contain 1 to 500 characters")
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("references must be unique")
+        return normalized
+
+
+class AiTestSuggestionReview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_version: int = Field(ge=1)
+    decision: str = Field(pattern=r"^(approve|reject)$")
+    comment: str = Field(min_length=3, max_length=2000)
+
+
+class AiTestSuggestionPromote(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_version: int = Field(ge=1)
+    definition_id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{7,63}$")
+
+
+class AiTestSuggestionResponse(BaseModel):
+    id: UUID
+    suggestion_id: str
+    request_id: str
+    requirement_refs: list[str]
+    evidence_refs: list[str]
+    candidate: dict[str, Any]
+    rationale: str
+    status: str
+    version: int
+    duplicate: bool = False
+    created_by_user_id: UUID
+    reviewed_by_user_id: UUID | None
+    review_comment: str | None
+    reviewed_at: datetime | None
+    promoted_definition_id: UUID | None
+    promoted_definition_external_id: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AiTestSuggestionPage(BaseModel):
+    items: list[AiTestSuggestionResponse]
+    total: int
+    limit: int
+    offset: int

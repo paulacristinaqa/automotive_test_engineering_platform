@@ -58,7 +58,7 @@ def build() -> None:
     section.right_margin = Inches(0.75)
     styles = doc.styles
     styles["Normal"].font.name = "Aptos"
-    styles["Normal"].font.size = Pt(10.5)
+    styles["Normal"].font.size = Pt(10)
     for name in ("Title", "Heading 1", "Heading 2"):
         styles[name].font.color.rgb = RGBColor(0, 0, 0)
         styles[name].font.name = "Aptos"
@@ -71,21 +71,22 @@ def build() -> None:
     title.add_run("ATEP Volume IX AI Test Engineer Engineering Workbook")
     intro = doc.add_paragraph()
     intro.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    intro.add_run("Version 0.3.0  Deterministic Log Intelligence").bold = True
+    intro.add_run("Version 0.4.0  Governed Test Suggestions").bold = True
     doc.add_paragraph(
         "This workbook records the governed AI boundary and deterministic analysis worker for "
         "ATEP. IX-1 captures analysis intent, IX-2 produces structured advisory results, and "
-        "IX-3 converts bounded logs into sanitized timelines and anomaly evidence without a "
+        "IX-3 converts bounded logs into sanitized timelines and anomaly evidence, while IX-4 "
+        "adds reviewed test suggestions without a "
         "paid service, model download, network call, or GPU."
     )
     table(
         doc,
         ["Field", "Value"],
         [
-            ["Status", "IX-1 through IX-3 implemented"],
+            ["Status", "IX-1 through IX-4 implemented"],
             ["Cost", "Local first and no paid dependency"],
-            ["Migrations", "0057 foundation, 0059 workers, 0060 log intelligence"],
-            ["Next", "IX-4 reviewed test generation"],
+            ["Migrations", "0057 foundation, 0059 workers, 0060 logs, 0061 suggestions"],
+            ["Next", "IX-5 root cause and risk"],
         ],
         [1.6, 5.2],
     )
@@ -106,6 +107,7 @@ def build() -> None:
             ["Local worker", "Deterministic versioned rules and safe failure handling"],
             ["Adapter boundary", "Common interface with unknown providers disabled"],
             ["Log intelligence", "Sanitization, timeline, clustering, anomalies, and explanation"],
+            ["Test generation", "Requirement-aware draft, human review, and catalog promotion"],
         ],
         [1.7, 5.1],
     )
@@ -188,7 +190,26 @@ def build() -> None:
         "Unsupported lines are counted without preserving their content. Explanations describe "
         "observed structure, severity, and proximity and explicitly avoid claiming causality."
     )
-    doc.add_heading("7 Verification Catalogue", level=1)
+    doc.add_heading("7 Governed Test Generation", level=1)
+    doc.add_paragraph(
+        "IX-4 creates deterministic catalog-compatible drafts from bounded requirement and "
+        "evidence "
+        "references. Review and promotion are separate versioned actions. Rejection preserves the "
+        "reviewer and reason; approval alone does not create or activate a catalog resource."
+    )
+    table(
+        doc,
+        ["Control", "Rule", "Engineering purpose"],
+        [
+            ["Requirements", "At least one bounded reference", "Preserve traceability"],
+            ["Review", "Explicit approval or rejection", "Retain human authority"],
+            ["Concurrency", "Expected version", "Reject stale decisions"],
+            ["Promotion", "Approved suggestions only", "Prevent draft bypass"],
+            ["Catalog state", "Definition remains draft", "Prevent automatic execution"],
+        ],
+        [1.5, 2.15, 3.15],
+    )
+    doc.add_heading("8 Verification Catalogue", level=1)
     table(
         doc,
         ["ID", "Objective"],
@@ -208,10 +229,13 @@ def build() -> None:
             ["AI-T-018 to 019", "Verify anomaly evidence and grounded explanations"],
             ["AI-T-020 to 021", "Verify bounds, replay, APIs, RBAC, and minimized events"],
             ["AI-T-022", "Apply migration 0060 through hosted Docker integration"],
+            ["AI-T-023 to 025", "Verify generation bounds, replay, review, and rejection evidence"],
+            ["AI-T-026 to 029", "Verify promotion gate, draft catalog state, APIs, and RBAC"],
+            ["AI-T-030", "Apply migration 0061 through hosted Docker integration"],
         ],
         [1.4, 5.4],
     )
-    doc.add_heading("8 Risks and Next Development", level=1)
+    doc.add_heading("9 Risks and Next Development", level=1)
     table(
         doc,
         ["Risk", "Control"],
@@ -219,19 +243,15 @@ def build() -> None:
             ["Sensitive data egress", "Classification and provider policy gate"],
             ["Hallucinated authority", "Advisory-only boundary and future citations"],
             ["Unexpected cost", "No provider call and local-only default"],
-            ["Resource consumption", "No model or GPU in IX-1 through IX-3"],
+            ["Resource consumption", "No model or GPU in IX-1 through IX-4"],
             ["Prompt leakage", "Minimized audit and outbox metadata"],
             ["Unbounded retries", "Three immutable attempts maximum"],
             ["Worker exception leakage", "Stable error code without exception text"],
             ["Sensitive log values", "Sanitize before persistence and omit rejected text"],
             ["False causal claim", "Report signals, citations, and explicit limitations"],
+            ["Unsafe generated test", "Human review and inactive catalog promotion"],
         ],
         [2.2, 4.6],
-    )
-    doc.add_paragraph(
-        "IX-4 will add requirement-aware test suggestions with human review, rejection evidence, "
-        "and controlled promotion into the catalog. Generated content will remain inactive until "
-        "an authorized reviewer accepts it."
     )
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     doc.save(OUTPUT)

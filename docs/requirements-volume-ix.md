@@ -51,6 +51,21 @@
 - **AI-NF-009** Keep parsing, redaction, clustering, and anomaly detection deterministic and local.
 - **AI-NF-010** Never claim causality solely from log severity, frequency, or temporal proximity.
 
+## IX-4 functional requirements
+
+- **AI-F-027** Create one deterministic test suggestion only for a governed `test_suggestion` request.
+- **AI-F-028** Require at least one bounded requirement reference and preserve governed evidence refs.
+- **AI-F-029** Store a bounded catalog-compatible candidate as a non-executable draft.
+- **AI-F-030** Require an explicit versioned human approval or rejection with a review comment.
+- **AI-F-031** Preserve reviewer, timestamp, decision, and rejection rationale as audit evidence.
+- **AI-F-032** Allow promotion only after approval and create the catalog definition as `draft`.
+- **AI-F-033** Never activate, schedule, or execute a generated test automatically.
+- **AI-F-034** Make creation, review, and promotion retries idempotent with stable conflicts.
+- **AI-F-035** Provide create, review, promotion, detail, filtered list, RBAC, audit, and outbox APIs.
+- **AI-NF-011** Generate suggestions locally without a model, paid API, network call, or GPU.
+- **AI-NF-012** Keep audit and outbox payloads free of candidate steps, objectives, and review text.
+- **AI-NF-013** Preserve traceability from request and requirements through the promoted definition.
+
 ## Verification catalogue
 
 - **AI-T-001** Validate task, subject, identifier, context, and evidence bounds.
@@ -75,3 +90,11 @@
 - **AI-T-020** Verify input bounds, seven-day span, unsupported tasks, replay, and conflicts.
 - **AI-T-021** Verify APIs, RBAC, pagination, source filters, and minimized audit/outbox payloads.
 - **AI-T-022** Apply migration 0060 and the complete flow through hosted Docker integration.
+- **AI-T-023** Verify requirement and evidence bounds plus deterministic candidate generation.
+- **AI-T-024** Verify create replay, changed-input conflict, task policy, and one-per-request behavior.
+- **AI-T-025** Verify versioned approval and rejection with preserved reviewer evidence.
+- **AI-T-026** Reject promotion from draft or rejected states and stale versions.
+- **AI-T-027** Verify approved promotion creates only a draft catalog definition.
+- **AI-T-028** Verify promotion replay and changed definition identifiers remain safe.
+- **AI-T-029** Verify APIs, RBAC, pagination, status filters, and minimized integration evidence.
+- **AI-T-030** Apply migration 0061 and the complete workflow through hosted Docker integration.
