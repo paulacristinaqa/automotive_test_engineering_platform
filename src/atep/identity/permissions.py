@@ -38,6 +38,7 @@ class PermissionName(StrEnum):
     TEST_CATALOG_MANAGE = "test_catalog:manage"
     AI_ANALYSIS_READ = "ai_analysis:read"
     AI_ANALYSIS_MANAGE = "ai_analysis:manage"
+    DASHBOARD_READ = "dashboard:read"
     PLATFORM_ADMIN = "platform:admin"
 
 

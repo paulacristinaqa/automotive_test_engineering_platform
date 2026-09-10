@@ -62,6 +62,19 @@ def test_user_pagination_has_safe_openapi_limits() -> None:
     assert parameters["offset"]["default"] == 0
 
 
+def test_dashboard_overview_contract_has_safe_query_limits() -> None:
+    operation = core_app.openapi()["paths"]["/api/v1/dashboard/overview"]["get"]
+    parameters = {item["name"]: item["schema"] for item in operation["parameters"]}
+    assert parameters["window_hours"]["minimum"] == 1
+    assert parameters["window_hours"]["maximum"] == 720
+    assert parameters["window_hours"]["default"] == 24
+    assert parameters["evidence_limit"]["minimum"] == 1
+    assert parameters["evidence_limit"]["maximum"] == 50
+    assert parameters["evidence_limit"]["default"] == 10
+    response_schema = operation["responses"]["200"]["content"]["application/json"]["schema"]
+    assert response_schema == {"$ref": "#/components/schemas/DashboardOverview"}
+
+
 def test_role_catalogue_contracts_and_safe_pagination_are_published() -> None:
     schema = core_app.openapi()
     paths = schema["paths"]
