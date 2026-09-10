@@ -54,3 +54,28 @@ class AiAnalysisExecution(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class AiLogAnalysis(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ai_log_analyses"
+    __table_args__ = (
+        UniqueConstraint("analysis_id", name="uq_ai_log_analyses_analysis_id"),
+        UniqueConstraint("request_id", name="uq_ai_log_analyses_request_id"),
+    )
+
+    analysis_id: Mapped[str] = mapped_column(String(64), index=True)
+    input_hash: Mapped[str] = mapped_column(String(64))
+    request_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("ai_analysis_requests.id", ondelete="CASCADE"), index=True
+    )
+    created_by_user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    source: Mapped[str] = mapped_column(String(80), index=True)
+    line_count: Mapped[int] = mapped_column(Integer)
+    parsed_count: Mapped[int] = mapped_column(Integer)
+    rejected_count: Mapped[int] = mapped_column(Integer)
+    timeline: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    clusters: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    anomalies: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
+    explanation: Mapped[dict[str, Any]] = mapped_column(JSON)

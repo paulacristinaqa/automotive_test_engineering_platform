@@ -814,6 +814,11 @@ def test_ai_analysis_request_contract_is_published() -> None:
     assert create["properties"]["evidence_refs"]["maxItems"] == 50
     execution = schema["components"]["schemas"]["AiAnalysisExecute"]
     assert execution["properties"]["provider_id"]["default"] == "local-rules"
+    assert "post" in paths["/api/v1/ai/analysis-requests/{request_id}/log-intelligence"]
+    assert "get" in paths["/api/v1/ai/log-analyses"]
+    assert "get" in paths["/api/v1/ai/log-analyses/{analysis_id}"]
+    log_create = schema["components"]["schemas"]["AiLogAnalysisCreate"]
+    assert log_create["properties"]["lines"]["maxItems"] == 500
 
 
 def test_performance_and_stress_contract_is_published() -> None:

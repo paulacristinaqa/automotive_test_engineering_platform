@@ -139,3 +139,78 @@ class AiAnalysisExecutionPage(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class AiLogAnalysisCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    analysis_id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{7,63}$")
+    source: str = Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
+    lines: list[str] = Field(min_length=1, max_length=500)
+
+    @field_validator("lines")
+    @classmethod
+    def bounded_lines(cls, value: list[str]) -> list[str]:
+        if any(not line or len(line.encode()) > 2000 for line in value):
+            raise ValueError("log lines must contain 1 to 2000 encoded bytes")
+        if sum(len(line.encode()) for line in value) > 256_000:
+            raise ValueError("log batch must not exceed 256000 encoded bytes")
+        return value
+
+
+class AiLogEvent(BaseModel):
+    line_number: int = Field(ge=1, le=500)
+    timestamp: datetime
+    level: str = Field(pattern=r"^(trace|debug|info|warning|error|critical)$")
+    component: str = Field(min_length=1, max_length=64)
+    message: str = Field(min_length=1, max_length=1000)
+    cluster_id: str = Field(pattern=r"^[a-f0-9]{16}$")
+
+
+class AiLogCluster(BaseModel):
+    cluster_id: str
+    count: int
+    first_timestamp: datetime
+    last_timestamp: datetime
+    levels: list[str]
+    representative: str
+    line_numbers: list[int]
+
+
+class AiLogAnomaly(BaseModel):
+    anomaly_type: str
+    severity: str
+    cluster_id: str
+    explanation: str
+    line_numbers: list[int]
+
+
+class AiFailureExplanation(BaseModel):
+    summary: str
+    supporting_line_numbers: list[int]
+    evidence_refs: list[str]
+    limitations: list[str]
+
+
+class AiLogAnalysisResponse(BaseModel):
+    id: UUID
+    analysis_id: str
+    request_id: str
+    source: str
+    line_count: int
+    parsed_count: int
+    rejected_count: int
+    timeline: list[AiLogEvent]
+    clusters: list[AiLogCluster]
+    anomalies: list[AiLogAnomaly]
+    explanation: AiFailureExplanation
+    duplicate: bool = False
+    created_by_user_id: UUID
+    created_at: datetime
+
+
+class AiLogAnalysisPage(BaseModel):
+    items: list[AiLogAnalysisResponse]
+    total: int
+    limit: int
+    offset: int

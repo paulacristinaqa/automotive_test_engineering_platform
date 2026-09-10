@@ -1374,6 +1374,43 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             )
             assert ai_execution_page.status_code == 200
             assert ai_execution_page.json()["total"] == 1
+            log_analysis_id = f"log-analysis-{uuid4().hex[:12]}"
+            log_analysis_payload = {
+                "analysis_id": log_analysis_id,
+                "source": "bms-ecu",
+                "lines": [
+                    "2026-09-10T10:00:00Z INFO [bms] Monitor started",
+                    "2026-09-10T10:00:01Z ERROR [bms] Cell voltage 2.1",
+                    "2026-09-10T10:00:02Z ERROR [bms] Cell voltage 2.2",
+                    "2026-09-10T10:00:03Z ERROR [bms] Cell voltage 2.3",
+                    "unsupported line",
+                ],
+            }
+            log_analysis = await client.post(
+                f"/api/v1/ai/analysis-requests/{ai_request_id}/log-intelligence",
+                headers=admin_headers,
+                json=log_analysis_payload,
+            )
+            assert log_analysis.status_code == 201, log_analysis.text
+            assert log_analysis.json()["parsed_count"] == 4
+            assert log_analysis.json()["rejected_count"] == 1
+            assert len(log_analysis.json()["anomalies"]) == 2
+            replayed_log_analysis = await client.post(
+                f"/api/v1/ai/analysis-requests/{ai_request_id}/log-intelligence",
+                headers=admin_headers,
+                json=log_analysis_payload,
+            )
+            assert replayed_log_analysis.status_code == 200
+            assert replayed_log_analysis.json()["duplicate"] is True
+            log_analysis_page = await client.get(
+                "/api/v1/ai/log-analyses?source=bms-ecu", headers=admin_headers
+            )
+            assert log_analysis_page.status_code == 200
+            assert log_analysis_page.json()["total"] == 1
+            log_analysis_detail = await client.get(
+                f"/api/v1/ai/log-analyses/{log_analysis_id}", headers=admin_headers
+            )
+            assert log_analysis_detail.status_code == 200
 
             role_name = f"integration-qa-{uuid4().hex[:12]}"
             role_command = {
@@ -1656,6 +1693,14 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                 headers=user_headers,
             )
             assert ai_executions_denied["code"] == "permission_denied"
+            log_analyses_denied = await expected_error(
+                client,
+                "GET",
+                "/api/v1/ai/log-analyses",
+                403,
+                headers=user_headers,
+            )
+            assert log_analyses_denied["code"] == "permission_denied"
             artifacts_denied = await expected_error(
                 client,
                 "GET",

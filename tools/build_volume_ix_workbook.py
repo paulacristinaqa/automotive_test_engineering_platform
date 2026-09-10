@@ -71,20 +71,21 @@ def build() -> None:
     title.add_run("ATEP Volume IX AI Test Engineer Engineering Workbook")
     intro = doc.add_paragraph()
     intro.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    intro.add_run("Version 0.2.0  Deterministic Analysis Workers").bold = True
+    intro.add_run("Version 0.3.0  Deterministic Log Intelligence").bold = True
     doc.add_paragraph(
         "This workbook records the governed AI boundary and deterministic analysis worker for "
-        "ATEP. IX-1 captures analysis intent and IX-2 produces structured advisory results "
-        "without a paid service, model download, network call, or GPU."
+        "ATEP. IX-1 captures analysis intent, IX-2 produces structured advisory results, and "
+        "IX-3 converts bounded logs into sanitized timelines and anomaly evidence without a "
+        "paid service, model download, network call, or GPU."
     )
     table(
         doc,
         ["Field", "Value"],
         [
-            ["Status", "IX-1 and IX-2 implemented"],
+            ["Status", "IX-1 through IX-3 implemented"],
             ["Cost", "Local first and no paid dependency"],
-            ["Migrations", "0057 foundation and 0059 workers"],
-            ["Next", "IX-3 log intelligence"],
+            ["Migrations", "0057 foundation, 0059 workers, 0060 log intelligence"],
+            ["Next", "IX-4 reviewed test generation"],
         ],
         [1.6, 5.2],
     )
@@ -104,6 +105,7 @@ def build() -> None:
             ["PostgreSQL", "Immutable request intent, attempts, results, and lifecycle"],
             ["Local worker", "Deterministic versioned rules and safe failure handling"],
             ["Adapter boundary", "Common interface with unknown providers disabled"],
+            ["Log intelligence", "Sanitization, timeline, clustering, anomalies, and explanation"],
         ],
         [1.7, 5.1],
     )
@@ -164,7 +166,29 @@ def build() -> None:
         "restricted data can never leave the local boundary. IX-2 requires no API key, model, "
         "cloud account, network access, paid service, or GPU."
     )
-    doc.add_heading("6 Verification Catalogue", level=1)
+    doc.add_heading("6 Log Intelligence", level=1)
+    doc.add_paragraph(
+        "IX-3 accepts up to 500 timestamped lines, sanitizes sensitive values before persistence, "
+        "orders timezone-aware events, and clusters messages after replacing volatile identifiers "
+        "and numbers. Severe levels and repeated ten-second bursts become deterministic signals."
+    )
+    table(
+        doc,
+        ["Control", "Bound", "Engineering purpose"],
+        [
+            ["Batch", "500 lines and 256000 bytes", "Bound memory and CPU exposure"],
+            ["Timeline", "Seven days", "Prevent misleading unbounded correlation"],
+            ["Sanitization", "Credentials, email, and VIN", "Reduce sensitive-data persistence"],
+            ["Clustering", "Normalized message fingerprint", "Group changing IDs and values"],
+            ["Explanation", "Line numbers and evidence refs", "Keep findings reviewable"],
+        ],
+        [1.5, 2.15, 3.15],
+    )
+    doc.add_paragraph(
+        "Unsupported lines are counted without preserving their content. Explanations describe "
+        "observed structure, severity, and proximity and explicitly avoid claiming causality."
+    )
+    doc.add_heading("7 Verification Catalogue", level=1)
     table(
         doc,
         ["ID", "Objective"],
@@ -180,10 +204,14 @@ def build() -> None:
             ["AI-T-010 to 011", "Verify retries, replay, adapter policy, and conflicts"],
             ["AI-T-012 to 013", "Verify cited output, minimized evidence, API, and RBAC"],
             ["AI-T-014", "Apply migration 0059 through hosted Docker integration"],
+            ["AI-T-015 to 017", "Verify parsing, sanitization, ordering, and clustering"],
+            ["AI-T-018 to 019", "Verify anomaly evidence and grounded explanations"],
+            ["AI-T-020 to 021", "Verify bounds, replay, APIs, RBAC, and minimized events"],
+            ["AI-T-022", "Apply migration 0060 through hosted Docker integration"],
         ],
         [1.4, 5.4],
     )
-    doc.add_heading("7 Risks and Next Development", level=1)
+    doc.add_heading("8 Risks and Next Development", level=1)
     table(
         doc,
         ["Risk", "Control"],
@@ -191,17 +219,19 @@ def build() -> None:
             ["Sensitive data egress", "Classification and provider policy gate"],
             ["Hallucinated authority", "Advisory-only boundary and future citations"],
             ["Unexpected cost", "No provider call and local-only default"],
-            ["Resource consumption", "No model or GPU in IX-1 or IX-2"],
+            ["Resource consumption", "No model or GPU in IX-1 through IX-3"],
             ["Prompt leakage", "Minimized audit and outbox metadata"],
             ["Unbounded retries", "Three immutable attempts maximum"],
             ["Worker exception leakage", "Stable error code without exception text"],
+            ["Sensitive log values", "Sanitize before persistence and omit rejected text"],
+            ["False causal claim", "Report signals, citations, and explicit limitations"],
         ],
         [2.2, 4.6],
     )
     doc.add_paragraph(
-        "IX-3 will add bounded log parsing, clustering, event timelines, anomaly evidence, and "
-        "grounded failure explanations. It will preserve the local-first, provider-neutral, "
-        "advisory-only boundary established here."
+        "IX-4 will add requirement-aware test suggestions with human review, rejection evidence, "
+        "and controlled promotion into the catalog. Generated content will remain inactive until "
+        "an authorized reviewer accepts it."
     )
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     doc.save(OUTPUT)
