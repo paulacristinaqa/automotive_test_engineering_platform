@@ -1202,6 +1202,25 @@ class AiLogAnalysisContractError(ApplicationError):
         )
 
 
+class AiTestSuggestionConflictError(ApplicationError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="ai_test_suggestion_conflict",
+            message="The test suggestion identifier is already used by different input.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+
+class AiTestSuggestionStateError(ApplicationError):
+    def __init__(self, reason: str) -> None:
+        super().__init__(
+            code="ai_test_suggestion_state_invalid",
+            message="The test suggestion operation is not allowed in its current state.",
+            status_code=status.HTTP_409_CONFLICT,
+            details={"reason": reason},
+        )
+
+
 class PerformanceEvidenceConflictError(ApplicationError):
     def __init__(self, resource: str) -> None:
         super().__init__(

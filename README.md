@@ -377,7 +377,7 @@ operational guidance, and review worksheets.
 | VI | Electric Vehicle | Baseline complete — increments VI-1 through VI-7 implemented |
 | VII | ADAS | Baseline complete - VII-1 through VII-7, including cross-platform evidence |
 | VIII | Test Framework | Complete — VIII-1 through VIII-7, including bounded performance and stress evidence |
-| IX | AI Test Engineer | IX-1 through IX-3, including deterministic local log intelligence |
+| IX | AI Test Engineer | IX-1 through IX-4, including reviewed test suggestions and safe catalog promotion |
 | X | Dashboard | Planned |
 | XI | DevOps | Planned |
 | XII | Enterprise Features | Planned |

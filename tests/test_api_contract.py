@@ -819,6 +819,15 @@ def test_ai_analysis_request_contract_is_published() -> None:
     assert "get" in paths["/api/v1/ai/log-analyses/{analysis_id}"]
     log_create = schema["components"]["schemas"]["AiLogAnalysisCreate"]
     assert log_create["properties"]["lines"]["maxItems"] == 500
+    assert "post" in paths["/api/v1/ai/analysis-requests/{request_id}/test-suggestions"]
+    assert "get" in paths["/api/v1/ai/test-suggestions"]
+    assert "get" in paths["/api/v1/ai/test-suggestions/{suggestion_id}"]
+    assert "post" in paths["/api/v1/ai/test-suggestions/{suggestion_id}/review"]
+    assert "post" in paths["/api/v1/ai/test-suggestions/{suggestion_id}/promotion"]
+    suggestion = schema["components"]["schemas"]["AiTestSuggestionCreate"]
+    assert suggestion["properties"]["requirement_refs"]["minItems"] == 1
+    assert suggestion["properties"]["requirement_refs"]["maxItems"] == 20
+    assert suggestion["properties"]["evidence_refs"]["maxItems"] == 20
 
 
 def test_performance_and_stress_contract_is_published() -> None:
