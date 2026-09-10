@@ -6,7 +6,7 @@ introduced. This keeps source domains authoritative and makes every visualizatio
 | Increment | Scope | Status |
 |---|---|---|
 | X-1 | Overview contract, KPI aggregation, evidence cards, RBAC, and safe limits | Complete |
-| X-2 | Test quality trends, regression history, and failure drill-down | Planned |
+| X-2 | Test quality trends, regression history, and failure drill-down | Complete |
 | X-3 | Vehicle, ECU, CAN, and diagnostics operational views | Planned |
 | X-4 | EV, charging, thermal, and ADAS visual analytics | Planned |
 | X-5 | OTA, cybersecurity, ASPICE, and ISO 26262 evidence views | Planned |
@@ -15,5 +15,5 @@ introduced. This keeps source domains authoritative and makes every visualizatio
 
 ## Next increment
 
-X-2 should add historical time buckets for test outcomes and quality indicators, then expose a
-bounded failure drill-down that references existing test and artifact identifiers.
+X-3 should add bounded operational views for vehicles, ECUs, CAN networks, and diagnostics while
+preserving each source domain as the authority.

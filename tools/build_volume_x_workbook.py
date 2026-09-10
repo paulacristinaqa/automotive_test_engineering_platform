@@ -71,21 +71,21 @@ def build() -> None:
     title.add_run("ATEP Volume X Dashboard Engineering Workbook")
     subtitle = doc.add_paragraph()
     subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    subtitle.add_run("Version 0.1.0  Dashboard Foundation").bold = True
+    subtitle.add_run("Version 0.2.0  Test Quality Trends").bold = True
     doc.add_paragraph(
-        "This workbook records X-1, the first governed dashboard read model. It consolidates "
-        "test execution, quality, automation, mutation, and AI evidence into a stable FastAPI "
-        "contract without duplicating source data or introducing a paid service, model, or GPU."
+        "This workbook records X-1 and X-2. The governed dashboard read model now consolidates "
+        "platform KPIs, complete UTC test-quality trends, and a bounded failed-case drill-down "
+        "without duplicating source data or introducing a paid service, model, or GPU."
     )
     add_table(
         doc,
         ["Field", "Value"],
         [
-            ["Status", "X-1 complete"],
+            ["Status", "X-1 and X-2 complete"],
             ["Contract", "dashboard-overview-v1"],
             ["Endpoint", "GET /api/v1/dashboard/overview"],
             ["Authorization", "dashboard:read"],
-            ["Next", "X-2 test quality trends and failure drill-down"],
+            ["Next", "X-3 vehicle ECU CAN and diagnostics views"],
         ],
         [1.65, 5.15],
     )
@@ -179,7 +179,28 @@ def build() -> None:
         [2.0, 4.8],
     )
 
-    doc.add_heading("5 Test Catalogue", level=1)
+    doc.add_heading("5 Test Quality Trends and Failure Drill Down", level=1)
+    doc.add_paragraph(
+        "The trends contract emits one point for every UTC day in the requested 1 to 90 day "
+        "window, including zero-activity days. The failure contract exposes only failed case "
+        "results, supports suite and time filtering, and keeps navigation tied to existing run, "
+        "case, definition, and evidence identifiers."
+    )
+    add_table(
+        doc,
+        ["Control", "Bound", "Engineering purpose"],
+        [
+            ["Trend window", "1 to 90 days", "Bound query work and chart density"],
+            ["Buckets", "Complete UTC days", "Prevent clients from inventing missing dates"],
+            ["Failure window", "1 to 2160 hours", "Bound historical investigation"],
+            ["Page", "1 to 100 records", "Bound response size and rendering work"],
+            ["Observation", "500 characters", "Minimize explanatory content exposure"],
+            ["Evidence", "Stored references", "Preserve drill-down traceability"],
+        ],
+        [1.45, 1.8, 3.55],
+    )
+
+    doc.add_heading("6 Test Catalogue", level=1)
     add_table(
         doc,
         ["Test", "Objective"],
@@ -198,11 +219,16 @@ def build() -> None:
             ],
             ["Regression", "Protect every previously delivered domain and integration contract"],
             ["Static quality", "Keep formatting and type analysis clean with Ruff and mypy"],
+            ["UTC buckets", "Verify ordering, empty days, outcome totals, and truthful rates"],
+            [
+                "Failure mapping",
+                "Verify pagination, filters, references, and observation truncation",
+            ],
         ],
         [2.0, 4.8],
     )
 
-    doc.add_heading("6 Risks Decisions and Technical Debt", level=1)
+    doc.add_heading("7 Risks Decisions and Technical Debt", level=1)
     add_table(
         doc,
         ["Topic", "Current decision", "Future trigger"],
@@ -212,7 +238,7 @@ def build() -> None:
                 "Bound live aggregation",
                 "Materialize only after measured latency requires it",
             ],
-            ["Historical trends", "Not included in X-1", "Add bounded buckets in X-2"],
+            ["Historical trends", "Bounded daily buckets", "Add comparison baselines if justified"],
             [
                 "Certification",
                 "Explicitly not inferred",
@@ -228,19 +254,20 @@ def build() -> None:
         [1.35, 2.7, 2.75],
     )
 
-    doc.add_heading("7 Cost and Resource Profile", level=1)
+    doc.add_heading("8 Cost and Resource Profile", level=1)
     doc.add_paragraph(
-        "X-1 reuses the local FastAPI and PostgreSQL stack. It requires no AWS account, paid API, "
+        "X-1 and X-2 reuse the local FastAPI and PostgreSQL stack. They require no AWS account, "
+        "paid API, "
         "external AI provider, model download, or GPU. The automated tests use small deterministic "
         "fixtures and bounded database checks, making the increment appropriate for the current "
         "Windows and Docker development environment."
     )
 
-    doc.add_heading("8 Next Planned Increment", level=1)
+    doc.add_heading("9 Next Planned Increment", level=1)
     doc.add_paragraph(
-        "X-2 will add time-bucketed test quality trends and a bounded failure drill-down contract. "
-        "It will reference existing test runs, case results, and artifacts without copying raw "
-        "evidence into the dashboard domain."
+        "X-3 will add bounded operational views for vehicles, ECUs, CAN networks, and diagnostics. "
+        "Each view will reference authoritative domain records without copying operational state "
+        "into the dashboard domain."
     )
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     doc.save(OUTPUT)

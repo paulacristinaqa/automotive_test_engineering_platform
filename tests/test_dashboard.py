@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from uuid import uuid4
 
@@ -6,8 +6,10 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atep.ai_engine.models import AiEvidenceProjection
-from atep.dashboard.service import build_overview
+from atep.dashboard.service import build_overview, list_test_failures, quality_trends_from_rows
 from atep.identity.permissions import PermissionName
+from atep.test_runs.models import TestCaseResult as CaseResultModel
+from atep.test_runs.models import TestRun as RunModel
 
 
 class ExecuteResult:
@@ -99,3 +101,92 @@ async def test_overview_uses_none_for_empty_denominators() -> None:
 
 def test_dashboard_permission_is_explicit_and_stable() -> None:
     assert PermissionName.DASHBOARD_READ.value == "dashboard:read"
+
+
+def test_quality_trends_fill_empty_utc_days_and_calculate_rates() -> None:
+    generated_at = datetime(2026, 9, 10, 14, 30, tzinfo=UTC)
+    trends = quality_trends_from_rows(
+        generated_at=generated_at,
+        window_days=3,
+        run_rows=[
+            (generated_at - timedelta(days=2), "passed", 2),
+            (generated_at, "failed", 1),
+        ],
+        case_rows=[
+            (generated_at - timedelta(days=2), "passed", 6),
+            (generated_at - timedelta(days=2), "failed", 2),
+        ],
+    )
+    assert trends.contract_version == "dashboard-test-quality-trends-v1"
+    assert len(trends.points) == 3
+    assert trends.points[0].test_case_pass_rate == 75.0
+    assert trends.points[1].test_runs_total == 0
+    assert trends.points[1].test_case_pass_rate is None
+    assert trends.points[2].test_runs_failed == 1
+
+
+class FailureResult:
+    def __init__(self, rows: list[tuple[CaseResultModel, RunModel]]) -> None:
+        self.rows = rows
+
+    def all(self) -> list[tuple[CaseResultModel, RunModel]]:
+        return self.rows
+
+
+class FailureSession:
+    def __init__(self, rows: list[tuple[CaseResultModel, RunModel]]) -> None:
+        self.rows = rows
+
+    async def scalar(self, _: Any) -> int:
+        return len(self.rows)
+
+    async def execute(self, _: Any) -> FailureResult:
+        return FailureResult(self.rows)
+
+
+@pytest.mark.asyncio
+async def test_failure_drill_down_maps_references_and_truncates_observation() -> None:
+    now = datetime.now(UTC)
+    run = RunModel(
+        id=uuid4(),
+        run_id="test-run-failure-001",
+        vehicle_id=uuid4(),
+        requested_by_user_id=uuid4(),
+        name="BMS regression",
+        suite="regression",
+        metadata_={},
+        status="failed",
+        progress_percent=100,
+        version=2,
+        created_at=now,
+        updated_at=now,
+    )
+    result = CaseResultModel(
+        id=uuid4(),
+        test_run_id=run.id,
+        case_id="bms-overheat",
+        definition_id="bms-overheat-v1",
+        definition_version=1,
+        order=1,
+        required=True,
+        status="failed",
+        attempt=1,
+        duration_ms=125,
+        observed="x" * 600,
+        evidence_refs=["artifact://bms-log"],
+        version=2,
+        created_at=now,
+        updated_at=now,
+    )
+    page = await list_test_failures(
+        cast(AsyncSession, FailureSession([(result, run)])),
+        window_hours=24,
+        suite="regression",
+        limit=50,
+        offset=0,
+    )
+    assert page.contract_version == "dashboard-test-failures-v1"
+    assert page.total == 1
+    assert len(page.items[0].observation or "") == 500
+    assert page.items[0].observation_truncated is True
+    assert page.items[0].evidence_refs == ["artifact://bms-log"]

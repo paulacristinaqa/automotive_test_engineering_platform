@@ -1568,6 +1568,19 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             assert dashboard_body["kpis"]["test_runs_total"] >= 0
             assert "dashboard_ai_evidence_total" in dashboard_body["kpis"]
             assert isinstance(dashboard_body["evidence_cards"], list)
+            quality_trends = await client.get(
+                "/api/v1/dashboard/test-quality/trends?window_days=7",
+                headers=admin_headers,
+            )
+            assert quality_trends.status_code == 200, quality_trends.text
+            assert quality_trends.json()["contract_version"] == ("dashboard-test-quality-trends-v1")
+            assert len(quality_trends.json()["points"]) == 7
+            failure_drill_down = await client.get(
+                "/api/v1/dashboard/test-quality/failures?window_hours=2160&limit=10",
+                headers=admin_headers,
+            )
+            assert failure_drill_down.status_code == 200, failure_drill_down.text
+            assert failure_drill_down.json()["contract_version"] == ("dashboard-test-failures-v1")
             projection_page = await client.get(
                 "/api/v1/ai/evidence-projections?consumer=carsystemui&severity=critical",
                 headers=admin_headers,
@@ -1980,6 +1993,14 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                 headers=user_headers,
             )
             assert dashboard_denied["code"] == "permission_denied"
+            quality_trends_denied = await expected_error(
+                client,
+                "GET",
+                "/api/v1/dashboard/test-quality/trends",
+                403,
+                headers=user_headers,
+            )
+            assert quality_trends_denied["code"] == "permission_denied"
             artifacts_denied = await expected_error(
                 client,
                 "GET",
