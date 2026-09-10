@@ -83,6 +83,22 @@
 - **AI-NF-015** Keep raw symptoms, signal collections, hypotheses, and evaluation evidence out of events.
 - **AI-NF-016** Treat risk scores as prioritization aids rather than calibrated safety probabilities.
 
+## IX-6 functional requirements
+
+- **AI-F-047** Create a private conversation only for the owner of its governed analysis request.
+- **AI-F-048** Bind every conversation to one immutable analysis request and its evidence boundary.
+- **AI-F-049** Accept one to 50 bounded exchanges with a maximum 2,000-character question.
+- **AI-F-050** Require every answer citation to be governed by the bound analysis request.
+- **AI-F-051** Generate deterministic local guidance that distinguishes evidence references from verified facts.
+- **AI-F-052** Sanitize credentials, email addresses, bearer tokens, and VIN-like values before persistence.
+- **AI-F-053** Make conversation and exchange retries idempotent and reject changed identifier reuse.
+- **AI-F-054** Prevent users from discovering or reading conversations owned by another user.
+- **AI-F-055** Retain conversations for one to 30 days and purge expired exchange content auditably.
+- **AI-F-056** Provide create, answer, detail, list, pagination, purge, RBAC, audit, and outbox APIs.
+- **AI-NF-017** Keep chat generation deterministic, versioned, local, and free of model or GPU requirements.
+- **AI-NF-018** Keep questions, answers, citations, and conversation titles out of audit and outbox payloads.
+- **AI-NF-019** Keep every response advisory and unable to mutate vehicle, test, catalog, or schedule state.
+
 ## Verification catalogue
 
 - **AI-T-001** Validate task, subject, identifier, context, and evidence bounds.
@@ -123,3 +139,11 @@
 - **AI-T-036** Verify prediction correctness, Brier score, replay, and changed-input conflicts.
 - **AI-T-037** Verify APIs, filters, historical metrics, RBAC, and minimized event evidence.
 - **AI-T-038** Apply migration 0062 and the complete workflow through hosted Docker integration.
+- **AI-T-039** Verify conversation, question, retention, exchange, and citation bounds.
+- **AI-T-040** Verify request ownership and non-disclosing cross-owner access boundaries.
+- **AI-T-041** Verify deterministic cited answers and explicit fact, causality, and authority limitations.
+- **AI-T-042** Verify credential, email, bearer-token, and VIN sanitization before persistence.
+- **AI-T-043** Verify conversation and exchange replay plus changed-input conflicts.
+- **AI-T-044** Verify 50-exchange enforcement, expiration, and content purge evidence.
+- **AI-T-045** Verify APIs, pagination, RBAC, and minimized audit and outbox metadata.
+- **AI-T-046** Apply migration 0063 and the complete chat workflow through hosted Docker integration.

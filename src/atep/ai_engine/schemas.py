@@ -394,3 +394,78 @@ class AiPredictionMetrics(BaseModel):
     correct_count: int
     accuracy: float | None
     mean_brier_score: float | None
+
+
+class AiChatConversationCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    conversation_id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{7,63}$")
+    title: str = Field(min_length=3, max_length=120)
+    retention_days: int = Field(default=7, ge=1, le=30)
+
+
+class AiChatExchangeCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    exchange_id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{7,63}$")
+    question: str = Field(min_length=3, max_length=2000)
+    evidence_refs: list[str] = Field(min_length=1, max_length=10)
+
+    @field_validator("evidence_refs")
+    @classmethod
+    def bounded_chat_evidence(cls, value: list[str]) -> list[str]:
+        normalized = [item.strip() for item in value]
+        if any(not item or len(item) > 500 for item in normalized):
+            raise ValueError("evidence references must contain 1 to 500 characters")
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("evidence references must be unique")
+        return normalized
+
+
+class AiChatExchangeResponse(BaseModel):
+    id: UUID
+    exchange_id: str
+    sequence: int
+    question: str
+    answer: str
+    citations: list[str]
+    rule_version: str
+    limitations: list[str]
+    duplicate: bool = False
+    created_by_user_id: UUID
+    created_at: datetime
+
+
+class AiChatConversationResponse(BaseModel):
+    id: UUID
+    conversation_id: str
+    request_id: str
+    title: str
+    retention_days: int
+    expires_at: datetime
+    status: str
+    message_count: int
+    owner_user_id: UUID
+    purged_at: datetime | None
+    duplicate: bool = False
+    created_at: datetime
+    updated_at: datetime
+
+
+class AiChatConversationPage(BaseModel):
+    items: list[AiChatConversationResponse]
+    total: int
+    limit: int
+    offset: int
+
+
+class AiChatExchangePage(BaseModel):
+    items: list[AiChatExchangeResponse]
+    total: int
+    limit: int
+    offset: int
+
+
+class AiChatPurgeResponse(BaseModel):
+    purged_conversation_count: int
+    purged_exchange_count: int

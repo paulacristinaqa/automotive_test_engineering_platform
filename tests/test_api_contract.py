@@ -837,6 +837,16 @@ def test_ai_analysis_request_contract_is_published() -> None:
     assert root_risk["properties"]["signals"]["minItems"] == 1
     assert root_risk["properties"]["signals"]["maxItems"] == 50
     assert root_risk["properties"]["horizon_hours"]["maximum"] == 720
+    assert "post" in paths["/api/v1/ai/analysis-requests/{request_id}/chat-conversations"]
+    assert "get" in paths["/api/v1/ai/chat-conversations"]
+    assert "post" in paths["/api/v1/ai/chat-conversations/purge-expired"]
+    assert "get" in paths["/api/v1/ai/chat-conversations/{conversation_id}"]
+    chat_exchanges = paths["/api/v1/ai/chat-conversations/{conversation_id}/exchanges"]
+    assert {"get", "post"} <= set(chat_exchanges)
+    chat_create = schema["components"]["schemas"]["AiChatConversationCreate"]
+    assert chat_create["properties"]["retention_days"]["maximum"] == 30
+    exchange_create = schema["components"]["schemas"]["AiChatExchangeCreate"]
+    assert exchange_create["properties"]["evidence_refs"]["maxItems"] == 10
 
 
 def test_performance_and_stress_contract_is_published() -> None:
