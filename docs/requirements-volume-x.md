@@ -50,6 +50,13 @@
 
 ## Traceability status
 
+### X-6.4 populated verification
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-025 | Validate distinct populated component statistics and state groups against known values and SQL reference queries. | Populated integration profile |
+| DASH-NF-026 | Isolate synthetic setup in connection-local temporary tables and verify public component row counts remain unchanged. | Fixture safety unit test and integration before/after checks |
+
 ### X-6.3 measured query and retention checks
 
 | ID | Requirement | Evidence |
