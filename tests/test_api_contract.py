@@ -100,6 +100,17 @@ def test_dashboard_mobility_contract_has_safe_window_and_metric_units() -> None:
     )
 
 
+def test_dashboard_evidence_contract_has_fixed_non_assessment_and_safe_window() -> None:
+    schema = core_app.openapi()
+    operation = schema["paths"]["/api/v1/dashboard/evidence-readiness"]["get"]
+    parameters = {item["name"]: item["schema"] for item in operation["parameters"]}
+    assert parameters["window_hours"]["minimum"] == 1
+    assert parameters["window_hours"]["maximum"] == 720
+    properties = schema["components"]["schemas"]["EvidenceReadiness"]["properties"]
+    assert properties["assessment"]["const"] == "not_assessed"
+    assert "readiness_percentage" not in properties
+
+
 def test_dashboard_test_quality_contracts_have_safe_limits() -> None:
     paths = core_app.openapi()["paths"]
     trend_operation = paths["/api/v1/dashboard/test-quality/trends"]["get"]

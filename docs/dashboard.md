@@ -1,5 +1,26 @@
 # Dashboard Foundation
 
+## X-5 supporting evidence and gaps
+
+`GET /api/v1/dashboard/evidence-readiness?window_hours=24` requires `dashboard:read`.
+It returns current diagnostic flash and requirement coverage distributions, together with
+administrative audit outcomes from an inclusive 1–720-hour UTC window. Only grouped counts
+are selected: no firmware image, audit details, actor identity or security material is exposed.
+
+Four explicit gap cards describe the implemented source inventory, not an assessment:
+
+- OTA: not implemented; diagnostic flashing is supporting technology, not OTA delivery.
+- Cybersecurity: not assessed; administrative audit is not an attack/vulnerability counter.
+- ASPICE: not assessed; generic requirement coverage is not process capability evidence.
+- ISO 26262: not assessed; generic test coverage is not conformity or certification.
+
+Source references are identifiers, not verified evidence links or standards clause mappings.
+The inventory is versioned in code and must be reviewed when the underlying capabilities
+change. Empty and populated databases retain the same gaps and `assessment=not_assessed`.
+No readiness percentage is computed. Sequential queries do not promise snapshot consistency.
+This deliberately reduced X-5 scope was approved before implementation; formal mappings and
+OTA lifecycle views remain deferred until their source capabilities exist.
+
 Volume X starts with a backend read model rather than a browser framework. The endpoint
 `GET /api/v1/dashboard/overview` consolidates existing ATEP evidence into a stable,
 consumer-oriented contract while leaving source domains authoritative.

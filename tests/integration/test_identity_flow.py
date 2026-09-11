@@ -1585,6 +1585,21 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             )
             assert mobility.status_code == 200, mobility.text
             assert mobility.json()["contract_version"] == "dashboard-mobility-analytics-v1"
+            readiness = await client.get(
+                "/api/v1/dashboard/evidence-readiness?window_hours=720", headers=admin_headers
+            )
+            assert readiness.status_code == 200, readiness.text
+            assert readiness.json()["assessment"] == "not_assessed"
+            assert len(readiness.json()["gaps"]) == 4
+            assert sum(item["count"] for item in readiness.json()["diagnostic_flash_states"]) == (
+                await database.fetchval("SELECT count(*) FROM diagnostic_flash_states")
+            )
+            for invalid_window in (0, 721):
+                invalid_readiness = await client.get(
+                    f"/api/v1/dashboard/evidence-readiness?window_hours={invalid_window}",
+                    headers=admin_headers,
+                )
+                assert invalid_readiness.status_code == 422
             metrics = {item["metric"]: item for item in mobility.json()["current_metrics"]}
             battery_aggregate = await database.fetchrow(
                 "SELECT count(*) AS samples, avg(soc_pct) AS average FROM battery_pack_states"
@@ -2042,6 +2057,10 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                 client, "GET", "/api/v1/dashboard/mobility", 403, headers=user_headers
             )
             assert mobility_denied["code"] == "permission_denied"
+            readiness_denied = await expected_error(
+                client, "GET", "/api/v1/dashboard/evidence-readiness", 403, headers=user_headers
+            )
+            assert readiness_denied["code"] == "permission_denied"
             quality_trends_denied = await expected_error(
                 client,
                 "GET",

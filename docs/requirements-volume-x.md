@@ -50,5 +50,17 @@
 
 ## Traceability status
 
+### X-5 approved supporting-evidence scope
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-F-016 | Summarize current diagnostic flash and requirement coverage states plus windowed administrative audit outcomes. | Evidence aggregation service |
+| DASH-F-017 | Expose four explicit gap cards with source identifiers, missing capabilities and limitations. | Empty/populated unit tests |
+| DASH-NF-014 | Keep assessment not_assessed regardless of evidence volume; do not compute conformity/readiness percentages. | Literal schema and unit tests |
+| DASH-NF-015 | Enforce dashboard:read, 1–720-hour windows and aggregate-only data selection. | OpenAPI, SQL and integration tests |
+
+These requirements implement the approved reduced X-5 scope. Formal standards mappings and
+OTA lifecycle capabilities are deferred, not certified or inferred from generic evidence.
+
 Requirements DASH-F-001 through DASH-F-015 and DASH-NF-001 through DASH-NF-013 are implemented
 through X-4. Visual clients and historical materialization are outside this increment.

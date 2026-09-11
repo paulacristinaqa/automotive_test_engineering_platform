@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from atep.dashboard.evidence import EvidenceReadiness, build_evidence_readiness
 from atep.dashboard.mobility import MobilityAnalytics, build_mobility_analytics
 from atep.dashboard.schemas import (
     DashboardOverview,
@@ -23,6 +24,15 @@ from atep.identity.permissions import PermissionName
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 read_access = require_permissions(PermissionName.DASHBOARD_READ.value)
+
+
+@router.get("/evidence-readiness", response_model=EvidenceReadiness)
+async def evidence_readiness(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(read_access)],
+    window_hours: Annotated[int, Query(ge=1, le=720)] = 24,
+) -> EvidenceReadiness:
+    return await build_evidence_readiness(session, window_hours=window_hours)
 
 
 @router.get("/mobility", response_model=MobilityAnalytics)

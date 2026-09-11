@@ -1,6 +1,6 @@
 # ATEP Volume X Dashboard Engineering Workbook
 
-Version 0.4.0 records X-1 through X-4, including test-quality, operational and mobility analytics.
+Version 0.5.0 records X-1 through X-4 and the approved X-5 supporting-evidence scope.
 
 ## Scope and architecture
 
@@ -109,6 +109,34 @@ Tests and objectives:
 No paid service, model download, GPU computation or AWS account is required. The DOCX edition
 remains X-1/X-2; this Markdown workbook records the current development evidence.
 
+## X-5 — Supporting evidence and explicit gaps
+
+Scope decision: repository inspection found diagnostic flashing, audit and generic requirement
+coverage, but no OTA lifecycle or formal standards mappings. The user approved delivering an
+evidence/gap panel instead of prematurely implementing those future domains.
+
+The read-only evidence-readiness API executes three sorted aggregate queries. Flash and coverage
+are current states; audit outcomes use inclusive UTC bounds. Pydantic fixes the assessment to
+not_assessed. Versioned gap cards preserve the distinction between existing supporting records
+and missing capabilities. No standards clauses, capability level, ASIL or certification is inferred.
+
+Tests and objectives:
+
+- Empty and populated cases prove successful records never erase implementation/assessment gaps.
+- SQL tests verify time bounds, deterministic order and exclusion of sensitive detail columns.
+- OpenAPI validates the fixed assessment contract and safe query limits.
+- Integration compares flash totals against PostgreSQL and verifies HTTP 403/422 behavior.
+- Local regression: 538 tests passed; Ruff and mypy passed for src and tests.
+- Docker integration: 1 test passed, including aggregate comparison and HTTP 403/422 checks.
+- PostgreSQL backup/restore drill passed; temporary test containers were removed.
+- Initial Docker Hub TLS timeout occurred before startup; one retry succeeded.
+- Resource samples: Windows CPU 27%, GPU 12%; RabbitMQ 181.67% container CPU
+  (approximately 1.8 cores) during integration. These are samples, not peak measurements.
+
+No new dependency, migration, paid provider, GPU workload or cloud account is introduced.
+The Markdown workbook is current; the DOCX export remains the X-1/X-2 edition.
+
 ## Next increment
 
-X-5 will add OTA, cybersecurity, ASPICE and ISO 26262 evidence views.
+X-6: live updates, exports, retention and performance hardening. Full OTA and formal standards
+mapping views remain explicitly deferred until their source capabilities are implemented.
