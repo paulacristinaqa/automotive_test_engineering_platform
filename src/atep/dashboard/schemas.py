@@ -8,6 +8,23 @@ class StatusCount(BaseModel):
     count: int = Field(ge=0)
 
 
+class OperationalOverview(BaseModel):
+    generated_at: datetime
+    window_start: datetime
+    window_hours: int = Field(ge=1, le=720)
+    vehicle_statuses: list[StatusCount]
+    ecu_states: list[StatusCount]
+    diagnostic_session_types: list[StatusCount]
+    stored_dtc_severities: list[StatusCount]
+    can_networks_total: int = Field(ge=0)
+    can_fd_networks_total: int = Field(ge=0)
+    can_transmissions_total: int = Field(ge=0)
+    can_fault_executions_total: int = Field(ge=0)
+    diagnostic_commands_total: int = Field(ge=0)
+    contract_version: str = "dashboard-operations-v1"
+    limitations: list[str]
+
+
 class DashboardKpis(BaseModel):
     test_runs_total: int = Field(ge=0)
     active_test_runs: int = Field(ge=0)

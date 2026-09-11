@@ -7,7 +7,7 @@ introduced. This keeps source domains authoritative and makes every visualizatio
 |---|---|---|
 | X-1 | Overview contract, KPI aggregation, evidence cards, RBAC, and safe limits | Complete |
 | X-2 | Test quality trends, regression history, and failure drill-down | Complete |
-| X-3 | Vehicle, ECU, CAN, and diagnostics operational views | Planned |
+| X-3 | Vehicle, ECU, CAN, and diagnostics operational views | Complete |
 | X-4 | EV, charging, thermal, and ADAS visual analytics | Planned |
 | X-5 | OTA, cybersecurity, ASPICE, and ISO 26262 evidence views | Planned |
 | X-6 | Live updates, exports, retention, and performance hardening | Planned |
@@ -15,5 +15,4 @@ introduced. This keeps source domains authoritative and makes every visualizatio
 
 ## Next increment
 
-X-3 should add bounded operational views for vehicles, ECUs, CAN networks, and diagnostics while
-preserving each source domain as the authority.
+X-4 should add EV, charging, thermal, and ADAS visual analytics while preserving source authority.

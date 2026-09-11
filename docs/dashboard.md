@@ -11,6 +11,19 @@ X-2 adds two read-only test quality contracts:
 
 ## Architecture
 
+X-3 adds `GET /api/v1/dashboard/operations?window_hours=24`, protected by
+`dashboard:read`. The `dashboard-operations-v1` contract returns current vehicle status,
+ECU operational states, diagnostic session types, stored DTC severity distributions, and
+CAN/CAN FD inventory totals. CAN transmission, fault execution, and diagnostic command
+counts use an inclusive server-time window of 1 to 720 hours, ending at `generated_at`.
+Independent scalar subqueries avoid join multiplication. No raw CAN payload, ECU memory,
+diagnostic request, security key, or DTC snapshot is selected or returned.
+
+These are recorded states, not live health checks. Stored DTCs are not necessarily active
+faults, and fault-execution counts include recovery operations. Sequential reads do not
+promise a transactionally consistent cross-domain snapshot. Detailed vehicle control
+remains in the source-domain APIs.
+
 The dashboard service issues bounded aggregate queries against test runs, case results,
 requirements, mutation executions, cross-platform automation reports, and dashboard-targeted AI
 evidence. It does not copy data into a dashboard table, emit events, or mutate operational state.
