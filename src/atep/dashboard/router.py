@@ -1,9 +1,10 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atep.dashboard.evidence import EvidenceReadiness, build_evidence_readiness
+from atep.dashboard.exports import DashboardExport, ExportView, generate_export
 from atep.dashboard.mobility import MobilityAnalytics, build_mobility_analytics
 from atep.dashboard.schemas import (
     DashboardOverview,
@@ -24,6 +25,25 @@ from atep.identity.permissions import PermissionName
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 read_access = require_permissions(PermissionName.DASHBOARD_READ.value)
+
+
+@router.get("/exports/{view}", response_model=DashboardExport)
+async def dashboard_export(
+    view: ExportView,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    _: Annotated[User, Depends(read_access)],
+    window_hours: Annotated[int, Query(ge=1, le=720)] = 24,
+) -> Response:
+    payload = await generate_export(session, view=view, window_hours=window_hours)
+    return Response(
+        content=payload,
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="atep-dashboard-{view}.json"',
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.get("/evidence-readiness", response_model=EvidenceReadiness)

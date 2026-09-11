@@ -50,6 +50,15 @@
 
 ## Traceability status
 
+### X-6.1 export requirements
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-F-018 | Export three allowlisted aggregate dashboard views as versioned JSON attachments. | Router, schema, integration |
+| DASH-NF-016 | Exports require dashboard:read and 1–720-hour windows. | OpenAPI and HTTP 403/422 integration |
+| DASH-NF-017 | Do not persist export artifacts; instruct HTTP caches not to store responses. | Service design and response-header tests |
+| DASH-NF-018 | Apply cooperative generation timeout and serialized-byte limit with stable errors. | Cancellation and exact-size boundary tests |
+
 ### X-5 approved supporting-evidence scope
 
 | ID | Requirement | Evidence |

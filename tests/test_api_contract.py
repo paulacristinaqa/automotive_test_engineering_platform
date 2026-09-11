@@ -111,6 +111,14 @@ def test_dashboard_evidence_contract_has_fixed_non_assessment_and_safe_window() 
     assert "readiness_percentage" not in properties
 
 
+def test_dashboard_export_contract_restricts_views_and_time_window() -> None:
+    operation = core_app.openapi()["paths"]["/api/v1/dashboard/exports/{view}"]["get"]
+    parameters = {item["name"]: item["schema"] for item in operation["parameters"]}
+    assert parameters["view"]["enum"] == ["operations", "mobility", "evidence-readiness"]
+    assert parameters["window_hours"]["minimum"] == 1
+    assert parameters["window_hours"]["maximum"] == 720
+
+
 def test_dashboard_test_quality_contracts_have_safe_limits() -> None:
     paths = core_app.openapi()["paths"]
     trend_operation = paths["/api/v1/dashboard/test-quality/trends"]["get"]

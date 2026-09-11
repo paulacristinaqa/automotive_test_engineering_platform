@@ -1,5 +1,26 @@
 # Dashboard Foundation
 
+## X-6.1 bounded transient exports
+
+`GET /api/v1/dashboard/exports/{view}?window_hours=24` supports only `operations`, `mobility`
+and `evidence-readiness`, under `dashboard:read` and the existing API rate limiter. The JSON
+attachment wraps the original source contract in `dashboard-export-v1`; all interpretation
+limitations are preserved. Names are selected from a fixed allowlist, not arbitrary file paths.
+
+The server creates no persisted export record or file. Responses set `Cache-Control: no-store`
+and `X-Content-Type-Options: nosniff`. Downloaded client copies remain the recipient's retention
+responsibility. Existing source-domain retention policies are unchanged.
+
+Generation uses a cooperative 10-second asyncio timeout and rejects serialized output larger
+than 256 KiB. Errors use the global contract: `dashboard_export_timeout` (504) and
+`dashboard_export_too_large` (422). Cancellation depends on the database driver; this is not a
+hard database statement deadline. Serialization is synchronous and the byte check occurs after
+serialization, so neither control is a strict peak-memory bound. Only aggregate views are included;
+raw logs, AI text cards and bulk records are intentionally outside this first export slice.
+
+Live updates, freshness, measured query optimization and broader retention verification remain
+pending in X-6. This slice does not claim to complete the entire increment.
+
 ## X-5 supporting evidence and gaps
 
 `GET /api/v1/dashboard/evidence-readiness?window_hours=24` requires `dashboard:read`.
