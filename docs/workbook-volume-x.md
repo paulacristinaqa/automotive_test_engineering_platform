@@ -1,6 +1,6 @@
 # ATEP Volume X Dashboard Engineering Workbook
 
-Version 0.3.0 records X-1 through X-3, including test-quality history and operational summaries.
+Version 0.4.0 records X-1 through X-4, including test-quality, operational and mobility analytics.
 
 ## Scope and architecture
 
@@ -76,6 +76,39 @@ Tests and objectives:
 The existing DOCX edition remains version 0.2.0 (X-1/X-2); this Markdown workbook is
 the current development record for X-3 until the next document export.
 
+## X-4 — EV, charging, thermal and ADAS analytics
+
+The mobility endpoint supplies chart-ready distributions without adding a frontend framework.
+Six metric summaries expose units and population sizes. Seven sorted state/outcome groups
+preserve the terminology of the source services. Current component records are distinct from
+time-windowed scenario executions and planning evaluations.
+
+Engineering decisions:
+
+- Reuse FastAPI, Pydantic, SQLAlchemy and PostgreSQL; no new dependencies or migrations.
+- Compute unweighted per-component statistics in SQL, without loading raw simulation payloads.
+- Use explicit UTC lower and upper boundaries only on activity data.
+- Return null numeric statistics for absent components; never infer that missing data is healthy.
+- Avoid fleet-wide thermal alarm thresholds: source models own operating-state decisions.
+- Keep queries sequential to avoid concurrent session use; do not claim snapshot consistency.
+- Defer interactive charts and query-cost hardening to their planned increments.
+
+Tests and objectives:
+
+- Populated and empty fixtures verify metric mapping, counts, statistics and missing-data semantics.
+- SQL inspection checks both activity boundaries, deterministic group order and absence of joins.
+- OpenAPI checks window limits, metric units and population-count fields.
+- PostgreSQL integration compares battery statistics against direct database aggregates.
+- Integration checks authorized access, forbidden access and invalid query windows.
+- Local regression: 535 tests passed; Ruff and mypy passed.
+- Docker integration: 1 test passed, including the mobility endpoint and RBAC.
+- PostgreSQL backup and isolated restore drill passed; temporary containers were removed.
+- Resource samples: Windows CPU 4% during integration; API container CPU 12.14%.
+  GPU utilization was 12% after regression. These samples are not peak measurements.
+
+No paid service, model download, GPU computation or AWS account is required. The DOCX edition
+remains X-1/X-2; this Markdown workbook records the current development evidence.
+
 ## Next increment
 
-X-4 will add EV, charging, thermal, and ADAS visual analytics contracts.
+X-5 will add OTA, cybersecurity, ASPICE and ISO 26262 evidence views.

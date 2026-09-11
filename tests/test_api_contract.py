@@ -88,6 +88,18 @@ def test_dashboard_operations_contract_has_safe_window_and_no_raw_payloads() -> 
     )
 
 
+def test_dashboard_mobility_contract_has_safe_window_and_metric_units() -> None:
+    schema = core_app.openapi()
+    operation = schema["paths"]["/api/v1/dashboard/mobility"]["get"]
+    parameters = {item["name"]: item["schema"] for item in operation["parameters"]}
+    assert parameters["window_hours"]["minimum"] == 1
+    assert parameters["window_hours"]["maximum"] == 720
+    assert parameters["window_hours"]["default"] == 24
+    assert {"unit", "sample_count", "minimum", "average", "maximum"} <= set(
+        schema["components"]["schemas"]["NumericDistribution"]["properties"]
+    )
+
+
 def test_dashboard_test_quality_contracts_have_safe_limits() -> None:
     paths = core_app.openapi()["paths"]
     trend_operation = paths["/api/v1/dashboard/test-quality/trends"]["get"]

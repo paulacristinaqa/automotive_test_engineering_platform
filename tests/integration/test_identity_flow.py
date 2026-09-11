@@ -1580,6 +1580,23 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             )
             assert operations.status_code == 200, operations.text
             assert operations.json()["contract_version"] == "dashboard-operations-v1"
+            mobility = await client.get(
+                "/api/v1/dashboard/mobility?window_hours=720", headers=admin_headers
+            )
+            assert mobility.status_code == 200, mobility.text
+            assert mobility.json()["contract_version"] == "dashboard-mobility-analytics-v1"
+            metrics = {item["metric"]: item for item in mobility.json()["current_metrics"]}
+            battery_aggregate = await database.fetchrow(
+                "SELECT count(*) AS samples, avg(soc_pct) AS average FROM battery_pack_states"
+            )
+            assert metrics["battery_soc"]["sample_count"] == battery_aggregate["samples"]
+            assert metrics["battery_soc"]["average"] == battery_aggregate["average"]
+            for invalid_window in (0, 721):
+                invalid_mobility = await client.get(
+                    f"/api/v1/dashboard/mobility?window_hours={invalid_window}",
+                    headers=admin_headers,
+                )
+                assert invalid_mobility.status_code == 422
             assert sum(item["count"] for item in operations.json()["vehicle_statuses"]) == (
                 await database.fetchval("SELECT count(*) FROM vehicles")
             )
@@ -2021,6 +2038,10 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                 client, "GET", "/api/v1/dashboard/operations", 403, headers=user_headers
             )
             assert operations_denied["code"] == "permission_denied"
+            mobility_denied = await expected_error(
+                client, "GET", "/api/v1/dashboard/mobility", 403, headers=user_headers
+            )
+            assert mobility_denied["code"] == "permission_denied"
             quality_trends_denied = await expected_error(
                 client,
                 "GET",
