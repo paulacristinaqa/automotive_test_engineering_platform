@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
 
@@ -10,6 +11,8 @@ import httpx
 import pytest
 import websockets
 from websockets.exceptions import InvalidStatus
+
+from tools.profile_dashboard_queries import profile_dashboard_queries
 
 pytestmark = pytest.mark.integration
 
@@ -1586,6 +1589,12 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             )
             assert mobility.status_code == 200, mobility.text
             assert mobility.json()["contract_version"] == "dashboard-mobility-analytics-v1"
+            query_profile = await profile_dashboard_queries(database_url)
+            profile_path = Path("dr-evidence/dashboard-query-profile.json")
+            await asyncio.to_thread(profile_path.parent.mkdir, parents=True, exist_ok=True)
+            await asyncio.to_thread(
+                profile_path.write_text, json.dumps(query_profile, indent=2), encoding="utf-8"
+            )
             readiness = await client.get(
                 "/api/v1/dashboard/evidence-readiness?window_hours=720", headers=admin_headers
             )

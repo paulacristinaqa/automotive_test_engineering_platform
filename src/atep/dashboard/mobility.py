@@ -1,5 +1,6 @@
 """Read-only, chart-ready EV and ADAS projections; source models remain authoritative."""
 
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 
 from pydantic import BaseModel, Field
@@ -43,22 +44,31 @@ class MobilityAnalytics(BaseModel):
     limitations: list[str]
 
 
-async def _distribution(
-    session: AsyncSession, column: InstrumentedAttribute[float], *, metric: str, unit: str
-) -> NumericDistribution:
-    count, minimum, average, maximum = (
-        await session.execute(
-            select(func.count(column), func.min(column), func.avg(column), func.max(column))
+async def _distributions(
+    session: AsyncSession,
+    metrics: Sequence[tuple[InstrumentedAttribute[float], str, str]],
+) -> list[NumericDistribution]:
+    # Each group belongs to one table: one scan without cross-table row multiplication.
+    expressions = [
+        expression
+        for column, _, _ in metrics
+        for expression in (func.count(column), func.min(column), func.avg(column), func.max(column))
+    ]
+    row = (await session.execute(select(*expressions))).one()
+    result = []
+    for index, (_, metric, unit) in enumerate(metrics):
+        count, minimum, average, maximum = row[index * 4 : index * 4 + 4]
+        result.append(
+            NumericDistribution(
+                metric=metric,
+                unit=unit,
+                sample_count=int(count),
+                minimum=float(minimum) if minimum is not None else None,
+                average=float(average) if average is not None else None,
+                maximum=float(maximum) if maximum is not None else None,
+            )
         )
-    ).one()
-    return NumericDistribution(
-        metric=metric,
-        unit=unit,
-        sample_count=int(count),
-        minimum=float(minimum) if minimum is not None else None,
-        average=float(average) if average is not None else None,
-        maximum=float(maximum) if maximum is not None else None,
-    )
+    return result
 
 
 async def _statuses(
@@ -84,15 +94,19 @@ async def build_mobility_analytics(
     now = datetime.now(UTC)
     start = now - timedelta(hours=window_hours)
     metrics = []
-    for column, metric, unit in (
-        (BatteryPackState.soc_pct, "battery_soc", "percent"),
-        (BatteryPackState.soh_pct, "battery_soh", "percent"),
-        (BatteryPackState.pack_temperature_c, "battery_temperature", "celsius"),
-        (MotorInverterState.motor_temperature_c, "motor_temperature", "celsius"),
-        (MotorInverterState.inverter_temperature_c, "inverter_temperature", "celsius"),
-        (ThermalManagementState.cabin_temperature_c, "cabin_temperature", "celsius"),
+    for group in (
+        (
+            (BatteryPackState.soc_pct, "battery_soc", "percent"),
+            (BatteryPackState.soh_pct, "battery_soh", "percent"),
+            (BatteryPackState.pack_temperature_c, "battery_temperature", "celsius"),
+        ),
+        (
+            (MotorInverterState.motor_temperature_c, "motor_temperature", "celsius"),
+            (MotorInverterState.inverter_temperature_c, "inverter_temperature", "celsius"),
+        ),
+        ((ThermalManagementState.cabin_temperature_c, "cabin_temperature", "celsius"),),
     ):
-        metrics.append(await _distribution(session, column, metric=metric, unit=unit))
+        metrics.extend(await _distributions(session, group))
     groups = []
     for status_column, timestamp in (
         (BatteryPackState.operating_state, None),

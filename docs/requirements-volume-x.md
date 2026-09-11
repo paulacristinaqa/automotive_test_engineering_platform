@@ -50,6 +50,14 @@
 
 ## Traceability status
 
+### X-6.3 measured query and retention checks
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-022 | Mobility shall use at most ten SELECTs with unchanged numeric metrics. | PostgreSQL reference comparison and query-count unit test |
+| DASH-NF-023 | Verify aggregate/export paths in a read-only transaction with bounded statement duration. | PostgreSQL integration profile |
+| DASH-NF-024 | Retain non-sensitive query-profile evidence with explicit limits and no production data retention changes. | Integration JSON report and 14-day CI artifact policy |
+
 ### X-6.2 live snapshot requirements
 
 | ID | Requirement | Evidence |

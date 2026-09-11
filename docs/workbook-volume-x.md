@@ -1,6 +1,6 @@
 # ATEP Volume X Dashboard Engineering Workbook
 
-Version 0.6.1 records X-1 through X-5 and the X-6.1/X-6.2 export/live-snapshot slices.
+Version 0.6.2 records X-1 through X-5 and X-6.1 through X-6.3.
 
 ## Scope and architecture
 
@@ -194,7 +194,40 @@ No cloud provider, paid API, database migration or GPU workload is added. Browse
 distributed handshake limiting and capacity measurements remain explicit later work. The Markdown
 workbook is current; DOCX remains the X-1/X-2 edition.
 
-## Remaining X-6 work after periodic snapshots
+## X-6.3 — Query profile and read-only verification
+
+Inspection identified six individual numeric queries in the mobility view, including repeated
+scans of battery and motor tables. Grouping metrics by table reduces numeric queries from six
+to three and the full-view query count from thirteen to ten. Status queries and API contracts
+remain unchanged. No new cache, index or migration is added without measured justification.
+
+Integration compares the optimized metrics with six independent SQL reference calculations
+inside one repeatable-read transaction. PostgreSQL read-only enforcement also covers all three
+exports, validating that these paths do not mutate source records. The test uses a local
+five-second statement timeout; production timeout behavior is unchanged.
+
+Evidence records sample counts, query totals, export sizes and elapsed times. Timings are one
+small-fixture observation, not a latency target, speedup comparison or fleet capacity claim.
+The report contains no tokens, record identifiers or raw payloads. CI retention is fourteen days;
+local evidence is ignored by Git and manually managed. This differs from production dashboard
+snapshots/exports, which have no server-side persistence. Source retention policies are untouched.
+
+Test objectives: preserve numeric/null semantics; prevent extra joins or SELECT regressions;
+verify PostgreSQL equivalence and read-only export execution. Final local regression: 553 tests passed;
+Ruff and mypy passed. Integration and PostgreSQL restore both passed.
+
+Observed profile: ten SELECTs for the optimized view (previously thirteen), with three numeric
+queries instead of six. All six numeric populations were empty in the integration fixture.
+The observed full-view time was 24.614 ms; the numeric-only reference was 59.083 ms.
+These different workloads and empty populations do not substantiate a populated-fleet speedup.
+Export sizes were 867, 1506 and 1893 bytes for operations, mobility and evidence-readiness.
+A distinct-population unit case additionally guards field alignment, negative temperatures and
+null populations. Populated PostgreSQL performance characterization remains future validation.
+
+No new paid service, GPU workload or production data cleanup is introduced. DOCX remains the
+X-1/X-2 edition; Markdown is the current development record.
+
+## Remaining acceptance work
 
 X-6: live updates, exports, retention and performance hardening. Full OTA and formal standards
 mapping views remain explicitly deferred until their source capabilities are implemented.
