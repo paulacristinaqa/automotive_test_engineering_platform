@@ -1,6 +1,6 @@
 # ATEP Volume X Dashboard Engineering Workbook
 
-Version 0.6.2 records X-1 through X-5 and X-6.1 through X-6.3.
+Version 0.6.3 records X-1 through X-5 and X-6.1 through X-6.4.
 
 ## Scope and architecture
 
@@ -227,7 +227,32 @@ null populations. Populated PostgreSQL performance characterization remains futu
 No new paid service, GPU workload or production data cleanup is introduced. DOCX remains the
 X-1/X-2 edition; Markdown is the current development record.
 
-## Remaining acceptance work
+## X-6.4 — Populated isolated projection fixture
+
+The X-6.3 report revealed empty PostgreSQL metric populations. This increment retains that
+case and adds a second profile using temporary component tables on a dedicated connection.
+Three batteries, two motor/inverters and one thermal record have known, distinct values.
+Temporary setup does not enforce domain constraints and is not an end-to-end vehicle fixture.
+
+Setup copies no public data and inserts only into pg_temp; it commits before starting a new
+read-only repeatable-read measurement. Session closure and engine disposal remove connection-local
+state. Public component counts are compared before and after. Source records and retention
+policies remain unchanged, and no migration or production service configuration is added.
+
+Tests check fixed temporary-only writes, known averages/populations, negative temperature bounds,
+source-state distributions, independent SQL equivalence and ten SELECTs. The existing three export
+paths also run under read-only measurement. The combined report retains the same 14-day CI policy.
+Local regression: 554 tests passed; Ruff and mypy passed. This is not a fleet-scale latency SLA.
+
+Local PostgreSQL evidence: integration passed, with metric populations 3/3/3/2/2/1 and ten
+SELECTs. The populated full view took 21.082 ms in one observation; the numeric-only reference
+took 11.678 ms (different workload, not a speedup comparison). Public component counts were
+unchanged. Resource samples: host CPU 19%, GPU 8%, RabbitMQ 270.91% container CPU; not peaks.
+PostgreSQL backup/restore passed, and temporary integration containers were removed.
+
+No paid services, new dependencies or GPU workload. Markdown remains current; DOCX remains X-1/X-2.
+
+## Remaining acceptance work after populated verification
 
 X-6: live updates, exports, retention and performance hardening. Full OTA and formal standards
 mapping views remain explicitly deferred until their source capabilities are implemented.

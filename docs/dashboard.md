@@ -1,5 +1,23 @@
 # Dashboard Foundation
 
+## X-6.4 populated isolated verification
+
+The integration profile now runs a second case with connection-local temporary component tables.
+Three batteries, two motor/inverter records and one thermal record provide distinct populations,
+negative temperatures and known averages. The test verifies counts `[3,3,3,2,2,1]`, means
+`[50,90,20,50,60,22]`, battery temperature bounds and state distributions, in addition to
+independent SQL equivalence and the ten-SELECT budget.
+
+Fixture setup copies only table structure (no public rows or constraints) and inserts exclusively
+into `pg_temp`. It commits setup before starting the repeatable-read/read-only measurement.
+The connection closes and its engine is disposed afterward; no temporary fixture is shared with
+the API connection pool. Public component row counts are checked before and after. The existing
+empty-population case remains, and the report nests the populated result under `populated_fixture`.
+
+This is a small SQL projection fixture, not a complete vehicle/domain simulation or a fleet-load
+benchmark. Temporary tables intentionally omit production constraints because no domain write path
+is under test. Source retention and production deployment configuration are unchanged.
+
 ## X-6.3 query-count regression and retention verification
 
 Mobility numeric aggregates now group by source table: three battery statistics share one

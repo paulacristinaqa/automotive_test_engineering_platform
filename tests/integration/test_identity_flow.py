@@ -1590,6 +1590,21 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             assert mobility.status_code == 200, mobility.text
             assert mobility.json()["contract_version"] == "dashboard-mobility-analytics-v1"
             query_profile = await profile_dashboard_queries(database_url)
+            public_counts_before = await database.fetchrow(
+                "SELECT (SELECT count(*) FROM public.battery_pack_states) AS battery, "
+                "(SELECT count(*) FROM public.motor_inverter_states) AS motor, "
+                "(SELECT count(*) FROM public.thermal_management_states) AS thermal"
+            )
+            populated_profile = await profile_dashboard_queries(
+                database_url, synthetic_components=True
+            )
+            public_counts_after = await database.fetchrow(
+                "SELECT (SELECT count(*) FROM public.battery_pack_states) AS battery, "
+                "(SELECT count(*) FROM public.motor_inverter_states) AS motor, "
+                "(SELECT count(*) FROM public.thermal_management_states) AS thermal"
+            )
+            assert public_counts_before == public_counts_after
+            query_profile["populated_fixture"] = populated_profile
             profile_path = Path("dr-evidence/dashboard-query-profile.json")
             await asyncio.to_thread(profile_path.parent.mkdir, parents=True, exist_ok=True)
             await asyncio.to_thread(
