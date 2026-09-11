@@ -9,10 +9,13 @@ introduced. This keeps source domains authoritative and makes every visualizatio
 | X-2 | Test quality trends, regression history, and failure drill-down | Complete |
 | X-3 | Vehicle, ECU, CAN, and diagnostics operational views | Complete |
 | X-4 | EV, charging, thermal, and ADAS visual analytics | Complete |
-| X-5 | OTA, cybersecurity, ASPICE, and ISO 26262 evidence views | Planned |
+| X-5 | Supporting evidence and explicit OTA/cybersecurity/standards gaps (approved reduced scope) | Complete within approved scope |
 | X-6 | Live updates, exports, retention, and performance hardening | Planned |
 | X-7 | Cross-platform dashboard validation and Volume X completion | Planned |
 
 ## Next increment
 
-X-5 should add OTA, cybersecurity, ASPICE, and ISO 26262 evidence views without implying certification.
+X-6 adds live updates, exports, retention, and performance hardening.
+
+X-5 was explicitly reduced to supporting evidence and gap reporting. OTA lifecycle views and
+formal ASPICE/ISO 26262/cybersecurity mappings remain deferred dependencies, not delivered features.
