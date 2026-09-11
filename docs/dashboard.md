@@ -1,5 +1,29 @@
 # Dashboard Foundation
 
+## X-6.3 query-count regression and retention verification
+
+Mobility numeric aggregates now group by source table: three battery statistics share one
+query, two motor/inverter statistics share another, and cabin temperature uses the third.
+The full view issues ten SELECTs instead of thirteen, without changing metric ordering,
+units, population counts or null semantics. This is a query/round-trip reduction, not an
+assertion of a particular latency speedup.
+
+`tools/profile_dashboard_queries.py` is exercised by integration against the disposable
+PostgreSQL fixture. A repeatable-read, read-only transaction and five-second local statement
+timeout bound this small verification. Six independent reference numeric queries are compared
+with the optimized view; exact metric equality and ten SELECTs are required. All three exports
+are then exercised in the same read-only transaction. Any database mutation would fail.
+
+The non-sensitive `dashboard-query-profile.json` records query counts, population sizes,
+export byte sizes and elapsed samples. Numeric-only reference and full-view times measure
+different workloads and must not be interpreted as a speedup ratio. CI retains this evidence
+with the existing restore report for 14 days. Local reports are ignored by Git and remain until
+manually removed. These test reports are not retained dashboard snapshots or production exports.
+
+Production source retention remains unchanged. Exports and live snapshots create no server
+artifact; HTTP exports retain their no-store policy. This verification is not a production-scale
+load benchmark or a distributed admission-control assessment.
+
 ## X-6.2 periodic live snapshots and freshness
 
 `/api/v1/dashboard/stream/{view}` is a WebSocket endpoint for the same three allowlisted export
@@ -124,10 +148,10 @@ The `dashboard-overview-v1` response contains:
 
 Empty numeric populations have zero samples and `null` statistics. No capacity weighting,
 cross-vehicle thermal threshold, pass-rate inference, live health claim or certification is
-invented. Different component populations can have different counts. Thirteen sequential
+invented. Different component populations can have different counts. Ten sequential
 aggregate queries avoid cross-domain join multiplication and loading raw cells, scenes,
 predictions or request payloads. This is a fixed-size numeric projection plus state groups,
-not a history series or atomic snapshot. Future X-6 work will measure query cost and caching
+not a history series or atomic snapshot. X-6.3 groups numeric queries by table; further work measures caching
 needs; a bounded time window alone does not bound database scan cost.
 
 ## Safety and cost controls (all contracts)

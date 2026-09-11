@@ -10,14 +10,15 @@ introduced. This keeps source domains authoritative and makes every visualizatio
 | X-3 | Vehicle, ECU, CAN, and diagnostics operational views | Complete |
 | X-4 | EV, charging, thermal, and ADAS visual analytics | Complete |
 | X-5 | Supporting evidence and explicit OTA/cybersecurity/standards gaps (approved reduced scope) | Complete within approved scope |
-| X-6 | Live updates, exports, retention, and performance hardening | In progress — X-6.1 exports and X-6.2 periodic snapshots |
+| X-6 | Live updates, exports, retention, and performance hardening | In progress — X-6.3 query profile and read-only retention verification |
 | X-7 | Cross-platform dashboard validation and Volume X completion | Planned |
 
 ## Next increment
 
-X-6.1 implements bounded transient JSON exports. X-6.2 adds authenticated periodic snapshots
-and explicit freshness semantics; subsequent X-6 work must measure query costs and complete retention/performance
-policy validation. Do not mark X-6 complete until these remaining capabilities are verified.
+X-6.1 implements transient exports; X-6.2 adds periodic snapshots; X-6.3 verifies query reduction,
+metric equivalence and database read-only behavior, with retained non-sensitive test evidence.
+Before X-6 completion, review production admission/browser authentication boundaries and define
+the cross-platform acceptance scope for X-7. Small-fixture timings are not capacity guarantees.
 
 X-5 was explicitly reduced to supporting evidence and gap reporting. OTA lifecycle views and
 formal ASPICE/ISO 26262/cybersecurity mappings remain deferred dependencies, not delivered features.

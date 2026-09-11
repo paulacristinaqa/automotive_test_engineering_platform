@@ -383,7 +383,7 @@ operational guidance, and review worksheets.
 | VII | ADAS | Baseline complete - VII-1 through VII-7, including cross-platform evidence |
 | VIII | Test Framework | Complete — VIII-1 through VIII-7, including bounded performance and stress evidence |
 | IX | AI Test Engineer | Complete IX-1 through IX-7 with cross-platform cited AI evidence |
-| X | Dashboard | In progress - X-1 through X-5 delivered (X-5 reduced scope); X-6.1 exports and X-6.2 periodic live snapshots implemented |
+| X | Dashboard | In progress - X-1 through X-5 delivered (X-5 reduced scope); X-6.1–X-6.3 exports, snapshots and query/retention verification implemented |
 | X | Dashboard | Planned |
 | XI | DevOps | Planned |
 | XII | Enterprise Features | Planned |
