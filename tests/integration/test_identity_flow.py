@@ -9,6 +9,7 @@ import asyncpg  # type: ignore[import-untyped]
 import httpx
 import pytest
 import websockets
+from websockets.exceptions import InvalidStatus
 
 pytestmark = pytest.mark.integration
 
@@ -1591,6 +1592,19 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             assert readiness.status_code == 200, readiness.text
             assert readiness.json()["assessment"] == "not_assessed"
             assert len(readiness.json()["gaps"]) == 4
+            dashboard_ws_url = (
+                api_url.replace("https://", "wss://").replace("http://", "ws://")
+                + "/api/v1/dashboard/stream/evidence-readiness"
+            )
+            async with websockets.connect(
+                dashboard_ws_url, additional_headers=admin_headers
+            ) as dashboard_stream:
+                live_dashboard = await wait_for_stream_event(
+                    dashboard_stream, "atep.dashboard.snapshot.v1"
+                )
+                assert live_dashboard["snapshot"]["data"]["assessment"] == "not_assessed"
+                assert live_dashboard["refresh_interval_seconds"] == 30
+                assert live_dashboard["sequence"] == 1
             for export_view in ("operations", "mobility", "evidence-readiness"):
                 exported = await client.get(
                     f"/api/v1/dashboard/exports/{export_view}", headers=admin_headers
@@ -2080,6 +2094,10 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                 client, "GET", "/api/v1/dashboard/exports/operations", 403, headers=user_headers
             )
             assert export_denied["code"] == "permission_denied"
+            with pytest.raises(InvalidStatus) as stream_denied:
+                async with websockets.connect(dashboard_ws_url, additional_headers=user_headers):
+                    pytest.fail("Dashboard stream accepted an unauthorized user")
+            assert stream_denied.value.response.status_code == 403
             quality_trends_denied = await expected_error(
                 client,
                 "GET",

@@ -1,5 +1,36 @@
 # Dashboard Foundation
 
+## X-6.2 periodic live snapshots and freshness
+
+`/api/v1/dashboard/stream/{view}` is a WebSocket endpoint for the same three allowlisted export
+views. It uses a fixed 24-hour activity window and `Authorization: Bearer ...` headers, never
+query-string tokens. Clients must support custom handshake headers (for example the Android
+client). A browser ticket/cookie flow is not implemented in this slice.
+
+Each `atep.dashboard.snapshot.v1` frame contains a sequence, server `observed_at`,
+`refresh_not_before`, a 30-second minimum refresh interval, and the versioned snapshot.
+`freshness_basis=server_query_not_vehicle_measurement` prevents a recent query from implying
+recent vehicle telemetry. Source timestamps and all limitations remain inside the snapshot.
+Queries start only after the previous send and wait period: this is periodic sampling, not
+event-driven delivery, and intermediate changes can be missed. There is no replay guarantee.
+
+Token expiry, active-user state and dashboard:read are checked on admission, before generation
+and again before transmission. Revocation during the idle interval closes the connection at
+the next check; no claim of immediate idle-connection teardown is made. Concurrent revocation
+after the final check remains a normal check/send race, not a transactionally atomic boundary.
+
+Limits: 16 admitted connections per worker process, 10 snapshots per connection, five seconds
+per send, and a cooperative 15-second authentication/generation cycle. Existing export generation
+and byte limits apply to the embedded snapshot, not the small outer WebSocket envelope. No database
+session is held during idle waits. Disconnects, cancellation, errors and normal completion release
+the connection slot. Client application messages close the read-only stream with 1008; capacity
+or operational errors close with 1013. Authentication/permission close codes are 4401/4403 after
+acceptance; denial before acceptance is an HTTP handshake rejection (403 under this server).
+
+No dashboard data is persisted. Limits are process-local, not a distributed connection or handshake
+rate limiter; production ingress admission, browser authentication and measured multi-worker capacity
+remain part of later hardening. The existing test-run stream is unchanged.
+
 ## X-6.1 bounded transient exports
 
 `GET /api/v1/dashboard/exports/{view}?window_hours=24` supports only `operations`, `mobility`

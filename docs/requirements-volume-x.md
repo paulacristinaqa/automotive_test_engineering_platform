@@ -50,6 +50,15 @@
 
 ## Traceability status
 
+### X-6.2 live snapshot requirements
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-F-019 | Stream versioned periodic snapshots for three allowlisted views with server-query freshness metadata. | WebSocket integration and frame tests |
+| DASH-NF-019 | Revalidate token, active user and dashboard permission before generating and sending each snapshot. | Auth and revocation tests |
+| DASH-NF-020 | Bound admitted connections per process, snapshot count, refresh interval and send duration. | Capacity, periodic and slow-consumer tests |
+| DASH-NF-021 | Release connection capacity on disconnect or failure; accept no client refresh commands or URL tokens. | Cleanup and read-only tests |
+
 ### X-6.1 export requirements
 
 | ID | Requirement | Evidence |
