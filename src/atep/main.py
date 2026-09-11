@@ -24,6 +24,7 @@ from atep.core.observability import (
 )
 from atep.core.rate_limit import api_rate_limit
 from atep.cross_platform_automation.router import router as cross_platform_automation_router
+from atep.dashboard.realtime import router as dashboard_websocket_router
 from atep.dashboard.router import router as dashboard_router
 from atep.db.session import session_factory
 from atep.diagnostics.router import router as diagnostics_router
@@ -140,6 +141,7 @@ app.include_router(performance_testing_router, prefix="/api/v1", dependencies=ra
 app.include_router(cross_platform_automation_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(dashboard_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(test_runs_websocket_router, prefix="/api/v1")
+app.include_router(dashboard_websocket_router, prefix="/api/v1")
 install_exception_handlers(app)
 
 

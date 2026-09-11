@@ -1,6 +1,6 @@
 # ATEP Volume X Dashboard Engineering Workbook
 
-Version 0.6.0 records X-1 through X-5 and the X-6.1 transient-export slice.
+Version 0.6.1 records X-1 through X-5 and the X-6.1/X-6.2 export/live-snapshot slices.
 
 ## Scope and architecture
 
@@ -165,7 +165,36 @@ Tests and objectives:
 No new dependencies, paid services or GPU workloads. Markdown remains the current workbook;
 the existing DOCX edition remains X-1/X-2.
 
-## Remaining X-6 work
+## X-6.2 — Periodic authenticated snapshots
+
+The existing test-run stream authenticates only on admission. Dashboard streaming instead
+revalidates access before queries and again before each send, using existing identity services.
+This change is isolated to the dashboard; it does not modify the earlier test-run stream.
+
+Design: reuse bounded aggregate exports; sample no faster than 30 seconds, send at most ten
+snapshots, admit sixteen connections per worker, and time out slow sends. Database sessions
+are closed between refreshes. Freshness describes server query observation, not vehicle telemetry
+age. Periodic sampling intentionally does not promise event replay or instantaneous change delivery.
+
+Tests and objectives:
+
+- Header, inactive-user, permission and expired-token tests verify admission checks.
+- Revocation during generation prevents sending the snapshot.
+- Freshness and periodic tests verify the frame contract and maximum snapshot count.
+- Capacity rejection avoids admitting another connection; all tested termination paths free slots.
+- Slow consumers and client commands close safely without recording sensitive exception text.
+- Real WebSocket integration checks a governed snapshot and unauthorized handshake rejection.
+- Regression: 552 tests passed; Ruff and mypy passed for src and tests.
+- Docker integration: 1 end-to-end test passed, including WebSocket snapshot and 403 handshake.
+- PostgreSQL backup/restore drill passed; temporary containers were removed.
+- Resource samples: host CPU 25%, GPU 14%, RabbitMQ container CPU 281.56%; these are not
+  peak measurements and do not establish attribution of all host resource usage.
+
+No cloud provider, paid API, database migration or GPU workload is added. Browser authentication,
+distributed handshake limiting and capacity measurements remain explicit later work. The Markdown
+workbook is current; DOCX remains the X-1/X-2 edition.
+
+## Remaining X-6 work after periodic snapshots
 
 X-6: live updates, exports, retention and performance hardening. Full OTA and formal standards
 mapping views remain explicitly deferred until their source capabilities are implemented.
