@@ -1591,6 +1591,21 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             assert readiness.status_code == 200, readiness.text
             assert readiness.json()["assessment"] == "not_assessed"
             assert len(readiness.json()["gaps"]) == 4
+            for export_view in ("operations", "mobility", "evidence-readiness"):
+                exported = await client.get(
+                    f"/api/v1/dashboard/exports/{export_view}", headers=admin_headers
+                )
+                assert exported.status_code == 200, exported.text
+                assert exported.headers["cache-control"] == "no-store"
+                assert "attachment" in exported.headers["content-disposition"]
+                assert exported.json()["view"] == export_view
+                assert exported.json()["server_retention"] == "not_persisted"
+                assert len(exported.content) <= 262144
+            for bad_export in ("unknown", "operations?window_hours=0", "mobility?window_hours=721"):
+                invalid_export = await client.get(
+                    f"/api/v1/dashboard/exports/{bad_export}", headers=admin_headers
+                )
+                assert invalid_export.status_code == 422
             assert sum(item["count"] for item in readiness.json()["diagnostic_flash_states"]) == (
                 await database.fetchval("SELECT count(*) FROM diagnostic_flash_states")
             )
@@ -2061,6 +2076,10 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                 client, "GET", "/api/v1/dashboard/evidence-readiness", 403, headers=user_headers
             )
             assert readiness_denied["code"] == "permission_denied"
+            export_denied = await expected_error(
+                client, "GET", "/api/v1/dashboard/exports/operations", 403, headers=user_headers
+            )
+            assert export_denied["code"] == "permission_denied"
             quality_trends_denied = await expected_error(
                 client,
                 "GET",

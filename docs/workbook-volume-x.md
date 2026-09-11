@@ -1,6 +1,6 @@
 # ATEP Volume X Dashboard Engineering Workbook
 
-Version 0.5.0 records X-1 through X-4 and the approved X-5 supporting-evidence scope.
+Version 0.6.0 records X-1 through X-5 and the X-6.1 transient-export slice.
 
 ## Scope and architecture
 
@@ -136,7 +136,36 @@ Tests and objectives:
 No new dependency, migration, paid provider, GPU workload or cloud account is introduced.
 The Markdown workbook is current; the DOCX export remains the X-1/X-2 edition.
 
-## Next increment
+## X-6.1 — Bounded transient exports
+
+The first X-6 slice reuses existing aggregate view builders and adds a versioned JSON envelope.
+Only operations, mobility and evidence-readiness are exportable. Authentication/RBAC and the
+global API rate limiter remain active; fixed names prevent user-controlled filesystem paths.
+No server file, artifact row, cloud object or export history is created. Client copies are outside
+server retention control; source records are not deleted or modified.
+
+Controls: 256 KiB serialized payload ceiling, cooperative 10-second generation timeout, no-store
+and nosniff headers. Timeout cancels the awaited builder; it is not a database statement timeout.
+The byte check is post-serialization, not a hard memory ceiling. Remaining X-6 hardening must
+measure real query costs before claiming performance guarantees.
+
+Tests and objectives:
+
+- Envelope test preserves source limitations, four gap cards and not-assessed semantics.
+- Exact-limit and one-byte-over tests validate the byte ceiling and stable error code.
+- Blocked-builder test verifies cooperative cancellation and the timeout error.
+- OpenAPI restricts view names and time windows.
+- Integration checks all three downloads, headers, byte limits, invalid views/windows and RBAC.
+- Local regression: 541 passed; Ruff and mypy passed for src and tests.
+- Docker integration: 1 end-to-end test passed across all three exports and validation/RBAC cases.
+- PostgreSQL backup/restore drill passed; temporary containers were removed afterward.
+- Resource samples: Windows CPU 53%, GPU 8%, API container CPU 2.03%; these are not peak
+  measurements and total host utilization cannot be attributed solely to this test run.
+
+No new dependencies, paid services or GPU workloads. Markdown remains the current workbook;
+the existing DOCX edition remains X-1/X-2.
+
+## Remaining X-6 work
 
 X-6: live updates, exports, retention and performance hardening. Full OTA and formal standards
 mapping views remain explicitly deferred until their source capabilities are implemented.
