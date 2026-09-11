@@ -36,7 +36,28 @@ The `dashboard-overview-v1` response contains:
 - a bounded list of recent cited AI evidence cards;
 - explicit interpretation limitations.
 
-## Safety and cost controls
+## X-4 mobility analytics
+
+`GET /api/v1/dashboard/mobility?window_hours=24` returns the
+`dashboard-mobility-analytics-v1` chart contract under `dashboard:read`.
+
+| Data | Scope | Interpretation |
+|---|---|---|
+| SOC and SOH | Current battery records | Unweighted percent minimum, mean, maximum and count |
+| Battery, motor, inverter and cabin temperatures | Current component records | Celsius minimum, mean, maximum and count |
+| Battery, motor, charging and thermal states | Current component records | Sorted source-state distributions |
+| EV and ADAS scenario outcomes | Inclusive 1–720-hour UTC window | Stored execution status counts |
+| ADAS maneuvers | Same activity window | Planning evaluations, not actual maneuvers |
+
+Empty numeric populations have zero samples and `null` statistics. No capacity weighting,
+cross-vehicle thermal threshold, pass-rate inference, live health claim or certification is
+invented. Different component populations can have different counts. Thirteen sequential
+aggregate queries avoid cross-domain join multiplication and loading raw cells, scenes,
+predictions or request payloads. This is a fixed-size numeric projection plus state groups,
+not a history series or atomic snapshot. Future X-6 work will measure query cost and caching
+needs; a bounded time window alone does not bound database scan cost.
+
+## Safety and cost controls (all contracts)
 
 - `dashboard:read` is required independently from source-domain permissions.
 - `window_hours` accepts 1 through 720 hours and defaults to 24.

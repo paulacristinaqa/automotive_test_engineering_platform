@@ -26,6 +26,16 @@
 
 ## Non-functional requirements
 
+### X-4 mobility requirements
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-F-013 | Expose SOC/SOH and component temperature distributions with units and sample counts. | Mobility projection and unit tests |
+| DASH-F-014 | Expose battery, motor, charging and thermal source-state distributions. | Mobility aggregate queries |
+| DASH-F-015 | Expose windowed EV/ADAS scenario outcomes and ADAS planning maneuvers. | SQL boundary tests |
+| DASH-NF-012 | Empty numeric populations shall return null statistics, not invented zeros. | Empty-state tests |
+| DASH-NF-013 | Mobility access requires dashboard:read and windows of 1–720 hours. | OpenAPI and integration 403/422 checks |
+
 | ID | Requirement | Evidence |
 |---|---|---|
 | DASH-NF-001 | Dashboard access shall require `dashboard:read`. | Permission catalogue and router |
@@ -40,5 +50,5 @@
 
 ## Traceability status
 
-Requirements DASH-F-001 through DASH-F-012 and DASH-NF-001 through DASH-NF-011 are implemented
-through X-3. Visual clients and historical materialization are outside this increment.
+Requirements DASH-F-001 through DASH-F-015 and DASH-NF-001 through DASH-NF-013 are implemented
+through X-4. Visual clients and historical materialization are outside this increment.
