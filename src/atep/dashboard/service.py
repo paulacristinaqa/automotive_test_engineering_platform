@@ -6,19 +6,99 @@ from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atep.ai_engine.models import AiEvidenceProjection
+from atep.can_network.models import CanFaultExecution, CanFrameTransmission, CanNetwork
 from atep.cross_platform_automation.models import CrossPlatformAutomationReport
 from atep.dashboard.schemas import (
     DashboardEvidenceCard,
     DashboardKpis,
     DashboardOverview,
+    OperationalOverview,
     StatusCount,
     TestFailureDetail,
     TestFailurePage,
     TestQualityTrendPoint,
     TestQualityTrends,
 )
+from atep.diagnostics.models import DiagnosticCommand, DiagnosticSessionState, DiagnosticTroubleCode
+from atep.ecus.models import ElectronicControlUnit
 from atep.mutation_analysis.models import MutationExecution, RequirementCoverage
 from atep.test_runs.models import TestCaseResult, TestRun
+from atep.vehicles.models import Vehicle
+
+
+async def build_operations(session: AsyncSession, *, window_hours: int) -> OperationalOverview:
+    generated_at = datetime.now(UTC)
+    window_start = generated_at - timedelta(hours=window_hours)
+    vehicle_statuses = await _counts(
+        session, select(Vehicle.status, func.count()).group_by(Vehicle.status)
+    )
+    ecu_states = await _counts(
+        session,
+        select(ElectronicControlUnit.operational_state, func.count()).group_by(
+            ElectronicControlUnit.operational_state
+        ),
+    )
+    sessions = await _counts(
+        session,
+        select(DiagnosticSessionState.session_type, func.count()).group_by(
+            DiagnosticSessionState.session_type
+        ),
+    )
+    dtcs = await _counts(
+        session,
+        select(DiagnosticTroubleCode.severity, func.count()).group_by(
+            DiagnosticTroubleCode.severity
+        ),
+    )
+    # Independent scalar subqueries avoid multiplying counts through cross-domain joins.
+    totals = (
+        await session.execute(
+            select(
+                select(func.count(CanNetwork.id)).scalar_subquery(),
+                select(func.count(CanNetwork.id))
+                .where(CanNetwork.can_fd_enabled.is_(True))
+                .scalar_subquery(),
+                select(func.count(CanFrameTransmission.id))
+                .where(
+                    CanFrameTransmission.created_at >= window_start,
+                    CanFrameTransmission.created_at <= generated_at,
+                )
+                .scalar_subquery(),
+                select(func.count(CanFaultExecution.id))
+                .where(
+                    CanFaultExecution.created_at >= window_start,
+                    CanFaultExecution.created_at <= generated_at,
+                )
+                .scalar_subquery(),
+                select(func.count(DiagnosticCommand.id))
+                .where(
+                    DiagnosticCommand.created_at >= window_start,
+                    DiagnosticCommand.created_at <= generated_at,
+                )
+                .scalar_subquery(),
+            )
+        )
+    ).one()
+    return OperationalOverview(
+        generated_at=generated_at,
+        window_start=window_start,
+        window_hours=window_hours,
+        vehicle_statuses=_items(vehicle_statuses),
+        ecu_states=_items(ecu_states),
+        diagnostic_session_types=_items(sessions),
+        stored_dtc_severities=_items(dtcs),
+        can_networks_total=int(totals[0]),
+        can_fd_networks_total=int(totals[1]),
+        can_transmissions_total=int(totals[2]),
+        can_fault_executions_total=int(totals[3]),
+        diagnostic_commands_total=int(totals[4]),
+        limitations=[
+            "Inventory, ECU states, sessions and stored DTCs are current records, not live health.",
+            "Activity counts use server creation timestamps within the selected UTC window.",
+            "Stored DTCs need not be active faults; fault executions include recovery.",
+            "Sequential queries can observe concurrent changes; this is not an atomic snapshot.",
+        ],
+    )
 
 
 async def _counts(session: AsyncSession, statement: Select[tuple[str, int]]) -> dict[str, int]:

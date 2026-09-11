@@ -1575,6 +1575,30 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
             assert quality_trends.status_code == 200, quality_trends.text
             assert quality_trends.json()["contract_version"] == ("dashboard-test-quality-trends-v1")
             assert len(quality_trends.json()["points"]) == 7
+            operations = await client.get(
+                "/api/v1/dashboard/operations?window_hours=720", headers=admin_headers
+            )
+            assert operations.status_code == 200, operations.text
+            assert operations.json()["contract_version"] == "dashboard-operations-v1"
+            assert sum(item["count"] for item in operations.json()["vehicle_statuses"]) == (
+                await database.fetchval("SELECT count(*) FROM vehicles")
+            )
+            assert sum(item["count"] for item in operations.json()["ecu_states"]) == (
+                await database.fetchval("SELECT count(*) FROM electronic_control_units")
+            )
+            assert operations.json()["can_networks_total"] == (
+                await database.fetchval("SELECT count(*) FROM can_networks")
+            )
+            assert (
+                operations.json()["can_fd_networks_total"]
+                <= operations.json()["can_networks_total"]
+            )
+            for invalid_window in (0, 721):
+                invalid_operations = await client.get(
+                    f"/api/v1/dashboard/operations?window_hours={invalid_window}",
+                    headers=admin_headers,
+                )
+                assert invalid_operations.status_code == 422
             failure_drill_down = await client.get(
                 "/api/v1/dashboard/test-quality/failures?window_hours=2160&limit=10",
                 headers=admin_headers,
@@ -1993,6 +2017,10 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                 headers=user_headers,
             )
             assert dashboard_denied["code"] == "permission_denied"
+            operations_denied = await expected_error(
+                client, "GET", "/api/v1/dashboard/operations", 403, headers=user_headers
+            )
+            assert operations_denied["code"] == "permission_denied"
             quality_trends_denied = await expected_error(
                 client,
                 "GET",

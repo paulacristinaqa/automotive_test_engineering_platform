@@ -6,7 +6,12 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from atep.ai_engine.models import AiEvidenceProjection
-from atep.dashboard.service import build_overview, list_test_failures, quality_trends_from_rows
+from atep.dashboard.service import (
+    build_operations,
+    build_overview,
+    list_test_failures,
+    quality_trends_from_rows,
+)
 from atep.identity.permissions import PermissionName
 from atep.test_runs.models import TestCaseResult as CaseResultModel
 from atep.test_runs.models import TestRun as RunModel
@@ -51,6 +56,34 @@ class FakeSession:
 
     async def scalars(self, _: Any) -> ScalarResult:
         return ScalarResult(self.evidence)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("empty", [False, True])
+async def test_operations_counts_current_records_separately_from_activity(empty: bool) -> None:
+    session = FakeSession([])
+    session.results = (
+        [[], [], [], [], (0, 0, 0, 0, 0)]
+        if empty
+        else [
+            [("registered", 2)],
+            [("offline", 1), ("online", 3)],
+            [("default", 2)],
+            [("warning", 4)],
+            (2, 1, 12, 3, 8),
+        ]
+    )
+    result = await build_operations(cast(AsyncSession, session), window_hours=24)
+    assert result.contract_version == "dashboard-operations-v1"
+    assert result.generated_at - result.window_start == timedelta(hours=24)
+    assert result.can_networks_total == (0 if empty else 2)
+    assert result.can_fd_networks_total == (0 if empty else 1)
+    assert result.can_transmissions_total == (0 if empty else 12)
+    assert result.can_fault_executions_total == (0 if empty else 3)
+    assert result.diagnostic_commands_total == (0 if empty else 8)
+    assert sum(item.count for item in result.ecu_states) == (0 if empty else 4)
+    assert sum(item.count for item in result.stored_dtc_severities) == (0 if empty else 4)
+    assert not session.results
 
 
 @pytest.mark.asyncio

@@ -15,6 +15,15 @@
 | DASH-F-009 | The platform shall expose failed case results with run, definition, suite, duration, observation, and evidence references. | Failure drill-down API |
 | DASH-F-010 | Failure results shall support bounded pagination, time window, and suite filtering. | OpenAPI and integration tests |
 
+## X-3 operational requirements
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-F-011 | Expose current vehicle, ECU, session and stored-DTC distributions. | Operations service and aggregate tests |
+| DASH-F-012 | Distinguish CAN inventory from time-windowed CAN and diagnostic activity. | Independent SQL aggregates and integration |
+| DASH-NF-010 | Operations require dashboard:read and reject windows outside 1–720 hours. | Integration 403/422 and OpenAPI tests |
+| DASH-NF-011 | Exclude memory, keys, command payloads and diagnostic snapshots. | Explicit column selection and response schema |
+
 ## Non-functional requirements
 
 | ID | Requirement | Evidence |
@@ -31,5 +40,5 @@
 
 ## Traceability status
 
-Requirements DASH-F-001 through DASH-F-010 and DASH-NF-001 through DASH-NF-009 are implemented
-through X-2. Visual clients and historical materialization are outside this increment.
+Requirements DASH-F-001 through DASH-F-012 and DASH-NF-001 through DASH-NF-011 are implemented
+through X-3. Visual clients and historical materialization are outside this increment.
