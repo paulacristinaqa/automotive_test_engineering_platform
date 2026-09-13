@@ -1,6 +1,26 @@
 # ATEP Volume X Dashboard Engineering Workbook
 
-Version 0.6.4 records X-1 through X-5 and X-6.1 through X-6.5.
+Version 0.6.5 records X-1 through X-5 and X-6.1 through X-6.6.
+
+## X-6.6 — Native transport boundary and Redis integration
+
+The native dashboard stream now rejects Origin-bearing handshakes before any downstream work.
+This makes the unsupported browser boundary explicit, including empty/null/same-origin values.
+No JWT, RBAC or quota check is bypassed by omitting Origin. This is not a browser login solution.
+
+Unit tests verify no admission, authentication, export or slot consumption on Origin denial.
+Real WebSocket integration tests admin-token requests with browser/null Origin against HTTP 403.
+A dedicated Redis integration alternates independent connection pools through the production
+30-attempt budget and checks rejection, TTL and recovery. A random test key isolates cleanup and
+accelerated expiry from user counters. No parallel load, production-policy change or paid service
+is involved. Test Redis is exposed on loopback only; application deployment settings are unchanged.
+
+Verification: 563 fast tests passed, two integration tests deselected; Ruff and mypy passed.
+Both Docker integration tests passed in 20.01 seconds; the restore drill passed and disposable
+services were removed. Resource sample: host CPU 49%, GPU 9%, API container CPU 28.07% and RAM
+149.1 MiB. These are samples, not peaks; host usage includes other applications. No ATEP GPU
+workload was introduced.
+The Markdown workbook is updated; existing DOCX snapshots remain unchanged.
 
 ## X-6.5 — Handshake admission hardening
 

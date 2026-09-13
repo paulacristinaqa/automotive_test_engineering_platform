@@ -47,6 +47,11 @@ async def authorized(websocket: WebSocket) -> bool:
 async def stream_dashboard(websocket: WebSocket, view: ExportView) -> None:
     acquired = False
     try:
+        # This endpoint is native/header-only. Browser authentication is a separate contract.
+        # Presence (including empty or "null") is denied; absence is not authentication.
+        if "origin" in websocket.headers:
+            await websocket.close(code=1008, reason="Browser dashboard stream is not supported")
+            return
         if connection_slots.locked():
             await websocket.close(code=1013, reason="Dashboard stream capacity reached")
             return

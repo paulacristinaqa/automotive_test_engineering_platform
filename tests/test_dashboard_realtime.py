@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import WebSocket
+from starlette.datastructures import Headers
 
 from atep.core.security import InvalidTokenError
 from atep.dashboard import realtime
@@ -27,6 +28,29 @@ def setup(monkeypatch: pytest.MonkeyPatch) -> None:
     context.__aexit__ = AsyncMock(return_value=False)
     monkeypatch.setattr(realtime, "session_factory", lambda: context)
     monkeypatch.setattr(realtime, "connection_slots", asyncio.Semaphore(1))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("origin", ["https://dashboard.example", "null", ""])
+async def test_native_stream_rejects_origin_before_downstream_work(
+    monkeypatch: pytest.MonkeyPatch, origin: str
+) -> None:
+    setup(monkeypatch)
+    admit = AsyncMock()
+    auth = AsyncMock()
+    build = AsyncMock()
+    monkeypatch.setattr(realtime, "admit_dashboard_handshake", admit)
+    monkeypatch.setattr(realtime, "authorized", auth)
+    monkeypatch.setattr(realtime, "generate_export", build)
+    ws = socket()
+    ws.headers = Headers({"Origin": origin, "Authorization": "Bearer valid-native-token"})
+    await realtime.stream_dashboard(ws, "operations")
+    admit.assert_not_awaited()
+    auth.assert_not_awaited()
+    build.assert_not_awaited()
+    ws.accept.assert_not_awaited()
+    assert ws.close.call_args.kwargs["code"] == 1008
+    assert not realtime.connection_slots.locked()
 
 
 @pytest.mark.asyncio
