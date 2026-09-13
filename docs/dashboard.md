@@ -1,5 +1,15 @@
 # Dashboard Foundation
 
+## X-6.5 handshake admission
+
+Streams reserve a worker slot before admission or database authentication. A dedicated Redis
+fixed-window budget permits 30 attempts per transport peer per 60 seconds, shared by workers
+using the same Redis. Quota exhaustion and unavailable Redis deny entry without dashboard
+queries. The peer is hashed; credentials and raw forwarded headers are not used as keys.
+The policy remains enabled independently of the HTTP limiter setting. Sixteen connection slots
+remain per worker, including pending authentication. See `dashboard-acceptance.md` for proxy,
+NAT, denial semantics and the remaining browser/Android acceptance gates.
+
 ## X-6.4 populated isolated verification
 
 The integration profile now runs a second case with connection-local temporary component tables.

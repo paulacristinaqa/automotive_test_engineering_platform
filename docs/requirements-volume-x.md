@@ -1,5 +1,14 @@
 # Volume X Dashboard Requirements
 
+## X-6.5 admission requirements
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-027 | Enforce a shared Redis handshake budget of 30 attempts per peer per 60 seconds, failing closed on unavailable protection. | `test_dashboard_admission.py` |
+| DASH-NF-028 | Reserve a bounded worker slot and admit the handshake before database authentication; release owned slots on exit. | `test_dashboard_realtime.py` |
+
+Cross-platform release gates and unverified client boundaries are in `dashboard-acceptance.md`.
+
 ## Functional requirements
 
 | ID | Requirement | Evidence |
