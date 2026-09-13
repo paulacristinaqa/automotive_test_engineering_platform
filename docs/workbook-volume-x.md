@@ -1,6 +1,25 @@
 # ATEP Volume X Dashboard Engineering Workbook
 
-Version 0.6.5 records X-1 through X-5 and X-6.1 through X-6.6.
+Version 0.7.0 records X-1 through X-5 and X-6.1 through X-6.7 backend implementation.
+
+## X-6.7 — Opt-in browser authentication
+
+Added a separate browser stream without changing the native header contract. An exact-Origin
+allowlist defaults to empty. Accepted clients must send a bounded versioned token frame within
+five seconds; JWT and live RBAC checks gate all snapshot work. One shared runner preserves quota,
+capacity, refresh, timeout, read-only and revocation semantics for both transports.
+
+The architecture decision, protocol, deployment constraints and primary design reference are
+recorded in `dashboard-browser-authentication.md`. Tokens are not placed in URLs or cookies;
+application errors never echo frames. Operators must disable protocol frame logging and configure
+ingress limits. No new service, persistence layer, paid infrastructure or GPU workload was added.
+
+Local verification: 592 fast tests passed, two integration tests deselected; Ruff and mypy passed.
+Both Docker integration tests passed in 19.31 seconds; the restore drill passed and disposable
+services were removed. The resource sample was collected after cleanup (host CPU 16%, GPU 15%),
+so it is not evidence of test-time utilization or peaks. No GPU workload was introduced.
+Markdown is current; DOCX snapshots are not regenerated. X-6 backend implementation is complete within the documented lab scope;
+X-7 must still validate real browser/AAOS clients and deployment conditions.
 
 ## X-6.6 — Native transport boundary and Redis integration
 

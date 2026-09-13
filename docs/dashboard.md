@@ -1,5 +1,13 @@
 # Dashboard Foundation
 
+## X-6.7 opt-in browser authentication
+
+`/api/v1/dashboard/browser-stream/{view}` implements an exact-Origin, first-message token flow.
+It is disabled by default and shares all native stream admission, authorization and snapshot
+limits. See `dashboard-browser-authentication.md` for configuration, versioned message, close
+codes and security boundaries. Native `/stream/{view}` remains header-only and rejects Origin.
+This completes the bounded X-6 backend scope; real client/deployment acceptance belongs to X-7.
+
 ## X-6.6 native transport boundary and real Redis verification
 
 The current stream explicitly rejects every handshake containing an `Origin` header, including

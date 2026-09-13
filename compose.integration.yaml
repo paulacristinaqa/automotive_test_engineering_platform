@@ -2,6 +2,7 @@ x-app-environment: &app-environment
   ATEP_ENVIRONMENT: integration
   ATEP_DATABASE_URL: postgresql+asyncpg://atep:${ATEP_INTEGRATION_DB_PASSWORD:?required}@postgres:5432/atep
   ATEP_REDIS_URL: redis://redis:6379/0
+  ATEP_DASHBOARD_BROWSER_ORIGINS: http://localhost:8080
   ATEP_RABBITMQ_URL: amqp://${ATEP_INTEGRATION_RABBITMQ_USER:?required}:${ATEP_INTEGRATION_RABBITMQ_PASSWORD:?required}@rabbitmq:5672/
   ATEP_JWT_SECRET: ${ATEP_INTEGRATION_JWT_SECRET:?required}
   ATEP_ACCESS_TOKEN_MINUTES: 5

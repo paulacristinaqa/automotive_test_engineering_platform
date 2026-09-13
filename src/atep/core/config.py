@@ -2,6 +2,7 @@ import re
 from functools import lru_cache
 from ipaddress import ip_network
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from pydantic import EmailStr, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -26,6 +27,7 @@ class Settings(BaseSettings):
     auth_rate_limit_window_seconds: int = Field(default=60, ge=1, le=86_400)
     api_rate_limit_requests: int = Field(default=300, ge=1, le=1_000_000)
     api_rate_limit_window_seconds: int = Field(default=60, ge=1, le=86_400)
+    dashboard_browser_origins: str = Field(default="", max_length=4096)
     module_reconciliation_enabled: bool = True
     module_reconciliation_interval_seconds: int = Field(default=15, ge=1, le=300)
     module_availability_slo_target: float = Field(default=0.99, gt=0.0, le=1.0)
@@ -47,6 +49,39 @@ class Settings(BaseSettings):
     outbox_retry_seconds: int = Field(default=1, ge=1, le=60)
     bootstrap_admin_email: EmailStr | None = None
     bootstrap_admin_password: SecretStr | None = None
+
+    @field_validator("dashboard_browser_origins")
+    @classmethod
+    def validate_dashboard_browser_origins(cls, value: str) -> str:
+        origins = [item.strip() for item in value.split(",") if item.strip()]
+        if len(origins) > 20:
+            raise ValueError("at most 20 dashboard browser origins are allowed")
+        for origin in origins:
+            parsed = urlsplit(origin)
+            if (
+                not origin.isascii()
+                or any(character.isspace() for character in origin)
+                or "*" in origin
+                or parsed.scheme not in {"https", "http"}
+                or not parsed.hostname
+                or origin != f"{parsed.scheme}://{parsed.netloc}"
+                or "\\" in origin
+                or "%" in origin
+                or parsed.username is not None
+                or parsed.password is not None
+                or parsed.path
+                or parsed.query
+                or parsed.fragment
+                or (
+                    parsed.scheme == "http"
+                    and parsed.hostname not in {"localhost", "127.0.0.1", "::1"}
+                )
+            ):
+                raise ValueError("dashboard origins require exact HTTPS origins or HTTP loopback")
+            # Accessing port validates its numeric range.
+            if parsed.port is not None and parsed.port == 0:
+                raise ValueError("dashboard origin port must be positive")
+        return ",".join(dict.fromkeys(origins))
 
     @field_validator("workload_identity_trust_domain")
     @classmethod

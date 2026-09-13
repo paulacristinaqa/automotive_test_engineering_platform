@@ -8,7 +8,7 @@ Backend tests do not establish graphical client acceptance or automotive safety 
 | Windows Python backend | Unit contracts, lint and types | Local automated suite |
 | Linux containers | Authenticated snapshot, forbidden role, exports and read-only queries | Docker integration suite |
 | Android/AAOS client | Header-based authentication, reconnect, stale indicator and permission loss | Not validated by backend tests |
-| Browser dashboard | Approved authentication design, origin protection, reconnect and expired-session behavior | Current native endpoint explicitly rejects Origin; a separate browser authentication contract remains pending |
+| Browser dashboard | Actual browser login/stream, origin protection, reconnect and expired-session behavior | X-6.7 opt-in first-message authentication implemented; real browser-engine acceptance pending |
 | Trusted reverse proxy | Transport peer integrity, shared quota, TLS and resource limits | Deployment acceptance pending |
 
 Every supported client must distinguish server query time from vehicle measurement time, mark
@@ -38,4 +38,6 @@ The Redis admission test uses two client pools, one random pseudonymous peer and
 attempts under a ten-second timeout. It checks TTL and recovery by shortening only the test key's
 TTL. This proves shared Redis counter behavior, not multi-process WebSocket capacity.
 
-X-6 remains in progress; this matrix defines gates, it does not claim they all passed.
+X-6 backend scope is implemented; this X-7 matrix does not claim every client/deployment gate passed.
+The separate browser route is specified in `dashboard-browser-authentication.md`. The native
+Origin prohibition above remains unchanged; it is not the policy of the new browser route.

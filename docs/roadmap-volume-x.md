@@ -10,7 +10,7 @@ introduced. This keeps source domains authoritative and makes every visualizatio
 | X-3 | Vehicle, ECU, CAN, and diagnostics operational views | Complete |
 | X-4 | EV, charging, thermal, and ADAS visual analytics | Complete |
 | X-5 | Supporting evidence and explicit OTA/cybersecurity/standards gaps (approved reduced scope) | Complete within approved scope |
-| X-6 | Live updates, exports, retention, and performance hardening | In progress — X-6.6 native boundary and real Redis verification |
+| X-6 | Live updates, exports, retention, and performance hardening | Backend scope complete — X-6.7 opt-in browser authentication; X-7 acceptance pending |
 | X-7 | Cross-platform dashboard validation and Volume X completion | Planned |
 
 ## Next increment
@@ -20,8 +20,9 @@ metric equivalence and database read-only behavior, with retained non-sensitive 
 X-6.4 adds distinct populated temporary components while retaining the empty-state profile.
 X-6.5 bounds admission before authentication and adds a shared Redis handshake budget.
 X-6.6 enforces the native-only Origin boundary and verifies quota/expiry with independent Redis pools.
-The cross-platform acceptance scope is defined in `dashboard-acceptance.md`. Browser authentication
-and client-level evidence remain explicit release gates, not delivered capabilities.
+X-6.7 adds a separate, disabled-by-default browser route with exact origins and first-message JWT.
+The next increment is X-7 cross-platform acceptance, as defined in `dashboard-acceptance.md`.
+Actual client/deployment evidence remains a release gate; protocol tests do not establish it.
 Small-fixture timings are not capacity guarantees.
 
 X-5 was explicitly reduced to supporting evidence and gap reporting. OTA lifecycle views and

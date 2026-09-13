@@ -208,3 +208,56 @@ async def test_periodic_refresh_is_bounded(monkeypatch: pytest.MonkeyPatch) -> N
     assert ws.send_json.await_count == 2
     assert ws.close.call_args.kwargs["code"] == 1000
     assert not realtime.connection_slots.locked()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("valid", [True, False])
+async def test_browser_stream_authenticates_before_snapshot_and_rechecks_token(
+    monkeypatch: pytest.MonkeyPatch, valid: bool
+) -> None:
+    setup(monkeypatch)
+    monkeypatch.setattr(realtime, "browser_transport_allowed", lambda ws: True)
+    monkeypatch.setattr(realtime, "receive_browser_token", AsyncMock(return_value="browser-token"))
+    auth = AsyncMock(return_value=valid)
+    build = AsyncMock(return_value=b"{}")
+    monkeypatch.setattr(realtime, "authorized", auth)
+    monkeypatch.setattr(realtime, "generate_export", build)
+    ws = socket()
+    await realtime.browser_dashboard(ws, "operations")
+    ws.accept.assert_awaited_once()
+    assert auth.await_count == (3 if valid else 1)
+    assert all(call.args == (ws, "browser-token") for call in auth.await_args_list)
+    if not valid:
+        build.assert_not_awaited()
+        ws.send_json.assert_not_awaited()
+    assert not realtime.connection_slots.locked()
+
+
+@pytest.mark.asyncio
+async def test_browser_auth_cancellation_releases_capacity(monkeypatch: pytest.MonkeyPatch) -> None:
+    setup(monkeypatch)
+    monkeypatch.setattr(realtime, "browser_transport_allowed", lambda ws: True)
+    monkeypatch.setattr(
+        realtime, "receive_browser_token", AsyncMock(side_effect=asyncio.CancelledError)
+    )
+    ws = socket()
+    with pytest.raises(asyncio.CancelledError):
+        await realtime.browser_dashboard(ws, "operations")
+    ws.send_json.assert_not_awaited()
+    assert not realtime.connection_slots.locked()
+
+
+@pytest.mark.asyncio
+async def test_browser_origin_denial_does_not_accept_or_consume_admission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    setup(monkeypatch)
+    monkeypatch.setattr(realtime, "browser_transport_allowed", lambda ws: False)
+    admission = AsyncMock()
+    monkeypatch.setattr(realtime, "admit_dashboard_handshake", admission)
+    ws = socket()
+    await realtime.browser_dashboard(ws, "operations")
+    admission.assert_not_awaited()
+    ws.accept.assert_not_awaited()
+    ws.send_json.assert_not_awaited()
+    assert not realtime.connection_slots.locked()
