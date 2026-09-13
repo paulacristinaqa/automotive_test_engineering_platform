@@ -8,6 +8,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from atep.core.config import get_settings
 from atep.core.security import InvalidTokenError, decode_access_token
+from atep.dashboard.admission import admit_dashboard_handshake
 from atep.dashboard.exports import ExportView, generate_export
 from atep.db.session import session_factory
 from atep.identity.permissions import PermissionName
@@ -46,14 +47,16 @@ async def authorized(websocket: WebSocket) -> bool:
 async def stream_dashboard(websocket: WebSocket, view: ExportView) -> None:
     acquired = False
     try:
-        async with asyncio.timeout(10):
-            if not await authorized(websocket):
-                return
         if connection_slots.locked():
             await websocket.close(code=1013, reason="Dashboard stream capacity reached")
             return
         await connection_slots.acquire()
         acquired = True
+        async with asyncio.timeout(10):
+            if not await admit_dashboard_handshake(websocket):
+                return
+            if not await authorized(websocket):
+                return
         await websocket.accept()
         for sequence in range(1, MAX_SNAPSHOTS + 1):
             async with asyncio.timeout(15):

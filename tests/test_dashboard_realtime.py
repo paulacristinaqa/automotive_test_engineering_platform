@@ -21,11 +21,46 @@ def socket() -> Any:
 
 
 def setup(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(realtime, "admit_dashboard_handshake", AsyncMock(return_value=True))
     context = MagicMock()
     context.__aenter__ = AsyncMock(return_value=object())
     context.__aexit__ = AsyncMock(return_value=False)
     monkeypatch.setattr(realtime, "session_factory", lambda: context)
     monkeypatch.setattr(realtime, "connection_slots", asyncio.Semaphore(1))
+
+
+@pytest.mark.asyncio
+async def test_admission_denial_precedes_authentication_and_releases_slot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    setup(monkeypatch)
+    monkeypatch.setattr(realtime, "admit_dashboard_handshake", AsyncMock(return_value=False))
+    auth = AsyncMock()
+    monkeypatch.setattr(realtime, "authorized", auth)
+    ws = socket()
+    await realtime.stream_dashboard(ws, "operations")
+    auth.assert_not_awaited()
+    ws.accept.assert_not_awaited()
+    ws.send_json.assert_not_awaited()
+    assert not realtime.connection_slots.locked()
+
+
+@pytest.mark.asyncio
+async def test_full_capacity_skips_admission_and_authentication(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    setup(monkeypatch)
+    admit = AsyncMock()
+    auth = AsyncMock()
+    monkeypatch.setattr(realtime, "admit_dashboard_handshake", admit)
+    monkeypatch.setattr(realtime, "authorized", auth)
+    await realtime.connection_slots.acquire()
+    ws = socket()
+    await realtime.stream_dashboard(ws, "operations")
+    admit.assert_not_awaited()
+    auth.assert_not_awaited()
+    assert realtime.connection_slots.locked()
+    assert ws.close.call_args.kwargs["code"] == 1013
 
 
 @pytest.mark.asyncio
