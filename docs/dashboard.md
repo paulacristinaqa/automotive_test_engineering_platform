@@ -1,5 +1,24 @@
 # Dashboard Foundation
 
+## X-6.6 native transport boundary and real Redis verification
+
+The current stream explicitly rejects every handshake containing an `Origin` header, including
+empty and `null` values, before reserving capacity or accessing Redis/authentication/database.
+This is a native-client-only contract, not an origin allowlist. Origin absence does not identify
+a trustworthy client: native clients can forge headers and must still pass JWT, RBAC and admission.
+HTTP CORS settings do not enable browser WebSocket support. Native clients must omit Origin.
+
+Real handshake integration verifies HTTP 403 for Origin-bearing requests even with a valid admin
+token, while the existing header-only connection still receives a snapshot. A separate Redis
+integration alternates two independent pools through all 30 allowed attempts, rejects attempt 31,
+verifies counter TTL and verifies recovery after expiration. Only a random test key has its TTL
+shortened; the production policy remains 60 seconds. This does not measure distributed load or
+simulate Redis outage (the latter is covered by unit tests).
+
+The disposable integration Redis port is bound only to `127.0.0.1:16379`, configurable through
+`ATEP_INTEGRATION_REDIS_PORT`. The test client uses `ATEP_INTEGRATION_REDIS_URL`; the Windows runner
+and CI set it automatically. Production Compose and client/database access boundaries are unchanged.
+
 ## X-6.5 handshake admission
 
 Streams reserve a worker slot before admission or database authentication. A dedicated Redis

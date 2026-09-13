@@ -83,6 +83,8 @@ services:
 
   redis:
     image: redis:7.4-alpine
+    ports:
+      - "127.0.0.1:${ATEP_INTEGRATION_REDIS_PORT:-16379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 2s

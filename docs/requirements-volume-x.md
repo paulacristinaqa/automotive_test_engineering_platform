@@ -1,5 +1,12 @@
 # Volume X Dashboard Requirements
 
+## X-6.6 native boundary and integration requirements
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-029 | The native stream shall reject any Origin header before admission, authentication and snapshot work. Header absence shall not bypass authentication. | Origin matrix unit tests and real HTTP 403 handshake integration |
+| DASH-NF-030 | Verify the shared handshake counter, quota rejection, bounded TTL and post-expiration recovery against real Redis without altering other peer counters. | `test_dashboard_admission_redis.py` |
+
 ## X-6.5 admission requirements
 
 | ID | Requirement | Evidence |

@@ -11,6 +11,7 @@ import httpx
 import pytest
 import websockets
 from websockets.exceptions import InvalidStatus
+from websockets.typing import Origin
 
 from tools.profile_dashboard_queries import profile_dashboard_queries
 
@@ -1629,6 +1630,13 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                 assert live_dashboard["snapshot"]["data"]["assessment"] == "not_assessed"
                 assert live_dashboard["refresh_interval_seconds"] == 30
                 assert live_dashboard["sequence"] == 1
+            for origin in ("https://dashboard.example", "null"):
+                with pytest.raises(InvalidStatus) as browser_denied:
+                    async with websockets.connect(
+                        dashboard_ws_url, additional_headers=admin_headers, origin=Origin(origin)
+                    ):
+                        pytest.fail("Native dashboard stream accepted a browser Origin")
+                assert browser_denied.value.response.status_code == 403
             for export_view in ("operations", "mobility", "evidence-readiness"):
                 exported = await client.get(
                     f"/api/v1/dashboard/exports/{export_view}", headers=admin_headers

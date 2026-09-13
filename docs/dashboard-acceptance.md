@@ -8,7 +8,7 @@ Backend tests do not establish graphical client acceptance or automotive safety 
 | Windows Python backend | Unit contracts, lint and types | Local automated suite |
 | Linux containers | Authenticated snapshot, forbidden role, exports and read-only queries | Docker integration suite |
 | Android/AAOS client | Header-based authentication, reconnect, stale indicator and permission loss | Not validated by backend tests |
-| Browser dashboard | Approved authentication design, origin protection, reconnect and expired-session behavior | Native WebSocket cannot set an Authorization header; unsupported until designed |
+| Browser dashboard | Approved authentication design, origin protection, reconnect and expired-session behavior | Current native endpoint explicitly rejects Origin; a separate browser authentication contract remains pending |
 | Trusted reverse proxy | Transport peer integrity, shared quota, TLS and resource limits | Deployment acceptance pending |
 
 Every supported client must distinguish server query time from vehicle measurement time, mark
@@ -27,5 +27,15 @@ ones. The limiter is always enabled, independently of the HTTP rate-limit config
 Before acceptance, a denial uses an ASGI close and may appear as HTTP 403 rather than a WebSocket
 1013 frame. Clients must not expect HTTP rate-limit headers. Never place access tokens in URLs.
 No browser workaround, new paid service, GPU workload or real vehicle command is introduced here.
+
+X-6.6 enforces this native-only boundary rather than implicitly relying on lack of browser header
+support. Every Origin value is rejected, including same-origin, empty and `null`; no browser origin
+is currently allowed. Origin is not authentication and header omission is not proof of client type.
+Native/AAOS clients must omit Origin and supply Authorization. Integration verifies real 403 denials
+and native snapshot success; it does not exercise a browser UI or certify Android compatibility.
+
+The Redis admission test uses two client pools, one random pseudonymous peer and 31 sequential
+attempts under a ten-second timeout. It checks TTL and recovery by shortening only the test key's
+TTL. This proves shared Redis counter behavior, not multi-process WebSocket capacity.
 
 X-6 remains in progress; this matrix defines gates, it does not claim they all passed.
