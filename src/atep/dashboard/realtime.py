@@ -9,6 +9,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from atep.core.config import get_settings
 from atep.core.security import InvalidTokenError, decode_access_token
 from atep.dashboard.admission import admit_dashboard_handshake
+from atep.dashboard.browser import browser_transport_allowed, receive_browser_token
 from atep.dashboard.exports import ExportView, generate_export
 from atep.db.session import session_factory
 from atep.identity.permissions import PermissionName
@@ -22,11 +23,12 @@ SEND_TIMEOUT_SECONDS = 5
 connection_slots = asyncio.Semaphore(16)
 
 
-async def authorized(websocket: WebSocket) -> bool:
-    scheme, _, token = websocket.headers.get("authorization", "").partition(" ")
-    if scheme.casefold() != "bearer" or not token:
-        await websocket.close(code=4401, reason="Authentication required")
-        return False
+async def authorized(websocket: WebSocket, token: str | None = None) -> bool:
+    if token is None:
+        scheme, _, token = websocket.headers.get("authorization", "").partition(" ")
+        if scheme.casefold() != "bearer" or not token:
+            await websocket.close(code=4401, reason="Authentication required")
+            return False
     try:
         user_id = decode_access_token(token, get_settings())
     except InvalidTokenError:
@@ -45,11 +47,28 @@ async def authorized(websocket: WebSocket) -> bool:
 
 @router.websocket("/stream/{view}")
 async def stream_dashboard(websocket: WebSocket, view: ExportView) -> None:
+    await run_dashboard_stream(websocket, view, browser=False)
+
+
+@router.websocket("/browser-stream/{view}")
+async def browser_dashboard(websocket: WebSocket, view: ExportView) -> None:
+    await run_dashboard_stream(websocket, view, browser=True)
+
+
+async def run_dashboard_stream(websocket: WebSocket, view: ExportView, *, browser: bool) -> None:
     acquired = False
+    token: str | None = None
+
+    async def check_access() -> bool:
+        return await authorized(websocket, token) if browser else await authorized(websocket)
+
     try:
         # This endpoint is native/header-only. Browser authentication is a separate contract.
         # Presence (including empty or "null") is denied; absence is not authentication.
-        if "origin" in websocket.headers:
+        if browser and not browser_transport_allowed(websocket):
+            await websocket.close(code=1008, reason="Dashboard browser transport denied")
+            return
+        if not browser and "origin" in websocket.headers:
             await websocket.close(code=1008, reason="Browser dashboard stream is not supported")
             return
         if connection_slots.locked():
@@ -60,17 +79,23 @@ async def stream_dashboard(websocket: WebSocket, view: ExportView) -> None:
         async with asyncio.timeout(10):
             if not await admit_dashboard_handshake(websocket):
                 return
-            if not await authorized(websocket):
+            if browser:
+                await websocket.accept()
+                token = await receive_browser_token(websocket)
+                if token is None:
+                    return
+            if not await check_access():
                 return
-        await websocket.accept()
+        if not browser:
+            await websocket.accept()
         for sequence in range(1, MAX_SNAPSHOTS + 1):
             async with asyncio.timeout(15):
-                if not await authorized(websocket):
+                if not await check_access():
                     return
                 async with session_factory() as session:
                     payload = await generate_export(session, view=view, window_hours=24)
                 # Do not send a snapshot if access changed while the queries were executing.
-                if not await authorized(websocket):
+                if not await check_access():
                     return
             observed_at = datetime.now(UTC)
             frame = {

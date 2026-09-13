@@ -1,5 +1,16 @@
 # Volume X Dashboard Requirements
 
+## X-6.7 browser authentication requirements
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-F-020 | Provide a separate browser snapshot route using the versioned first-message authentication contract, preserving native behavior. | Browser stream integration and shared runner |
+| DASH-NF-031 | Default browser access to disabled; require exactly one allowlisted Origin and reject query/header credential alternatives. | Configuration/transport tests |
+| DASH-NF-032 | Require a text authentication frame of at most 4096 bytes within five seconds, with no snapshot before JWT and live RBAC checks. | Parser, timeout, authentication and integration tests |
+| DASH-NF-033 | Share worker slots and Redis quota with native streams; release slots on failure/cancellation and revalidate the token before/after snapshot queries. | Shared runner and lifecycle tests |
+
+Protocol and deployment limitations are documented in `dashboard-browser-authentication.md`.
+
 ## X-6.6 native boundary and integration requirements
 
 | ID | Requirement | Evidence |

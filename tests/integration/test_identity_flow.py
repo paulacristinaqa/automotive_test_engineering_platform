@@ -10,7 +10,7 @@ import asyncpg  # type: ignore[import-untyped]
 import httpx
 import pytest
 import websockets
-from websockets.exceptions import InvalidStatus
+from websockets.exceptions import ConnectionClosed, InvalidStatus
 from websockets.typing import Origin
 
 from tools.profile_dashboard_queries import profile_dashboard_queries
@@ -1637,6 +1637,41 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                     ):
                         pytest.fail("Native dashboard stream accepted a browser Origin")
                 assert browser_denied.value.response.status_code == 403
+            browser_ws_url = dashboard_ws_url.replace("/stream/", "/browser-stream/")
+            async with websockets.connect(
+                browser_ws_url, origin=Origin("http://localhost:8080")
+            ) as browser_stream:
+                await browser_stream.send(
+                    json.dumps(
+                        {
+                            "type": "atep.dashboard.authenticate.v1",
+                            "access_token": admin_headers["Authorization"].removeprefix("Bearer "),
+                        }
+                    )
+                )
+                browser_snapshot = await wait_for_stream_event(
+                    browser_stream, "atep.dashboard.snapshot.v1"
+                )
+                assert browser_snapshot["sequence"] == 1
+                assert browser_snapshot["snapshot"]["data"]["assessment"] == "not_assessed"
+            with pytest.raises(InvalidStatus) as wrong_origin:
+                async with websockets.connect(
+                    browser_ws_url, origin=Origin("https://other.example")
+                ):
+                    pytest.fail("Browser stream accepted an unlisted origin")
+            assert wrong_origin.value.response.status_code == 403
+            async with websockets.connect(
+                browser_ws_url, origin=Origin("http://localhost:8080")
+            ) as invalid_browser:
+                await invalid_browser.send(
+                    json.dumps(
+                        {"type": "atep.dashboard.authenticate.v1", "access_token": "invalid"}
+                    )
+                )
+                with pytest.raises(ConnectionClosed) as invalid_auth:
+                    await invalid_browser.recv()
+                assert invalid_auth.value.rcvd is not None
+                assert invalid_auth.value.rcvd.code == 4401
             for export_view in ("operations", "mobility", "evidence-readiness"):
                 exported = await client.get(
                     f"/api/v1/dashboard/exports/{export_view}", headers=admin_headers
@@ -2130,6 +2165,21 @@ async def test_administrator_identity_event_and_audit_flow() -> None:
                 async with websockets.connect(dashboard_ws_url, additional_headers=user_headers):
                     pytest.fail("Dashboard stream accepted an unauthorized user")
             assert stream_denied.value.response.status_code == 403
+            async with websockets.connect(
+                browser_ws_url, origin=Origin("http://localhost:8080")
+            ) as forbidden_browser:
+                await forbidden_browser.send(
+                    json.dumps(
+                        {
+                            "type": "atep.dashboard.authenticate.v1",
+                            "access_token": user_headers["Authorization"].removeprefix("Bearer "),
+                        }
+                    )
+                )
+                with pytest.raises(ConnectionClosed) as forbidden_auth:
+                    await forbidden_browser.recv()
+                assert forbidden_auth.value.rcvd is not None
+                assert forbidden_auth.value.rcvd.code == 4403
             quality_trends_denied = await expected_error(
                 client,
                 "GET",
