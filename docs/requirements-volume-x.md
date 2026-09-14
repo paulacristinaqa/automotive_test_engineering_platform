@@ -1,5 +1,12 @@
 # Volume X Dashboard Requirements
 
+## X-7.1 browser acceptance requirements
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-034 | Record real browser-engine evidence for authenticated snapshots, invalid/late authentication, read-only enforcement and native Origin denial. | `dashboard-browser-acceptance.md` and local sanitized report |
+| DASH-NF-035 | Keep the optional acceptance fixture loopback-only, bounded, disposable and separate from production login; retain no credentials or snapshots in its report. | Fixture origin/schema tests, runner cleanup and report inspection |
+
 ## X-6.7 browser authentication requirements
 
 | ID | Requirement | Evidence |

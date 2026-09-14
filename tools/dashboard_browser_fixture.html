@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ATEP — Browser acceptance fixture</title>
+<style>
+body{font:18px system-ui;max-width:850px;margin:48px auto;padding:0 24px;background:#102033;color:#e5eef7}
+button{font:inherit;padding:12px 20px;background:#9de8cb;border:0;border-radius:6px;color:#102033;cursor:pointer}
+pre{white-space:pre-wrap;padding:20px;background:#172c44;border-radius:8px;font-size:15px}
+</style>
+<h1>ATEP browser acceptance</h1>
+<p>Disposable protocol fixture — not the production dashboard.</p>
+<p>Uses a test-only administrator token. No credentials or snapshots are saved in this page.</p>
+<button id="run">Run five sequential checks</button>
+<p id="status" role="status">Ready. No checks have run.</p>
+<pre id="report">Awaiting browser evidence.</pre>
+<script>
+"use strict";
+const base = "ws://localhost:18000/api/v1/dashboard/";
+const authenticate = token => JSON.stringify({type:"atep.dashboard.authenticate.v1",access_token:token});
+function probe({token, expected, native=false, readonly=false}) {
+  return new Promise(resolve => {
+    let snapshot = false, settled = false;
+    const socket = new WebSocket(base + (native ? "stream/" : "browser-stream/") + "evidence-readiness");
+    const finish = result => { if(settled) return; settled=true; clearTimeout(timer); socket.close(); resolve(result); };
+    const timer = setTimeout(() => finish(false), 9000);
+    socket.onopen = () => {if(token !== null) socket.send(authenticate(token));};
+    socket.onmessage = event => {
+      try {
+        const frame = JSON.parse(event.data);
+        snapshot = frame.type === "atep.dashboard.snapshot.v1" && frame.sequence === 1 &&
+          frame.refresh_interval_seconds === 30 && frame.freshness_basis === "server_query_not_vehicle_measurement" &&
+          frame.snapshot.view === "evidence-readiness";
+        if(readonly && snapshot) socket.send("refresh");
+        else finish(expected === "snapshot" && snapshot);
+      } catch {finish(false);}
+    };
+    socket.onerror = () => {}; // Native Origin denial is an expected network rejection.
+    socket.onclose = event => finish(event.code === expected && (readonly ? snapshot : !snapshot));
+  });
+}
+document.querySelector("#run").onclick = async () => {
+  document.querySelector("#run").disabled = true;
+  document.querySelector("#status").textContent = "Running sequential checks…";
+  let token;
+  try {
+    const response = await fetch("/fixture-token", {method:"POST", cache:"no-store"});
+    if(!response.ok) throw new Error("Fixture login unavailable");
+    token = (await response.json()).access_token;
+    const report = {user_agent:navigator.userAgent};
+    const cases = [
+      ["browser_snapshot", {token,expected:"snapshot"}],
+      ["invalid_token", {token:"invalid",expected:4401}],
+      ["authentication_timeout", {token:null,expected:4401}],
+      ["read_only", {token,expected:1008,readonly:true}],
+      ["native_origin_denial", {token:null,expected:1006,native:true}]
+    ];
+    for(const [name, options] of cases) {
+      report[name] = await probe(options) ? "pass" : "fail";
+      document.querySelector("#report").textContent = JSON.stringify(report,null,2);
+    }
+    token = undefined;
+    const saved = await fetch("/result", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(report)});
+    if(!saved.ok) throw new Error("Evidence recording failed");
+    document.querySelector("#status").textContent = Object.values(report).includes("fail") ? "FAILED" : "PASSED — five checks";
+  } catch {
+    document.querySelector("#status").textContent = "FAILED — fixture unavailable; no credentials displayed";
+  } finally {token=undefined;}
+};
+</script>
+</html>

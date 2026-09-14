@@ -1,6 +1,20 @@
 # ATEP Volume X Dashboard Engineering Workbook
 
-Version 0.7.0 records X-1 through X-5 and X-6.1 through X-6.7 backend implementation.
+Version 0.7.1 records X-1 through X-6 backend implementation and X-7.1 browser protocol evidence.
+
+## X-7.1 — Real browser protocol acceptance
+
+Added an optional loopback-only acceptance fixture and Windows runner switch. Real headless Chrome
+passed five sequential scenarios on 2026-09-14: snapshot, invalid token, missing-auth timeout,
+read-only command rejection and native Origin denial. `dashboard-browser-acceptance.md` records
+browser/tool versions, reproduction, resource samples and limitations. The browser automation
+skills required actual page inspection and isolated-session cleanup, both performed.
+
+The regular integration suite passed both tests in 19.37 seconds and the restore drill passed.
+Final fast verification: 594 tests passed, two integration tests deselected; Ruff and mypy passed.
+Docker services and the isolated browser were closed. This fixture uses a disposable seeded token;
+end-user login, client reconnect/staleness, AAOS and deployment acceptance remain pending.
+Markdown is current; DOCX snapshots are unchanged. No paid services or emulator were added.
 
 ## X-6.7 — Opt-in browser authentication
 
