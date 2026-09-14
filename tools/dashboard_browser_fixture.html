@@ -10,11 +10,13 @@ pre{white-space:pre-wrap;padding:20px;background:#172c44;border-radius:8px;font-
 </style>
 <h1>ATEP browser acceptance</h1>
 <p>Disposable protocol fixture — not the production dashboard.</p>
-<p>Uses a test-only administrator token. No credentials or snapshots are saved in this page.</p>
-<button id="run">Run five sequential checks</button>
+<p>Uses a test-only administrator token. No credentials or snapshots are persisted or included in the report.</p>
+<button id="run">Run eight sequential checks (~40 seconds)</button>
 <p id="status" role="status">Ready. No checks have run.</p>
+<p id="client-state" role="status">Client lifecycle: not started.</p>
 <pre id="report">Awaiting browser evidence.</pre>
-<script>
+<script type="module">
+import {DashboardStreamClient} from "/stream-client.mjs";
 "use strict";
 const base = "ws://localhost:18000/api/v1/dashboard/";
 const authenticate = token => JSON.stringify({type:"atep.dashboard.authenticate.v1",access_token:token});
@@ -59,13 +61,59 @@ document.querySelector("#run").onclick = async () => {
       report[name] = await probe(options) ? "pass" : "fail";
       document.querySelector("#report").textContent = JSON.stringify(report,null,2);
     }
+    const lifecycle = await lifecycleProbe(token);
+    Object.assign(report, lifecycle);
+    report.client_auth_stop = await authStopProbe() ? "pass" : "fail";
+    document.querySelector("#report").textContent = JSON.stringify(report,null,2);
     token = undefined;
     const saved = await fetch("/result", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(report)});
     if(!saved.ok) throw new Error("Evidence recording failed");
-    document.querySelector("#status").textContent = Object.values(report).includes("fail") ? "FAILED" : "PASSED — five checks";
+    document.querySelector("#status").textContent = Object.values(report).includes("fail") ? "FAILED" : "PASSED — eight checks";
   } catch {
     document.querySelector("#status").textContent = "FAILED — fixture unavailable; no credentials displayed";
   } finally {token=undefined;}
 };
+
+function lifecycleProbe(token) {
+  return new Promise(resolve => {
+    let socket, received = 0, disconnectedAt = null, stale = false, finished = false;
+    const finish = reconnect => {
+      if(finished) return;
+      finished=true; clearTimeout(deadline); client.stop();
+      resolve({client_stale_disconnect:stale ? "pass" : "fail",client_reconnect:reconnect ? "pass" : "fail"});
+    };
+    const client = new DashboardStreamClient({
+      url:base+"browser-stream/evidence-readiness",random:()=>0,
+      socketFactory:url=>{socket=new WebSocket(url);return socket;},
+      onState:state=>{
+        document.querySelector("#client-state").textContent = `Client: ${state.status}; server snapshot stale: ${state.stale}; retained: ${Boolean(state.snapshot)}`;
+        if(finished) return;
+        if(state.status === "reconnecting") {
+          stale = state.stale && Boolean(state.snapshot) && state.retryAfterMs >= 30000;
+          disconnectedAt=performance.now();
+        }
+        if(state.status === "live") {
+          received++;
+          if(received===1) socket.close(); // Controlled real-browser transport closure, not a network partition.
+          else finish(stale && disconnectedAt!==null && performance.now()-disconnectedAt>=30000);
+        }
+      }
+    });
+    const deadline=setTimeout(()=>finish(false),50000);
+    client.start(token);
+  });
+}
+
+function authStopProbe() {
+  return new Promise(resolve=>{
+    let finished=false;
+    const finish=result=>{if(finished)return;finished=true;clearTimeout(deadline);client.stop();resolve(result);};
+    const client=new DashboardStreamClient({url:base+"browser-stream/evidence-readiness",onState:state=>{
+      if(state.status==="auth_required") finish(state.snapshot===null && state.retryAfterMs===null);
+    }});
+    const deadline=setTimeout(()=>finish(false),9000);
+    client.start("invalid");
+  });
+}
 </script>
 </html>

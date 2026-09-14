@@ -14,12 +14,16 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 ORIGIN = "http://localhost:8080"
+CLIENT_MODULE = Path(__file__).resolve().parent.parent / "clients/dashboard/stream-client.mjs"
 CASE_NAMES = (
     "browser_snapshot",
     "invalid_token",
     "authentication_timeout",
     "read_only",
     "native_origin_denial",
+    "client_stale_disconnect",
+    "client_reconnect",
+    "client_auth_stop",
 )
 
 
@@ -31,6 +35,9 @@ class BrowserResult(BaseModel):
     authentication_timeout: Literal["pass", "fail"]
     read_only: Literal["pass", "fail"]
     native_origin_denial: Literal["pass", "fail"]
+    client_stale_disconnect: Literal["pass", "fail"]
+    client_reconnect: Literal["pass", "fail"]
+    client_auth_stop: Literal["pass", "fail"]
 
 
 def require_local_origin(request: Request) -> None:
@@ -41,6 +48,14 @@ def require_local_origin(request: Request) -> None:
 def create_fixture(done: asyncio.Event) -> FastAPI:
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     app.state.result = None
+
+    @app.get("/stream-client.mjs")
+    async def stream_client() -> FileResponse:
+        return FileResponse(
+            CLIENT_MODULE,
+            media_type="text/javascript",
+            headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+        )
 
     @app.get("/")
     async def index() -> FileResponse:
@@ -102,7 +117,7 @@ async def run() -> int:
         return 1
     passed = all(getattr(payload, name) == "pass" for name in CASE_NAMES)
     report = {
-        "schema_version": "dashboard-browser-acceptance-v1",
+        "schema_version": "dashboard-browser-acceptance-v2",
         "observed_at": datetime.now(UTC).isoformat(),
         "status": "passed" if passed else "failed",
         "fixture": "disposable_admin_token_not_end_user_login",

@@ -1,6 +1,23 @@
 # ATEP Volume X Dashboard Engineering Workbook
 
-Version 0.7.1 records X-1 through X-6 backend implementation and X-7.1 browser protocol evidence.
+Version 0.7.2 records X-1 through X-6 backend implementation and X-7.1/X-7.2 browser evidence.
+
+## X-7.2 — Reconnect and stale snapshot lifecycle
+
+Implemented a reusable, dependency-free browser stream module with private in-memory credentials,
+bounded retry, stale snapshot indication, terminal permission/authentication handling and timer
+cleanup. The same module is served by the acceptance fixture. Virtual-clock tests keep long
+retry/session scenarios lightweight; CI now includes the Node client tests.
+
+Eight real Chromium fixture checks passed at 2026-09-14 08:29:04 UTC, including a controlled
+disconnect, visible stale retained snapshot, reconnect after 30 real seconds and auth-stop.
+`dashboard-client-lifecycle.md` records design, test objectives, resource samples and limitations.
+Browser skills guided actual page inspection at the initial, reconnecting and completed states.
+The browser was closed. Real product login/UI, AAOS and deployment acceptance remain pending.
+Verification: 594 Python tests, 14 Node client tests and both integration tests passed; Ruff and
+mypy passed. Integration took 19.02 seconds; the restore drill passed and temporary services
+were removed. Browser evidence is local, while CI runs the deterministic Node suite.
+Markdown is current; DOCX snapshots are unchanged. No paid infrastructure was introduced.
 
 ## X-7.1 — Real browser protocol acceptance
 

@@ -1,5 +1,13 @@
 # Volume X Dashboard Requirements
 
+## X-7.2 client lifecycle requirements
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-F-021 | Expose server-snapshot liveness/staleness and restore live state on a valid reconnected stream without implying vehicle freshness. | Client clock tests and Chromium fixture |
+| DASH-NF-036 | Bound reconnect delay to a 30-second minimum, 120-second cap and five consecutive retries, with non-negative jitter. | Virtual-clock Node tests |
+| DASH-NF-037 | Clear token/snapshot and stop retrying on auth/permission rejection or explicit stop; ignore retired socket callbacks. | Client lifecycle tests and browser authentication-stop case |
+
 ## X-7.1 browser acceptance requirements
 
 | ID | Requirement | Evidence |
