@@ -1,7 +1,22 @@
 # ATEP Volume X Dashboard Engineering Workbook
 
-Version 0.7.4 records backend implementation, browser transport/session evidence and the
-X-7.4 same-origin login shell. Full cross-platform/deployment acceptance remains pending.
+Version 0.7.5 records backend implementation, the same-origin shell and its lifecycle acceptance
+work. Full cross-platform/deployment acceptance remains pending.
+
+## X-7.5 — Real-shell lifecycle and keyboard acceptance
+
+Extended the optional Windows browser runner with tab traversal, Enter submission, focus checks,
+live role removal, controlled socket disconnect/reconnect and real-time local expiration.
+The initial two-minute test configuration was rejected by the existing five-minute minimum;
+the experiment was removed, preserving authentication policy and using real waiting instead.
+`dashboard-shell-lifecycle.md` records test objectives, instrumentation boundaries and execution
+status. No production client hooks, dependencies or paid services are introduced. Browser skills
+are used for real-page inspection and isolated-browser cleanup. DOCX remains unchanged.
+All added browser scenarios passed on 2026-09-14, including a minimum 30-second reconnect and
+real local expiry of the existing five-minute profile. Visual inspection confirmed stale-data and
+expired-session states. Local checks passed: 597 Python tests, 28 Node tests, Ruff and mypy;
+Docker integration passed both tests in 19.00 seconds. Responsive and broader accessibility
+verification remain next; neither complete accessibility conformance nor AAOS acceptance is claimed.
 
 ## X-7.4 — Same-origin login/logout shell
 

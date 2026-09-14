@@ -1,6 +1,6 @@
 # Called only by the disposable integration runner; never use personal credentials.
 [CmdletBinding()]
-param()
+param([switch]$Lifecycle)
 $ErrorActionPreference = "Stop"
 if ($env:ATEP_INTEGRATION_API_URL -ne "http://localhost:18000" -or
     -not $env:ATEP_INTEGRATION_ADMIN_PASSWORD) { throw "Disposable runner environment required." }
@@ -15,7 +15,7 @@ try {
         -ContentType "application/x-www-form-urlencoded" -Body @{
             username = $env:ATEP_INTEGRATION_ADMIN_EMAIL; password = $env:ATEP_INTEGRATION_ADMIN_PASSWORD
         }
-    $null = Invoke-RestMethod -Method Post -Uri "$($env:ATEP_INTEGRATION_API_URL)/api/v1/users" `
+    $deniedUser = Invoke-RestMethod -Method Post -Uri "$($env:ATEP_INTEGRATION_API_URL)/api/v1/users" `
         -Headers @{ Authorization = "Bearer $($pair.access_token)" } -ContentType "application/json" `
         -Body (@{ email = $deniedEmail; password = $deniedPassword; display_name = "Disposable no-role user" } | ConvertTo-Json)
     $pair = $null
@@ -33,6 +33,14 @@ function Assert-Browser([string]$Expression) {
     $result = Invoke-Browser @("eval", $Expression)
     if ($result.Trim() -ne "true") { throw "Browser assertion failed." }
 }
+function Wait-BrowserCondition([string]$Expression, [int]$Seconds) {
+    $deadline = [DateTime]::UtcNow.AddSeconds($Seconds)
+    do {
+        if ((Invoke-Browser @("eval", $Expression)).Trim() -eq "true") { return }
+        Start-Sleep -Seconds 2
+    } while ([DateTime]::UtcNow -lt $deadline)
+    throw "Browser lifecycle condition timed out."
+}
 
 try {
     & npm exec --yes --package=agent-browser@0.37.1 -- agent-browser `
@@ -42,6 +50,15 @@ try {
     $null = Invoke-Browser @("screenshot", "--full", "dr-evidence/dashboard-x74-login.png")
     Assert-Browser "document.title.includes('ATEP') && !!document.querySelector('#login-form')"
     Write-Host "Login shell loaded and controls verified."
+    if ($Lifecycle) {
+        # Keyboard focus sequence, not a claim of complete accessibility conformance.
+        $null = Invoke-Browser @("click", "#email")
+        foreach ($expected in @("password", "view", "sign-in")) {
+            $null = Invoke-Browser @("press", "Tab")
+            Assert-Browser "document.activeElement.id === '$expected'"
+        }
+        Write-Host "Keyboard tab order passed."
+    }
 
     $null = Invoke-Browser @("fill", "#email", $env:ATEP_INTEGRATION_ADMIN_EMAIL)
     $null = Invoke-Browser @("fill", "#password", "deliberately-invalid-test-password")
@@ -74,6 +91,57 @@ try {
     $null = Invoke-Browser @("snapshot", "-i")
     Assert-Browser "document.querySelector('#session-status').textContent.includes('does not have dashboard access') && document.querySelector('#snapshot').hidden && document.querySelector('#password').value === ''"
     Write-Host "User without dashboard permission was denied and local data cleared."
+    if ($Lifecycle) {
+        # Grant and remove a role only on the newly created disposable user.
+        try {
+            $pair = Invoke-RestMethod -Method Post -TimeoutSec 10 -Uri "$($env:ATEP_INTEGRATION_API_URL)/api/v1/auth/token" `
+                -ContentType "application/x-www-form-urlencoded" -Body @{
+                    username = $env:ATEP_INTEGRATION_ADMIN_EMAIL; password = $env:ATEP_INTEGRATION_ADMIN_PASSWORD
+                }
+            $headers = @{ Authorization = "Bearer $($pair.access_token)" }
+            $roles = Invoke-RestMethod -TimeoutSec 10 -Uri "$($env:ATEP_INTEGRATION_API_URL)/api/v1/roles" -Headers $headers
+            $role = $roles.items | Where-Object { $_.permissions -contains "dashboard:read" } | Select-Object -First 1
+            if (-not $role) { throw "No dashboard role available" }
+            $roleUrl = "$($env:ATEP_INTEGRATION_API_URL)/api/v1/users/$($deniedUser.id)/roles/$($role.id)"
+            $null = Invoke-RestMethod -Method Put -TimeoutSec 10 -Uri $roleUrl -Headers $headers
+        }
+        catch { throw "Could not prepare disposable role-removal fixture." }
+        $null = Invoke-Browser @("fill", "#email", $deniedEmail)
+        $null = Invoke-Browser @("fill", "#password", $deniedPassword)
+        $null = Invoke-Browser @("press", "Enter")
+        $null = Invoke-Browser @("wait", "#snapshot:not([hidden])")
+        $null = Invoke-Browser @("snapshot", "-i")
+        Assert-Browser "document.activeElement.id === 'sign-out'"
+        try { $null = Invoke-RestMethod -Method Delete -TimeoutSec 10 -Uri $roleUrl -Headers $headers }
+        catch { throw "Could not remove disposable role." }
+        $headers = $null; $pair = $null
+        Write-Host "Waiting for the next server permission check (up to 45 seconds)."
+        Wait-BrowserCondition "document.querySelector('#session-status').textContent.includes('does not have dashboard access')" 45
+        Assert-Browser "document.querySelector('#snapshot').hidden && document.querySelector('#snapshot').textContent === '' && document.activeElement.id === 'email'"
+        Write-Host "Live permission loss cleared the snapshot and restored login focus."
+
+        # Test-only socket observation. No tokens or payloads are recorded; no production hook.
+        $null = Invoke-Browser @("eval", "window.__opens=0; window.__NativeSocket=window.WebSocket; window.WebSocket=class extends window.__NativeSocket { constructor(...args) { super(...args); window.__testSocket=this; this.addEventListener('open',()=>{window.__opens++;window.__openedAt=Date.now()}); } }; true")
+        $null = Invoke-Browser @("fill", "#email", $env:ATEP_INTEGRATION_ADMIN_EMAIL)
+        $null = Invoke-Browser @("fill", "#password", $env:ATEP_INTEGRATION_ADMIN_PASSWORD)
+        $null = Invoke-Browser @("press", "Enter")
+        $null = Invoke-Browser @("wait", "#snapshot:not([hidden])")
+        $null = Invoke-Browser @("snapshot", "-i")
+        $null = Invoke-Browser @("eval", "window.__closedAt=Date.now(); window.__testSocket.close(); true")
+        Wait-BrowserCondition "document.querySelector('#freshness').textContent === 'Stale snapshot'" 10
+        Assert-Browser "!document.querySelector('#snapshot').hidden && window.__opens === 1"
+        $null = Invoke-Browser @("screenshot", "--full", "dr-evidence/dashboard-x75-stale.png")
+        Write-Host "Controlled disconnect retained stale data; waiting for bounded reconnect."
+        Wait-BrowserCondition "window.__opens === 2 && document.querySelector('#freshness').textContent === 'Current server snapshot'" 50
+        Assert-Browser "window.__openedAt-window.__closedAt >= 30000"
+        Write-Host "Reconnect restored a live snapshot after at least 30 real seconds."
+        Write-Host "Waiting for real client session expiration; no clock acceleration."
+        Wait-BrowserCondition "document.querySelector('#session-status').textContent.includes('session expired')" 310
+        Assert-Browser "document.querySelector('#snapshot').hidden && document.querySelector('#snapshot').textContent === '' && document.activeElement.id === 'email' && localStorage.length === 0 && sessionStorage.length === 0"
+        $null = Invoke-Browser @("screenshot", "--full", "dr-evidence/dashboard-x75-expired.png")
+        $null = Invoke-Browser @("eval", "window.WebSocket=window.__NativeSocket; delete window.__testSocket; true")
+        Write-Host "Real local session expiration cleared data and restored login focus."
+    }
 }
 finally {
     $null = Invoke-Browser @("close")
