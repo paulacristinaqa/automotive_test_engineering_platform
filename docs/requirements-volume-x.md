@@ -1,5 +1,13 @@
 # Volume X Dashboard Requirements
 
+## X-7.3 session controller requirements
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-F-022 | Authenticate using the existing same-origin form contract and connect the read-only stream without persistent browser credentials. | Session Node tests; UI acceptance pending |
+| DASH-NF-038 | Bound requests, suppress duplicate submissions and prevent cancelled or expired sessions from restarting transport. | Virtual-clock and race tests |
+| DASH-NF-039 | Clear local snapshots before logout; distinguish confirmed revocation from offline uncertainty; never expose credentials in public state. | Logout and state tests |
+
 ## X-7.2 client lifecycle requirements
 
 | ID | Requirement | Evidence |

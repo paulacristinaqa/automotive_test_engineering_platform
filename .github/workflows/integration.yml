@@ -23,7 +23,7 @@ jobs:
           python -m pip install --no-deps --no-build-isolation -e .
       - name: Run fast quality gates
         run: |
-          node --test tests/browser/stream-client.test.mjs
+          node --test tests/browser/stream-client.test.mjs tests/browser/session-client.test.mjs
           python -m pytest
           python -m ruff check .
           python -m mypy src tests
