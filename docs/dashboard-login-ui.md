@@ -16,6 +16,9 @@ Responses use no-store, nosniff, no-referrer, frame denial and a restrictive CSP
 and connections are same-origin, while inline scripts, framing and native form submission are
 blocked. Login is handled by JavaScript; a script failure must not send passwords through a GET
 query. Snapshot content is rendered with `textContent`, never HTML interpretation.
+PR security scanning flagged the original path join even after allowlist validation. Asset paths
+now come from an explicit constant-path lookup; request values are never joined to filesystem paths.
+The focused asset tests, Ruff and mypy passed after this change.
 
 Passwords are cleared synchronously on submission. The authenticated email is cleared from the
 input, tokens stay in the existing private-memory controllers, and local/session storage is unused.

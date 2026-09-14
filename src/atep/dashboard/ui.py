@@ -20,6 +20,13 @@ FILES = {
     "session-client.mjs": "text/javascript",
     "stream-client.mjs": "text/javascript",
 }
+ASSET_PATHS = {
+    "index.html": ASSETS / "index.html",
+    "dashboard.css": ASSETS / "dashboard.css",
+    "dashboard.mjs": ASSETS / "dashboard.mjs",
+    "session-client.mjs": ASSETS / "session-client.mjs",
+    "stream-client.mjs": ASSETS / "stream-client.mjs",
+}
 HEADERS = {
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
@@ -36,7 +43,7 @@ HEADERS = {
 def asset(name: str, settings: Settings) -> FileResponse:
     if not settings.dashboard_ui_enabled or name not in FILES:
         raise HTTPException(404, "Not found")
-    return FileResponse(ASSETS / name, media_type=FILES[name], headers=HEADERS)
+    return FileResponse(ASSET_PATHS[name], media_type=FILES[name], headers=HEADERS)
 
 
 @router.get("/dashboard/")
