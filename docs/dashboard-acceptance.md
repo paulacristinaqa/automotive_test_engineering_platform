@@ -8,7 +8,7 @@ Backend tests do not establish graphical client acceptance or automotive safety 
 | Windows Python backend | Unit contracts, lint and types | Local automated suite |
 | Linux containers | Authenticated snapshot, forbidden role, exports and read-only queries | Docker integration suite |
 | Android/AAOS client | Header-based authentication, reconnect, stale indicator and permission loss | Not validated by backend tests |
-| Browser dashboard | Actual browser login/stream, origin protection, reconnect and expired-session behavior | X-7.2 real client fixture passed eight checks including reconnect/stale display; end-user login/product UI pending |
+| Browser dashboard | Actual browser login/stream, origin protection, reconnect and expired-session behavior | X-7.2 fixture reconnect/stale evidence; X-7.4 real form login/logout/no-role shell evidence; final-shell lifecycle acceptance pending |
 | Trusted reverse proxy | Transport peer integrity, shared quota, TLS and resource limits | Deployment acceptance pending |
 
 Every supported client must distinguish server query time from vehicle measurement time, mark

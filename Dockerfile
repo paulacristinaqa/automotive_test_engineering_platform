@@ -15,6 +15,7 @@ WORKDIR /app
 
 COPY pyproject.toml README.md requirements.lock ./
 COPY src ./src
+COPY clients/dashboard ./clients/dashboard
 RUN pip install --no-cache-dir --require-hashes -r requirements.lock \
     && pip install --no-cache-dir --no-deps --no-build-isolation .
 

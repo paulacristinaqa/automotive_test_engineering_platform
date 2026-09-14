@@ -1,5 +1,13 @@
 # Volume X Dashboard Requirements
 
+## X-7.4 login shell requirements
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-F-023 | Provide a same-origin login/logout shell with view selection, aggregate snapshot and explicit freshness state. | Chrome form-login and snapshot scenario |
+| DASH-NF-040 | Disable the shell by default, serve only packaged allowlisted assets and apply restrictive response headers. | Python asset tests and Docker-installed wheel |
+| DASH-NF-041 | Clear password inputs and rendered data on appropriate lifecycle transitions; render server values as text; deny no-role users. | Browser invalid-login/logout/no-role checks and session tests |
+
 ## X-7.3 session controller requirements
 
 | ID | Requirement | Evidence |

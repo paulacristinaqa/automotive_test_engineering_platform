@@ -1,7 +1,21 @@
 # ATEP Volume X Dashboard Engineering Workbook
 
-Version 0.7.3 records X-1 through X-6 backend implementation, X-7.1/X-7.2 browser evidence,
-and the X-7.3 session foundation (end-user login acceptance still pending).
+Version 0.7.4 records backend implementation, browser transport/session evidence and the
+X-7.4 same-origin login shell. Full cross-platform/deployment acceptance remains pending.
+
+## X-7.4 — Same-origin login/logout shell
+
+Implemented opt-in packaged assets, restrictive headers, accessible form/status markup and
+text-only aggregate rendering. Password fields are cleared on submission; login, local cleanup,
+remote logout and no-role rejection use the existing identity/stream contracts.
+`dashboard-login-ui.md` records configuration, test objectives, resource samples and limitations.
+Browser verification skills required real page inspection; inspection exposed and guided correction
+of a pending-access message that remained after a successful snapshot. The Windows automation's
+initial output-capture hang was corrected without changing authentication policy.
+Local verification: 597 Python tests and 28 Node tests passed; Ruff and mypy passed. Real-browser
+login/logout/no-role checks passed. Further shell lifecycle, AAOS and deployment acceptance remain
+planned; this is an engineering JSON viewer, not the final KPI interface. No paid services added.
+English Markdown is current; DOCX snapshots remain unchanged.
 
 ## X-7.3 — In-memory login/session foundation
 

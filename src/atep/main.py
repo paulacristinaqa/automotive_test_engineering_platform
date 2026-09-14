@@ -26,6 +26,7 @@ from atep.core.rate_limit import api_rate_limit
 from atep.cross_platform_automation.router import router as cross_platform_automation_router
 from atep.dashboard.realtime import router as dashboard_websocket_router
 from atep.dashboard.router import router as dashboard_router
+from atep.dashboard.ui import router as dashboard_ui_router
 from atep.db.session import session_factory
 from atep.diagnostics.router import router as diagnostics_router
 from atep.ecus.router import profiles_router as ecu_profiles_router
@@ -113,6 +114,7 @@ if settings.metrics_enabled:
 
 
 app.include_router(health_router)
+app.include_router(dashboard_ui_router)
 rate_limited = [Depends(api_rate_limit)]
 app.include_router(identity_router, prefix="/api/v1", dependencies=rate_limited)
 app.include_router(users_router, prefix="/api/v1", dependencies=rate_limited)
