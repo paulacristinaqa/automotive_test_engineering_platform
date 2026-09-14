@@ -11,7 +11,7 @@ introduced. This keeps source domains authoritative and makes every visualizatio
 | X-4 | EV, charging, thermal, and ADAS visual analytics | Complete |
 | X-5 | Supporting evidence and explicit OTA/cybersecurity/standards gaps (approved reduced scope) | Complete within approved scope |
 | X-6 | Live updates, exports, retention, and performance hardening | Backend scope complete — X-6.7 opt-in browser authentication; X-7 acceptance pending |
-| X-7 | Cross-platform dashboard validation and Volume X completion | In progress — X-7.2 reusable browser lifecycle client validated |
+| X-7 | Cross-platform dashboard validation and Volume X completion | In progress — X-7.3 session controller foundation; login UI acceptance pending |
 
 ## Next increment
 
@@ -25,6 +25,8 @@ The next increment is X-7 cross-platform acceptance, as defined in `dashboard-ac
 X-7.1 evidence is recorded in `dashboard-browser-acceptance.md`; X-7.2 client lifecycle and
 reconnect/staleness evidence is in `dashboard-client-lifecycle.md`. End-user login/product UI,
 AAOS and deployment gates remain pending.
+X-7.3 adds the unit-tested session controller in `dashboard-client-session.md`.
+Next is its login/logout UI and real-browser acceptance; the controller does not close that gate.
 Actual client/deployment evidence remains a release gate; protocol tests do not establish it.
 Small-fixture timings are not capacity guarantees.
 

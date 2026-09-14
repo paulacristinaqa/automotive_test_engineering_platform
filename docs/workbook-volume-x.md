@@ -1,6 +1,18 @@
 # ATEP Volume X Dashboard Engineering Workbook
 
-Version 0.7.2 records X-1 through X-6 backend implementation and X-7.1/X-7.2 browser evidence.
+Version 0.7.3 records X-1 through X-6 backend implementation, X-7.1/X-7.2 browser evidence,
+and the X-7.3 session foundation (end-user login acceptance still pending).
+
+## X-7.3 — In-memory login/session foundation
+
+Added a same-origin REST session controller for the existing stream client. Authentication is
+separate from snapshot authorization. Requests and token contracts are bounded; late responses
+cannot resurrect disposed sessions. Local logout precedes remote revocation, which may remain
+unconfirmed offline. `dashboard-client-session.md` records design, integration obligations,
+test objectives and evidence. No storage, automatic refresh, CORS expansion or paid service.
+Local regression: 594 Python and 28 Node tests passed; Ruff and mypy passed. New client tests use virtual
+clocks rather than load generation. Login UI, real end-user acceptance and AAOS remain pending.
+Markdown is current; DOCX snapshots are unchanged.
 
 ## X-7.2 — Reconnect and stale snapshot lifecycle
 
