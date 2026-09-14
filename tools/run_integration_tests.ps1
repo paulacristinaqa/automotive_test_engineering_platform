@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
-    [string]$ProjectName = "atep-integration"
+    [string]$ProjectName = "atep-integration",
+    [switch]$DashboardBrowserAcceptance
 )
 
 $ErrorActionPreference = "Stop"
@@ -56,6 +57,13 @@ try {
     & $python -m pytest -p no:cacheprovider -o "addopts=" -m integration tests\integration
     if ($LASTEXITCODE -ne 0) {
         throw "Integration test suite failed."
+    }
+
+    if ($DashboardBrowserAcceptance) {
+        & $python tools\dashboard_browser_fixture.py
+        if ($LASTEXITCODE -ne 0) {
+            throw "Dashboard browser acceptance failed or timed out."
+        }
     }
 
     docker compose -p $ProjectName -f $composeFile stop api outbox-worker

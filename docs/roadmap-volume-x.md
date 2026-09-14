@@ -11,7 +11,7 @@ introduced. This keeps source domains authoritative and makes every visualizatio
 | X-4 | EV, charging, thermal, and ADAS visual analytics | Complete |
 | X-5 | Supporting evidence and explicit OTA/cybersecurity/standards gaps (approved reduced scope) | Complete within approved scope |
 | X-6 | Live updates, exports, retention, and performance hardening | Backend scope complete — X-6.7 opt-in browser authentication; X-7 acceptance pending |
-| X-7 | Cross-platform dashboard validation and Volume X completion | Planned |
+| X-7 | Cross-platform dashboard validation and Volume X completion | In progress — X-7.1 real Chromium protocol fixture validated |
 
 ## Next increment
 
@@ -22,6 +22,8 @@ X-6.5 bounds admission before authentication and adds a shared Redis handshake b
 X-6.6 enforces the native-only Origin boundary and verifies quota/expiry with independent Redis pools.
 X-6.7 adds a separate, disabled-by-default browser route with exact origins and first-message JWT.
 The next increment is X-7 cross-platform acceptance, as defined in `dashboard-acceptance.md`.
+X-7.1 evidence is recorded in `dashboard-browser-acceptance.md`; client login, reconnect/staleness,
+AAOS and deployment gates remain pending.
 Actual client/deployment evidence remains a release gate; protocol tests do not establish it.
 Small-fixture timings are not capacity guarantees.
 
