@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     api_rate_limit_requests: int = Field(default=300, ge=1, le=1_000_000)
     api_rate_limit_window_seconds: int = Field(default=60, ge=1, le=86_400)
     dashboard_browser_origins: str = Field(default="", max_length=4096)
+    dashboard_ui_enabled: bool = False
     module_reconciliation_enabled: bool = True
     module_reconciliation_interval_seconds: int = Field(default=15, ge=1, le=300)
     module_availability_slo_target: float = Field(default=0.99, gt=0.0, le=1.0)
