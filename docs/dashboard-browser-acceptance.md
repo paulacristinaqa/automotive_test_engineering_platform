@@ -1,5 +1,8 @@
 # X-7.1 — Real Chromium protocol acceptance
 
+This records the original five-case run. X-7.2 extends the fixture to eight cases and report v2;
+see `dashboard-client-lifecycle.md` for current client behavior and the later execution.
+
 ## Recorded execution
 
 At 2026-09-14 08:09:23 UTC, real headless Chrome on Windows passed five sequential checks against
@@ -24,7 +27,7 @@ end-user browser login is NOT validated by this result.
 ## Reproduction and safety
 
 Run `tools/run_integration_tests.ps1 -DashboardBrowserAcceptance` from the repository root.
-After normal integration, open `http://localhost:8080` and click **Run five sequential checks**.
+After normal integration, open `http://localhost:8080` and click the sequential checks button.
 The fixture has a 180-second deadline and binds to loopback only. Token/result requests require
 the exact fixture Origin and Host. Never deploy or expose this test-only token issuer.
 The default integration command and CI do not run this optional browser step.
