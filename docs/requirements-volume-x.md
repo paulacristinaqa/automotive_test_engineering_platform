@@ -1,5 +1,12 @@
 # Volume X Dashboard Requirements
 
+## X-7.9 native transport prerequisite
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-052 | Wire native lifecycle to header-authenticated read-only sockets, cancel obsolete connections and clear local sessions on expiry. | Companion adapter tests with fake transport |
+| DASH-NF-053 | Validate bounded envelopes, view/version and query-time metadata before displaying data. | Companion JSON tests; full per-view and Android parser validation remain pending |
+
 ## X-7.8 native lifecycle prerequisite
 
 | ID | Requirement | Evidence |

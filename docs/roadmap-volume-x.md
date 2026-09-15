@@ -36,6 +36,9 @@ AAOS acceptance, followed by trusted-proxy deployment acceptance. Request unit t
 alone do not complete the AAOS gate. X-7.8 adds the isolated lifecycle state machine
 described in `dashboard-native-lifecycle.md`; the transport/parser adapter and
 presentation remain prerequisites to device acceptance.
+X-7.9 adds the OkHttp/envelope adapter (`dashboard-native-transport.md`) with fake
+transport tests. Next is Android presentation/session ownership, followed by live
+backend/AAOS acceptance; JVM adapter tests do not pass that gate.
 Screen-reader/contrast/browser-matrix checks, real network partitions and server-side JWT expiry
 remain explicit evidence gaps rather than implied passes.
 Actual client/deployment evidence remains a release gate; protocol tests do not establish it.
