@@ -1,6 +1,16 @@
 # ATEP Volume X Dashboard Engineering Workbook
 
-Version 0.7.7 records the native request prerequisite alongside backend and browser work.
+Version 0.7.8 records native request and lifecycle prerequisites alongside backend/browser work.
+
+## X-7.8 — Native lifecycle state machine
+
+Added virtual-time companion tests for a deterministic connection lifecycle:
+stale data, bounded retries, obsolete callbacks, authorization cleanup, normal
+completion and initial timeout. `dashboard-native-lifecycle.md` records scope.
+The engine holds no credentials and opens no sockets; the real adapter, envelope
+parser, UI and device evidence remain pending. DOCX remains unchanged.
+Companion evidence: 44 tests passed, lint zero errors/15 warnings, debug APK build
+passed in 56 seconds. Virtual-time tests required no emulator or active network.
 
 ## X-7.7 — Native Android request prerequisite
 

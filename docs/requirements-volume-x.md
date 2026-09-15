@@ -1,5 +1,12 @@
 # Volume X Dashboard Requirements
 
+## X-7.8 native lifecycle prerequisite
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-050 | Bound consecutive reconnect attempts, mark retained evidence stale, and ignore obsolete connection callbacks. | Companion virtual-time lifecycle tests; real transport pending |
+| DASH-NF-051 | Clear evidence on authorization/protocol termination and complete a ten-snapshot session without automatic restart. | Companion populated cleanup and normal-completion tests |
+
 ## X-7.7 native request prerequisite
 
 | ID | Requirement | Evidence |
