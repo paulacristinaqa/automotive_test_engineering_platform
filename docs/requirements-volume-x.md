@@ -1,5 +1,12 @@
 # Volume X Dashboard Requirements
 
+## X-7.7 native request prerequisite
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-048 | Construct only allowlisted native dashboard requests with Authorization and no Origin or URL credentials. | Companion request unit tests; device acceptance pending |
+| DASH-NF-049 | Require HTTPS, except explicitly enabled local development; reject base paths, queries, fragments and invalid/bounded token values. | Companion positive/negative/boundary tests |
+
 ## X-7.6 responsive/accessibility checks
 
 | ID | Requirement | Evidence |

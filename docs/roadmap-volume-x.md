@@ -30,7 +30,10 @@ X-7.4 adds the same-origin login/logout shell and real form-login/no-role eviden
 `dashboard-login-ui.md`. X-7.5 records real-shell local expiration, permission loss, controlled
 reconnect and basic keyboard acceptance in `dashboard-shell-lifecycle.md`.
 X-7.6 responsive and additional keyboard/markup evidence is in `dashboard-responsive-accessibility.md`.
-Next are AAOS prerequisites and acceptance, followed by trusted-proxy deployment acceptance.
+X-7.7 introduces the native request foundation in the companion Android repository;
+see `dashboard-aaos-prerequisites.md`. Next are native lifecycle/presentation and actual
+AAOS acceptance, followed by trusted-proxy deployment acceptance. Request unit tests
+alone do not complete the AAOS gate.
 Screen-reader/contrast/browser-matrix checks, real network partitions and server-side JWT expiry
 remain explicit evidence gaps rather than implied passes.
 Actual client/deployment evidence remains a release gate; protocol tests do not establish it.
