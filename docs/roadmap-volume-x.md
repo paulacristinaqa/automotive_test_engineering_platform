@@ -33,7 +33,9 @@ X-7.6 responsive and additional keyboard/markup evidence is in `dashboard-respon
 X-7.7 introduces the native request foundation in the companion Android repository;
 see `dashboard-aaos-prerequisites.md`. Next are native lifecycle/presentation and actual
 AAOS acceptance, followed by trusted-proxy deployment acceptance. Request unit tests
-alone do not complete the AAOS gate.
+alone do not complete the AAOS gate. X-7.8 adds the isolated lifecycle state machine
+described in `dashboard-native-lifecycle.md`; the transport/parser adapter and
+presentation remain prerequisites to device acceptance.
 Screen-reader/contrast/browser-matrix checks, real network partitions and server-side JWT expiry
 remain explicit evidence gaps rather than implied passes.
 Actual client/deployment evidence remains a release gate; protocol tests do not establish it.
