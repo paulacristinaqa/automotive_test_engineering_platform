@@ -1,5 +1,13 @@
 # Volume X Dashboard Requirements
 
+## X-7.6 responsive/accessibility checks
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-045 | Expose a keyboard-visible skip link to main content and preserve the next input focus order. | Real Chrome keyboard and markup tests |
+| DASH-NF-046 | Keep login/live page layouts within 320/768/1280-pixel widths and avoid page overflow with 200% root text at 320 pixels. | Optional presentation runner and inspected screenshots |
+| DASH-NF-047 | Retain labeled controls, explicit atomic status messages and associated credential guidance. | Markup regression; screen-reader acceptance remains pending |
+
 ## X-7.5 shell lifecycle acceptance requirements
 
 | ID | Requirement | Evidence |
