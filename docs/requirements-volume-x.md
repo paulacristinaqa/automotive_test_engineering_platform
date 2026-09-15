@@ -1,5 +1,12 @@
 # Volume X Dashboard Requirements
 
+## X-7.10 Android engineering presentation
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-054 | Own one native session, invalidate queued callbacks on replacement/stop, and close partially started transports. | Companion session unit tests |
+| DASH-NF-055 | Provide masked transient token entry, bounded evidence preview and background cleanup without automatic restart. | Compose/ViewModel/Activity implementation; device acceptance pending |
+
 ## X-7.9 native transport prerequisite
 
 | ID | Requirement | Evidence |
