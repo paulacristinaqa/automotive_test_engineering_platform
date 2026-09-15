@@ -1,7 +1,19 @@
 # ATEP Volume X Dashboard Engineering Workbook
 
-Version 0.7.6 records backend implementation, same-origin shell lifecycle and targeted responsive/
-accessibility verification. Full cross-platform/deployment acceptance remains pending.
+Version 0.7.7 records the native request prerequisite alongside backend and browser work.
+
+## X-7.7 — Native Android request prerequisite
+
+The companion showcase is consolidated into main. A dedicated dashboard request
+builder now defines three native routes, header-only authentication, absent Origin,
+HTTPS by default and explicit loopback/emulator-host HTTP opt-in. Five focused JVM
+tests cover positive, negative and boundary behavior without starting an emulator.
+`dashboard-aaos-prerequisites.md` records scope and the remaining ordered gates.
+This is not a connected dashboard, device acceptance or a production credential flow.
+No new service/dependency or paid infrastructure; DOCX remains unchanged.
+
+Local companion verification: 37 tests passed, lint had zero errors and 15 warnings,
+and the debug APK built successfully. Full cross-platform/deployment acceptance remains pending.
 
 ## X-7.6 — Responsive presentation and additional keyboard access
 
