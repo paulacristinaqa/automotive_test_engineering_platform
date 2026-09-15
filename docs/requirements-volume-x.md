@@ -1,5 +1,13 @@
 # Volume X Dashboard Requirements
 
+## X-7.5 shell lifecycle acceptance requirements
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-042 | Exercise real-shell reconnect and local expiration with real elapsed time, preserving production authentication limits. | Optional lifecycle runner; execution evidence in dashboard-shell-lifecycle.md |
+| DASH-NF-043 | Observe role removal on an already authenticated shell and verify data cleanup and login focus at the next authorization check. | Disposable user role-removal scenario |
+| DASH-NF-044 | Verify login tab order, Enter submission and focus transfer to logout and back to email. | Real Chrome keyboard scenarios; not complete accessibility conformance |
+
 ## X-7.4 login shell requirements
 
 | ID | Requirement | Evidence |

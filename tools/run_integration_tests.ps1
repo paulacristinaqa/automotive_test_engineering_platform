@@ -2,7 +2,8 @@
 param(
     [string]$ProjectName = "atep-integration",
     [switch]$DashboardBrowserAcceptance,
-    [switch]$DashboardUiAcceptance
+    [switch]$DashboardUiAcceptance,
+    [switch]$DashboardLifecycleAcceptance
 )
 
 $ErrorActionPreference = "Stop"
@@ -20,7 +21,7 @@ $env:ATEP_INTEGRATION_JWT_SECRET = ([guid]::NewGuid().ToString("N") + [guid]::Ne
 $env:ATEP_INTEGRATION_ADMIN_EMAIL = "integration-admin@atep.example.com"
 $env:ATEP_INTEGRATION_ADMIN_PASSWORD = "Integration-$([guid]::NewGuid().ToString('N'))!"
 $env:ATEP_INTEGRATION_API_PORT = "18000"
-$env:ATEP_INTEGRATION_DASHBOARD_UI_ENABLED = if ($DashboardUiAcceptance) { "true" } else { "false" }
+$env:ATEP_INTEGRATION_DASHBOARD_UI_ENABLED = if ($DashboardUiAcceptance -or $DashboardLifecycleAcceptance) { "true" } else { "false" }
 $env:ATEP_INTEGRATION_POSTGRES_PORT = "15432"
 $env:ATEP_INTEGRATION_REDIS_PORT = "16379"
 $env:ATEP_INTEGRATION_REDIS_URL = "redis://127.0.0.1:16379/0"
@@ -61,8 +62,8 @@ try {
         throw "Integration test suite failed."
     }
 
-    if ($DashboardUiAcceptance) {
-        & (Join-Path $PSScriptRoot "run_dashboard_ui_acceptance.ps1")
+    if ($DashboardUiAcceptance -or $DashboardLifecycleAcceptance) {
+        & (Join-Path $PSScriptRoot "run_dashboard_ui_acceptance.ps1") -Lifecycle:$DashboardLifecycleAcceptance
     }
 
     if ($DashboardBrowserAcceptance) {
