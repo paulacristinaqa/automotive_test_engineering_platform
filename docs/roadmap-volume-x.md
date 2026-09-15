@@ -11,7 +11,7 @@ introduced. This keeps source domains authoritative and makes every visualizatio
 | X-4 | EV, charging, thermal, and ADAS visual analytics | Complete |
 | X-5 | Supporting evidence and explicit OTA/cybersecurity/standards gaps (approved reduced scope) | Complete within approved scope |
 | X-6 | Live updates, exports, retention, and performance hardening | Backend scope complete — X-6.7 opt-in browser authentication; X-7 acceptance pending |
-| X-7 | Cross-platform dashboard validation and Volume X completion | In progress — X-7.6 targeted responsive/accessibility checks passed; AAOS/deployment gates pending |
+| X-7 | Cross-platform dashboard validation and Volume X completion | In progress — X-7.10 Android engineering panel implemented; actual AAOS/deployment gates pending |
 
 ## Next increment
 
@@ -39,6 +39,9 @@ presentation remain prerequisites to device acceptance.
 X-7.9 adds the OkHttp/envelope adapter (`dashboard-native-transport.md`) with fake
 transport tests. Next is Android presentation/session ownership, followed by live
 backend/AAOS acceptance; JVM adapter tests do not pass that gate.
+X-7.10 wires an engineering Compose panel and session ownership; see
+`dashboard-android-panel.md`. The next gate is actual backend/AAOS interaction and
+visual/lifecycle acceptance, not another claim based only on compilation.
 Screen-reader/contrast/browser-matrix checks, real network partitions and server-side JWT expiry
 remain explicit evidence gaps rather than implied passes.
 Actual client/deployment evidence remains a release gate; protocol tests do not establish it.

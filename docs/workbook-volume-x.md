@@ -1,6 +1,18 @@
 # ATEP Volume X Dashboard Engineering Workbook
 
-Version 0.7.9 records the native transport adapter alongside request/lifecycle prerequisites.
+Version 0.7.10 records the Android engineering panel and session ownership.
+
+## X-7.10 — Android presentation and session owner
+
+Added a companion Compose panel with transient masked token input, remaining
+lifetime, view selection and explicit connect/clear. Session generations reject
+queued obsolete callbacks. Activity onStop clears data and closes the transport;
+return and rotation require reconnection. Four owner tests cover cleanup and
+replacement. `dashboard-android-panel.md` records scope and remaining device gates.
+This is an engineering preview, not end-user login or road-use certification.
+No new dependencies/paid services; DOCX unchanged.
+Companion validation: 57 JVM tests passed; lint zero errors/15 existing warnings;
+debug APK passed in 1m 2s. No emulator or visual/device acceptance was run.
 
 ## X-7.9 — Native socket and envelope adapter
 
