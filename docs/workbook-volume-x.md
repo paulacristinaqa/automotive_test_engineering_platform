@@ -1,6 +1,19 @@
 # ATEP Volume X Dashboard Engineering Workbook
 
-Version 0.7.8 records native request and lifecycle prerequisites alongside backend/browser work.
+Version 0.7.9 records the native transport adapter alongside request/lifecycle prerequisites.
+
+## X-7.9 — Native socket and envelope adapter
+
+Connected the companion request/lifecycle code to OkHttp, with synchronized events,
+monotonic polling, generation-based socket cancellation and conservative local token
+expiry. Added bounded envelope/version/view/freshness checks and nine JVM tests.
+`dashboard-native-transport.md` records scope and limitations. These are fake-transport
+tests, not live server or device acceptance. Android presentation is still pending.
+No new production dependencies or paid services; DOCX unchanged.
+Companion validation: 53 JVM tests passed; lint and debug APK build passed in
+52 seconds. A JUnit test-signature issue was corrected during verification.
+Final timer/dependency adjustments passed build/lint in 1m 4s, with zero errors
+and 15 existing warnings; fixed-delay polling avoids suspension catch-up bursts.
 
 ## X-7.8 — Native lifecycle state machine
 
