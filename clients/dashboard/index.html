@@ -8,29 +8,30 @@
   <script type="module" src="/dashboard/dashboard.mjs"></script>
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
   <header><span class="brand">ATEP</span><span>Automotive Test Engineering Platform</span></header>
-  <main>
+  <main id="main-content" tabindex="-1">
     <p class="eyebrow">VOLUME X / ENGINEERING WORKSPACE</p>
     <h1>Evidence, in view.</h1>
     <p class="intro">A read-only window into your automotive test platform.</p>
     <section class="panel" aria-labelledby="session-heading">
       <h2 id="session-heading">Dashboard access</h2>
-      <p id="session-status" role="status" aria-live="polite">Sign in to continue.</p>
+      <p id="session-status" role="status" aria-live="polite" aria-atomic="true">Sign in to continue.</p>
       <form id="login-form" method="post" action="/dashboard/">
         <label for="email">Email</label>
         <input id="email" name="username" type="email" autocomplete="username" maxlength="320" required>
         <label for="password">Password</label>
-        <input id="password" name="password" type="password" autocomplete="current-password" maxlength="256" required>
+        <input id="password" name="password" type="password" autocomplete="current-password" aria-describedby="credential-note" maxlength="256" required>
         <label for="view">Dashboard view</label>
         <select id="view"><option value="operations">Vehicle operations</option><option value="mobility">Electric mobility</option><option value="evidence-readiness">Evidence and gaps</option></select>
         <button id="sign-in" type="submit">Sign in</button>
       </form>
       <button id="sign-out" type="button" hidden>Sign out</button>
-      <p class="note">Credentials stay in memory. Reloading this page requires a new sign-in.</p>
+      <p id="credential-note" class="note">Credentials stay in memory. Reloading this page requires a new sign-in.</p>
     </section>
     <section class="panel" aria-labelledby="snapshot-heading">
       <div class="section-title"><h2 id="snapshot-heading">Server snapshot</h2><span id="freshness" class="badge">No data</span></div>
-      <p id="stream-status" role="status" aria-live="polite">Waiting for authentication.</p>
+      <p id="stream-status" role="status" aria-live="polite" aria-atomic="true">Waiting for authentication.</p>
       <p class="note">Updated at most every 30 seconds. Snapshot freshness does not establish vehicle-sensor freshness or standards compliance.</p>
       <pre id="snapshot" tabindex="0" aria-label="Aggregate dashboard snapshot" hidden></pre>
     </section>

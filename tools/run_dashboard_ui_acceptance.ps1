@@ -1,6 +1,6 @@
 # Called only by the disposable integration runner; never use personal credentials.
 [CmdletBinding()]
-param([switch]$Lifecycle)
+param([switch]$Lifecycle, [switch]$Presentation)
 $ErrorActionPreference = "Stop"
 if ($env:ATEP_INTEGRATION_API_URL -ne "http://localhost:18000" -or
     -not $env:ATEP_INTEGRATION_ADMIN_PASSWORD) { throw "Disposable runner environment required." }
@@ -41,6 +41,23 @@ function Wait-BrowserCondition([string]$Expression, [int]$Seconds) {
     } while ([DateTime]::UtcNow -lt $deadline)
     throw "Browser lifecycle condition timed out."
 }
+function Test-Presentation([string]$State) {
+    foreach ($width in @(320, 768, 1280)) {
+        $null = Invoke-Browser @("set", "viewport", "$width", "900")
+        $null = Invoke-Browser @("snapshot", "-i")
+        Assert-Browser "window.innerWidth === $width && document.documentElement.scrollWidth <= window.innerWidth"
+        Assert-Browser "Array.from(document.querySelectorAll('input,select,button')).filter(e=>e.getClientRects().length).every(e=>{const r=e.getBoundingClientRect();return r.left>=0 && r.right<=innerWidth && r.height>=44})"
+        $null = Invoke-Browser @("screenshot", "--full", "dr-evidence/dashboard-x76-$State-$width.png")
+    }
+    # Text enlargement is explicit; this is not an operating-system zoom test.
+    $null = Invoke-Browser @("set", "viewport", "320", "900")
+    $null = Invoke-Browser @("eval", "document.documentElement.style.fontSize='200%'; true")
+    Assert-Browser "parseFloat(getComputedStyle(document.documentElement).fontSize) >= 32 && document.documentElement.scrollWidth <= window.innerWidth"
+    $null = Invoke-Browser @("screenshot", "--full", "dr-evidence/dashboard-x76-$State-large-text.png")
+    $null = Invoke-Browser @("eval", "document.documentElement.style.fontSize=''; true")
+    $null = Invoke-Browser @("set", "viewport", "1280", "900")
+    Write-Host "Responsive $State checks passed at three widths and 200-percent text."
+}
 
 try {
     & npm exec --yes --package=agent-browser@0.37.1 -- agent-browser `
@@ -50,6 +67,19 @@ try {
     $null = Invoke-Browser @("screenshot", "--full", "dr-evidence/dashboard-x74-login.png")
     Assert-Browser "document.title.includes('ATEP') && !!document.querySelector('#login-form')"
     Write-Host "Login shell loaded and controls verified."
+    if ($Presentation) {
+        $null = Invoke-Browser @("press", "Tab")
+        Assert-Browser "document.activeElement.classList.contains('skip-link') && document.activeElement.getBoundingClientRect().top >= 0"
+        $null = Invoke-Browser @("press", "Enter")
+        Assert-Browser "document.activeElement.id === 'main-content'"
+        $null = Invoke-Browser @("press", "Tab")
+        Assert-Browser "document.activeElement.id === 'email'"
+        $null = Invoke-Browser @("fill", "#email", "invalid-email")
+        $null = Invoke-Browser @("click", "#sign-in")
+        Assert-Browser "!document.querySelector('#email').validity.valid && document.activeElement.id === 'email' && !document.querySelector('#login-form').hidden"
+        $null = Invoke-Browser @("fill", "#email", "")
+        Test-Presentation "login"
+    }
     if ($Lifecycle) {
         # Keyboard focus sequence, not a claim of complete accessibility conformance.
         $null = Invoke-Browser @("click", "#email")
@@ -76,6 +106,17 @@ try {
     Assert-Browser "document.querySelector('#login-form').hidden && document.querySelector('#password').value === '' && localStorage.length === 0 && sessionStorage.length === 0 && document.querySelector('#session-status').textContent.includes('access confirmed')"
     $null = Invoke-Browser @("screenshot", "--full", "dr-evidence/dashboard-x74-live.png")
     Write-Host "Real form login and authenticated snapshot passed."
+    if ($Presentation) {
+        Test-Presentation "live"
+        $null = Invoke-Browser @("click", "#sign-out")
+        $null = Invoke-Browser @("wait", "#login-form:not([hidden])")
+        Assert-Browser "document.activeElement.id === 'email'"
+        # Re-login so the shared logout scenario below remains unchanged.
+        $null = Invoke-Browser @("fill", "#email", $env:ATEP_INTEGRATION_ADMIN_EMAIL)
+        $null = Invoke-Browser @("fill", "#password", $env:ATEP_INTEGRATION_ADMIN_PASSWORD)
+        $null = Invoke-Browser @("press", "Enter")
+        $null = Invoke-Browser @("wait", "#snapshot:not([hidden])")
+    }
 
     $null = Invoke-Browser @("click", "#sign-out")
     $null = Invoke-Browser @("wait", "#login-form:not([hidden])")

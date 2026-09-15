@@ -1,7 +1,19 @@
 # ATEP Volume X Dashboard Engineering Workbook
 
-Version 0.7.5 records backend implementation, the same-origin shell and its lifecycle acceptance
-work. Full cross-platform/deployment acceptance remains pending.
+Version 0.7.6 records backend implementation, same-origin shell lifecycle and targeted responsive/
+accessibility verification. Full cross-platform/deployment acceptance remains pending.
+
+## X-7.6 — Responsive presentation and additional keyboard access
+
+Added a skip-to-main link, explicit atomic live-region semantics, associated credential guidance
+and wrapping/minimum-width CSS improvements. The optional presentation runner checks login and
+live operations at 320/768/1280 pixels and at 200% root text on the narrow viewport, plus skip-link,
+native validation and logout-focus behavior. All browser assertions passed and eight screenshots
+were inspected using the browser skills. Inspection identified native-selector abbreviation and
+word breaks at the most constrained size; these are recorded, not hidden behind a conformance claim.
+`dashboard-responsive-accessibility.md` lists objectives, resource samples, reproduction and gaps.
+Docker integration passed both tests in 19.71 seconds. No paid services or emulator were introduced.
+English Markdown is current; DOCX remains unchanged. AAOS/deployment gates remain pending.
 
 ## X-7.5 — Real-shell lifecycle and keyboard acceptance
 

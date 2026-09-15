@@ -11,7 +11,7 @@ introduced. This keeps source domains authoritative and makes every visualizatio
 | X-4 | EV, charging, thermal, and ADAS visual analytics | Complete |
 | X-5 | Supporting evidence and explicit OTA/cybersecurity/standards gaps (approved reduced scope) | Complete within approved scope |
 | X-6 | Live updates, exports, retention, and performance hardening | Backend scope complete — X-6.7 opt-in browser authentication; X-7 acceptance pending |
-| X-7 | Cross-platform dashboard validation and Volume X completion | In progress — X-7.5 shell lifecycle and basic keyboard acceptance passed; responsive/AAOS/deployment gates pending |
+| X-7 | Cross-platform dashboard validation and Volume X completion | In progress — X-7.6 targeted responsive/accessibility checks passed; AAOS/deployment gates pending |
 
 ## Next increment
 
@@ -29,8 +29,10 @@ X-7.3 adds the unit-tested session controller in `dashboard-client-session.md`.
 X-7.4 adds the same-origin login/logout shell and real form-login/no-role evidence in
 `dashboard-login-ui.md`. X-7.5 records real-shell local expiration, permission loss, controlled
 reconnect and basic keyboard acceptance in `dashboard-shell-lifecycle.md`.
-Next is responsive layout and broader keyboard/accessibility verification, before AAOS and
-deployment gates. Real network partitions and server-side JWT expiry remain distinct scenarios.
+X-7.6 responsive and additional keyboard/markup evidence is in `dashboard-responsive-accessibility.md`.
+Next are AAOS prerequisites and acceptance, followed by trusted-proxy deployment acceptance.
+Screen-reader/contrast/browser-matrix checks, real network partitions and server-side JWT expiry
+remain explicit evidence gaps rather than implied passes.
 Actual client/deployment evidence remains a release gate; protocol tests do not establish it.
 Small-fixture timings are not capacity guarantees.
 

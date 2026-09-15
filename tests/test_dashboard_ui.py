@@ -41,3 +41,8 @@ def test_dashboard_markup_has_accessible_labels_and_no_inline_code() -> None:
     assert '<script type="module" src=' in page
     assert "onclick=" not in page
     assert 'method="post"' in page
+    assert 'href="#main-content"' in page
+    assert 'id="main-content" tabindex="-1"' in page
+    assert page.count('aria-atomic="true"') == 2
+    assert 'aria-describedby="credential-note"' in page
+    assert 'id="credential-note"' in page
