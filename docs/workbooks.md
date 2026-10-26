@@ -14,7 +14,7 @@ decisions while preserving cross-volume traceability.
 | VI | Electric Vehicle | Baseline complete - VI-1 through VI-7 | `docs/workbook-volume-vi.md` | `docs/ATEP_Volume_VI_Electric_Vehicle_Engineering_Workbook.docx` |
 | VII | ADAS | Baseline complete - VII-1 through VII-7 | `docs/workbook-volume-vii.md` | `docs/ATEP_Volume_VII_ADAS_Engineering_Workbook.docx` |
 | VIII | Test Framework | Complete - VIII-1 through VIII-7 | `docs/workbook-volume-viii.md` | `docs/ATEP_Volume_VIII_Test_Framework_Engineering_Workbook.docx` |
-| IX | AI Test Engineer | IX-1 through IX-3 implemented | `docs/workbook-volume-ix.md` | `docs/ATEP_Volume_IX_AI_Test_Engineer_Engineering_Workbook.docx` |
+| IX | AI Test Engineer | Complete - IX-1 through IX-7 | `docs/workbook-volume-ix.md` | `docs/ATEP_Volume_IX_AI_Test_Engineer_Engineering_Workbook.docx` |
 | X | Dashboard | In progress - X-1 through X-6 backend scope delivered; X-7 acceptance in progress | `docs/workbook-volume-x.md` | `docs/ATEP_Volume_X_Dashboard_Engineering_Workbook.docx` |
 | XI | DevOps | Planned | To be created when development begins | To be created |
 | XII | Enterprise Features | Planned | To be created when development begins | To be created |
