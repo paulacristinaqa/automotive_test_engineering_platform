@@ -386,7 +386,6 @@ operational guidance, and review worksheets.
 | VIII | Test Framework | Complete — VIII-1 through VIII-7, including bounded performance and stress evidence |
 | IX | AI Test Engineer | Complete IX-1 through IX-7 with cross-platform cited AI evidence |
 | X | Dashboard | In progress - X-1 through X-6 backend scope delivered (X-5 reduced scope); X-7.10 native engineering panel implemented; actual AAOS/deployment acceptance pending |
-| X | Dashboard | Planned |
 | XI | DevOps | Planned |
 | XII | Enterprise Features | Planned |
 
