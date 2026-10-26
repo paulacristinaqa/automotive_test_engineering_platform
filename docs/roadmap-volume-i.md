@@ -77,6 +77,10 @@
   CI evidence. An operator-only read-only auditor now verifies observed account, S3, KMS,
   IAM/OIDC, and CloudTrail controls into bounded non-sensitive evidence. Approved apply, effective
   IAM simulation, upload/denial/restore, and CloudTrail event correlation remain)
+- security-configuration hardening (implemented initial slice: verified-user rate-limit identity,
+  placeholder/low-variety JWT secret rejection, HMAC algorithm allow-list, bearer-protected API
+  `/metrics` mandatory in production, CI formatting gate, and LF normalization; Prometheus bearer
+  wiring, worker-port authentication, and trusted-proxy client attribution remain hardening)
 - CI/CD promotion through development, staging, and production (implemented initial validation
   slice: ordered fixed environments, strict immutable inputs, fail-closed enablement, retained
   manifest evidence, production approval contract, and signed provenance verification; real

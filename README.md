@@ -54,7 +54,9 @@ An intended end-to-end scenario is:
 - users, roles, permissions, protected system-role invariants, and deny-by-default RBAC;
 - immutable administrative audit evidence with bounded search and formula-safe CSV export;
 - PostgreSQL persistence and Alembic migrations;
-- Redis-backed distributed authentication and API rate limiting;
+- Redis-backed distributed authentication and API rate limiting keyed on verified users;
+- fail-closed JWT configuration with an HMAC algorithm allow-list and placeholder-secret rejection;
+- bearer-protected API metrics scraping, mandatory in production;
 - transactional outbox and asynchronous RabbitMQ publication;
 - persistent module and versioned capability catalogue;
 - raw-once, hash-only module workload credentials;
