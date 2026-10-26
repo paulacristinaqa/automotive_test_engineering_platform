@@ -443,9 +443,7 @@ async def execute_adas_scenario_endpoint(
     await session.commit()
     if not duplicate:
         await session.refresh(execution, attribute_names=["created_at"])
-    return scenario_response(
-        execution, scene=scene, perception=perception, duplicate=duplicate
-    )
+    return scenario_response(execution, scene=scene, perception=perception, duplicate=duplicate)
 
 
 @router.get(
@@ -549,9 +547,7 @@ async def create_adas_integration_evidence_endpoint(
     )
     vehicle_commands = list(
         await session.scalars(
-            select(VehicleCommand).where(
-                VehicleCommand.command_id.in_(command.vehicle_command_ids)
-            )
+            select(VehicleCommand).where(VehicleCommand.command_id.in_(command.vehicle_command_ids))
         )
     )
     evidence, duplicate = await create_integration_evidence(
@@ -609,9 +605,7 @@ async def get_adas_integration_evidence_endpoint(
     scenario = await require_scenario_execution(
         session, scene_id=scene.id, execution_id=execution_id
     )
-    evidence = await require_integration_evidence(
-        session, scenario_execution_id=scenario.id
-    )
+    evidence = await require_integration_evidence(session, scenario_execution_id=scenario.id)
     test_run = await session.get(TestRun, evidence.test_run_id)
     if test_run is None:
         raise ResourceNotFoundError("test_run")

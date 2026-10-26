@@ -270,8 +270,7 @@ class EcuStatePayload(BaseModel):
         if len(task_ids) != len(set(task_ids)):
             raise ValueError("ECU cyclic task IDs must be unique")
         has_critical_fault = any(
-            fault.severity is EcuFaultSeverity.CRITICAL
-            and fault.status is EcuFaultStatus.CONFIRMED
+            fault.severity is EcuFaultSeverity.CRITICAL and fault.status is EcuFaultStatus.CONFIRMED
             for fault in self.faults
         )
         if has_critical_fault and self.operational_state is not EcuOperationalState.FAULT:

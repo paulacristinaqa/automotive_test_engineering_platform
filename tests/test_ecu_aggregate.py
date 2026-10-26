@@ -394,9 +394,9 @@ async def test_hard_reset_is_deterministic_and_preserves_undefined_memory_region
         "non_volatile_cells_preserved": 1,
         "faults_preserved": True,
     }
-    assert [
-        item.event_type for item in session.added if isinstance(item, OutboxEvent)
-    ] == ["atep.ecu.reset.completed.v1"]
+    assert [item.event_type for item in session.added if isinstance(item, OutboxEvent)] == [
+        "atep.ecu.reset.completed.v1"
+    ]
 
     returned, duplicate = await execute_ecu_reset(
         cast(AsyncSession, FakeSession(current, execution)),
@@ -423,9 +423,7 @@ async def test_reset_modes_have_fixed_logical_durations(mode: str, duration_ms: 
         cast(AsyncSession, FakeSession(current, None)),
         vehicle=target,
         ecu=current,
-        command=EcuResetCommand(
-            command_id=f"reset-{mode}-command", expected_version=1, mode=mode
-        ),
+        command=EcuResetCommand(command_id=f"reset-{mode}-command", expected_version=1, mode=mode),
         actor_user_id=uuid4(),
         correlation_id=None,
     )
@@ -574,9 +572,7 @@ async def test_reset_clears_volatile_memory_and_preserves_non_volatile_memory(
         cast(AsyncSession, FakeSession(current, None)),
         vehicle=target,
         ecu=current,
-        command=EcuResetCommand(
-            command_id=f"reset-{mode}-memory", expected_version=1, mode=mode
-        ),
+        command=EcuResetCommand(command_id=f"reset-{mode}-memory", expected_version=1, mode=mode),
         actor_user_id=uuid4(),
         correlation_id=None,
     )
@@ -602,9 +598,9 @@ async def test_memory_snapshot_is_checksums_audited_and_restorable() -> None:
     )
     assert snapshot.memory == [{"address": 1, "value": 7}, {"address": 2, "value": 8}]
     assert len(snapshot.checksum_sha256) == 64
-    assert [
-        item.event_type for item in session.added if isinstance(item, OutboxEvent)
-    ] == ["atep.ecu.memory.snapshot.created.v1"]
+    assert [item.event_type for item in session.added if isinstance(item, OutboxEvent)] == [
+        "atep.ecu.memory.snapshot.created.v1"
+    ]
     current.memory = [{"address": 1, "value": 0}]
     restored = await restore_memory_snapshot(
         cast(AsyncSession, FakeSession(current)),
@@ -696,9 +692,7 @@ async def test_fault_debounce_confirmation_and_healing_use_logical_time() -> Non
         cast(AsyncSession, FakeSession(current, None)),
         vehicle=target,
         ecu=current,
-        command=first.model_copy(
-            update={"command_id": "fault-observe-002", "expected_version": 2}
-        ),
+        command=first.model_copy(update={"command_id": "fault-observe-002", "expected_version": 2}),
         actor_user_id=uuid4(),
         correlation_id=None,
     )
@@ -1057,9 +1051,7 @@ async def test_gateway_route_creation_validates_signal_compatibility() -> None:
             actor_user_id=uuid4(),
             correlation_id=None,
         )
-    assert owner_error.value.details == {
-        "reason": "signal routes must be owned by a gateway ECU"
-    }
+    assert owner_error.value.details == {"reason": "signal routes must be owned by a gateway ECU"}
     session = FakeSession(None, source, target)
     route = await create_signal_route(
         cast(AsyncSession, session),

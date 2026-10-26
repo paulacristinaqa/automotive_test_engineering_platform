@@ -2,10 +2,15 @@ import re
 from functools import lru_cache
 from ipaddress import ip_network
 from pathlib import Path
+from typing import Literal, Self
 from urllib.parse import urlsplit
 
-from pydantic import EmailStr, Field, SecretStr, field_validator
+from pydantic import EmailStr, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Placeholder values shipped in examples and docs. They are long enough to pass the length
+# check, so they must be rejected explicitly or a copied example would sign real tokens.
+_PLACEHOLDER_SECRET_MARKERS = ("replace-with", "change-me", "changeme")
 
 
 class Settings(BaseSettings):
@@ -18,7 +23,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     rabbitmq_url: str = "amqp://atep:atep@localhost:5672/"
     jwt_secret: SecretStr = Field(min_length=32)
-    jwt_algorithm: str = "HS256"
+    jwt_algorithm: Literal["HS256", "HS384", "HS512"] = "HS256"
     access_token_minutes: int = Field(default=30, ge=5, le=1440)
     refresh_token_days: int = Field(default=30, ge=1, le=365)
     rate_limit_enabled: bool = True
@@ -42,6 +47,7 @@ class Settings(BaseSettings):
     test_artifact_storage_path: Path = Path(".atep/artifacts")
     test_artifact_max_bytes: int = Field(default=25 * 1024 * 1024, ge=1, le=1024 * 1024 * 1024)
     metrics_enabled: bool = True
+    metrics_bearer_token: SecretStr | None = Field(default=None, min_length=32, max_length=512)
     tracing_enabled: bool = False
     otel_service_name: str = Field(default="atep-core", min_length=1, max_length=80)
     otel_exporter_otlp_endpoint: str | None = None
@@ -50,6 +56,28 @@ class Settings(BaseSettings):
     outbox_retry_seconds: int = Field(default=1, ge=1, le=60)
     bootstrap_admin_email: EmailStr | None = None
     bootstrap_admin_password: SecretStr | None = None
+
+    @field_validator("jwt_secret", "metrics_bearer_token")
+    @classmethod
+    def reject_placeholder_secrets(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is None:
+            return value
+        normalized = value.get_secret_value().casefold()
+        if any(marker in normalized for marker in _PLACEHOLDER_SECRET_MARKERS):
+            raise ValueError("secret still contains an example placeholder value")
+        if len(set(normalized)) < 8:
+            raise ValueError("secret is too repetitive to be random")
+        return value
+
+    @model_validator(mode="after")
+    def require_protected_metrics_in_production(self) -> Self:
+        if (
+            self.environment.casefold() == "production"
+            and self.metrics_enabled
+            and self.metrics_bearer_token is None
+        ):
+            raise ValueError("production metrics require ATEP_METRICS_BEARER_TOKEN")
+        return self
 
     @field_validator("dashboard_browser_origins")
     @classmethod

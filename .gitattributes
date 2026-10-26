@@ -1,0 +1,14 @@
+# Normalize text files to LF in the repository and in working copies, so Windows checkouts
+# match CI and the Linux container images.
+* text=auto eol=lf
+
+# Windows-only scripts keep CRLF for PowerShell and cmd.
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+*.png binary
+*.jpg binary
+*.pdf binary
+*.docx binary
+*.xlsx binary

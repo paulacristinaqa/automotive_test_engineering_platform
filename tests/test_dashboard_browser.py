@@ -11,6 +11,8 @@ from starlette.datastructures import Headers, QueryParams
 from atep.core.config import Settings
 from atep.dashboard import browser
 
+TEST_JWT_SECRET = "test-secret-that-is-longer-than-32-characters"
+
 
 @pytest.mark.parametrize(
     "origin",
@@ -25,14 +27,14 @@ from atep.dashboard import browser
 )
 def test_browser_origin_configuration_rejects_unsafe_values(origin: str) -> None:
     with pytest.raises(ValidationError):
-        Settings(_env_file=None, jwt_secret="x" * 32, dashboard_browser_origins=origin)
+        Settings(_env_file=None, jwt_secret=TEST_JWT_SECRET, dashboard_browser_origins=origin)
 
 
 def test_browser_origin_configuration_is_disabled_by_default() -> None:
-    assert Settings(_env_file=None, jwt_secret="x" * 32).dashboard_browser_origins == ""
+    assert Settings(_env_file=None, jwt_secret=TEST_JWT_SECRET).dashboard_browser_origins == ""
     settings = Settings(
         _env_file=None,
-        jwt_secret="x" * 32,
+        jwt_secret=TEST_JWT_SECRET,
         dashboard_browser_origins="https://host,http://localhost:8080,http://[::1]:8080",
     )
     assert "http://localhost:8080" in settings.dashboard_browser_origins

@@ -32,7 +32,8 @@ encoded placeholder values.
 | `ATEP_DATABASE_URL` | yes | PostgreSQL async SQLAlchemy URL, including managed credential reference/value |
 | `ATEP_REDIS_URL` | yes | Redis URL used for rate limiting and live projections |
 | `ATEP_RABBITMQ_URL` | yes | RabbitMQ URL used by readiness and the outbox worker |
-| `ATEP_JWT_SECRET` | yes | random JWT signing material of at least 32 characters |
+| `ATEP_JWT_SECRET` | yes | random JWT signing material of at least 32 characters; example placeholders are rejected |
+| `ATEP_METRICS_BEARER_TOKEN` | yes, while metrics are enabled | random bearer token of at least 32 characters that Prometheus sends to scrape the API `/metrics` endpoint |
 | `ATEP_BOOTSTRAP_ADMIN_EMAIL` | bootstrap only | initial administrator identity |
 | `ATEP_BOOTSTRAP_ADMIN_PASSWORD` | bootstrap only | initial administrator credential, removed after first successful bootstrap |
 

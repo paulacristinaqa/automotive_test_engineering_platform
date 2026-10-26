@@ -168,9 +168,7 @@ def test_dbc_schema_rejects_duplicate_signals_and_invalid_range() -> None:
 
 
 def test_intel_and_motorola_bit_positions_follow_dbc_semantics() -> None:
-    intel = CanDbcSignal(
-        identifier="Intel", start_bit=0, bit_length=12, byte_order="intel"
-    )
+    intel = CanDbcSignal(identifier="Intel", start_bit=0, bit_length=12, byte_order="intel")
     motorola = CanDbcSignal(
         identifier="Motorola", start_bit=7, bit_length=12, byte_order="motorola"
     )

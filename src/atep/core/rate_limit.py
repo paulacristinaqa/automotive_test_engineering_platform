@@ -10,6 +10,7 @@ from fastapi import Depends, Request, Response
 
 from atep.core.config import Settings, get_settings
 from atep.core.errors import RateLimitExceededError, RateLimitUnavailableError
+from atep.core.security import InvalidTokenError, decode_access_token
 
 _FIXED_WINDOW_SCRIPT = """
 local count = redis.call('INCR', KEYS[1])
@@ -39,10 +40,17 @@ def _fingerprint(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
-def _client_identity(request: Request) -> str:
-    authorization = request.headers.get("Authorization")
-    if authorization:
-        return f"credential:{_fingerprint(authorization)}"
+def _client_identity(request: Request, settings: Settings) -> str:
+    # Only a verified access token earns a per-user bucket. Unverified headers fall back to
+    # the client address, so rotating junk Authorization values cannot mint fresh buckets.
+    scheme, _, token = request.headers.get("Authorization", "").partition(" ")
+    if scheme.casefold() == "bearer" and token:
+        try:
+            user_id = decode_access_token(token.strip(), settings)
+        except InvalidTokenError:
+            pass
+        else:
+            return f"user:{_fingerprint(str(user_id))}"
     host = request.client.host if request.client is not None else "unknown"
     return f"client:{_fingerprint(host)}"
 
@@ -121,7 +129,7 @@ async def api_rate_limit(
             limit=settings.api_rate_limit_requests,
             window_seconds=settings.api_rate_limit_window_seconds,
         ),
-        identity=_client_identity(request),
+        identity=_client_identity(request, settings),
     )
     apply_rate_limit_headers(response, result)
 

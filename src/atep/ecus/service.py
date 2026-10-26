@@ -185,9 +185,7 @@ async def replace_ecu_state(
     actor_user_id: UUID,
     correlation_id: UUID | None,
 ) -> tuple[ElectronicControlUnit, bool]:
-    locked = await require_ecu(
-        session, vehicle=vehicle, identifier=ecu.identifier, for_update=True
-    )
+    locked = await require_ecu(session, vehicle=vehicle, identifier=ecu.identifier, for_update=True)
     requested = EcuStatePayload.model_validate(command.model_dump(exclude={"expected_version"}))
     requested = _profile_state(
         requested, ecu_type=EcuType(locked.ecu_type), use_profile_defaults=False
@@ -207,9 +205,7 @@ async def replace_ecu_state(
     previous_version = locked.version
     locked.operational_state = requested.operational_state.value
     locked.memory = [item.model_dump(mode="json") for item in requested.memory]
-    locked.memory_regions = [
-        item.model_dump(mode="json") for item in requested.memory_regions
-    ]
+    locked.memory_regions = [item.model_dump(mode="json") for item in requested.memory_regions]
     locked.faults = [item.model_dump(mode="json") for item in requested.faults]
     locked.signals = [item.model_dump(mode="json") for item in requested.signals]
     locked.cyclic_tasks = [item.model_dump(mode="json") for item in requested.cyclic_tasks]
@@ -282,9 +278,7 @@ async def execute_ecu_advance(
     actor_user_id: UUID,
     correlation_id: UUID | None,
 ) -> tuple[EcuSimulationCommand, bool]:
-    locked = await require_ecu(
-        session, vehicle=vehicle, identifier=ecu.identifier, for_update=True
-    )
+    locked = await require_ecu(session, vehicle=vehicle, identifier=ecu.identifier, for_update=True)
     request_payload = command.model_dump(mode="json")
     existing = await _existing_simulation_command(
         session, ecu=locked, command_id=command.command_id
@@ -320,9 +314,7 @@ async def execute_ecu_advance(
         "task_runs": [item.model_dump(mode="json") for item in summaries],
     }
     profile = behavior_profile(EcuType(locked.ecu_type))
-    locked.behavior_state = execute_profile_transitions(
-        profile, locked.behavior_state, summaries
-    )
+    locked.behavior_state = execute_profile_transitions(profile, locked.behavior_state, summaries)
     result["profile_version"] = locked.profile_version
     result["behavior_state"] = locked.behavior_state
     locked.simulation_time_ms = simulation_time_ms
@@ -384,9 +376,7 @@ async def execute_ecu_reset(
     actor_user_id: UUID,
     correlation_id: UUID | None,
 ) -> tuple[EcuSimulationCommand, bool]:
-    locked = await require_ecu(
-        session, vehicle=vehicle, identifier=ecu.identifier, for_update=True
-    )
+    locked = await require_ecu(session, vehicle=vehicle, identifier=ecu.identifier, for_update=True)
     request_payload = command.model_dump(mode="json")
     existing = await _existing_simulation_command(
         session, ecu=locked, command_id=command.command_id
@@ -490,9 +480,7 @@ async def create_memory_snapshot(
     actor_user_id: UUID,
     correlation_id: UUID | None,
 ) -> EcuMemorySnapshot:
-    locked = await require_ecu(
-        session, vehicle=vehicle, identifier=ecu.identifier, for_update=True
-    )
+    locked = await require_ecu(session, vehicle=vehicle, identifier=ecu.identifier, for_update=True)
     canonical_memory = sorted(locked.memory, key=lambda item: int(item["address"]))
     checksum = hashlib.sha256(
         json.dumps(canonical_memory, separators=(",", ":"), sort_keys=True).encode()
@@ -572,9 +560,7 @@ async def restore_memory_snapshot(
     actor_user_id: UUID,
     correlation_id: UUID | None,
 ) -> ElectronicControlUnit:
-    locked = await require_ecu(
-        session, vehicle=vehicle, identifier=ecu.identifier, for_update=True
-    )
+    locked = await require_ecu(session, vehicle=vehicle, identifier=ecu.identifier, for_update=True)
     if expected_version != locked.version:
         raise EcuStateVersionConflictError(current_version=locked.version)
     EcuStatePayload.model_validate(
@@ -621,9 +607,7 @@ async def corrupt_ecu_memory(
     actor_user_id: UUID,
     correlation_id: UUID | None,
 ) -> tuple[EcuSimulationCommand, bool]:
-    locked = await require_ecu(
-        session, vehicle=vehicle, identifier=ecu.identifier, for_update=True
-    )
+    locked = await require_ecu(session, vehicle=vehicle, identifier=ecu.identifier, for_update=True)
     request_payload = command.model_dump(mode="json")
     existing = await _existing_simulation_command(
         session, ecu=locked, command_id=command.command_id
@@ -729,9 +713,7 @@ async def observe_ecu_fault(
     actor_user_id: UUID,
     correlation_id: UUID | None,
 ) -> tuple[EcuSimulationCommand, bool]:
-    locked = await require_ecu(
-        session, vehicle=vehicle, identifier=ecu.identifier, for_update=True
-    )
+    locked = await require_ecu(session, vehicle=vehicle, identifier=ecu.identifier, for_update=True)
     request_payload = command.model_dump(mode="json")
     existing_command = await _existing_simulation_command(
         session, ecu=locked, command_id=command.command_id
@@ -871,9 +853,7 @@ async def clear_ecu_fault(
     actor_user_id: UUID,
     correlation_id: UUID | None,
 ) -> tuple[EcuSimulationCommand, bool]:
-    locked = await require_ecu(
-        session, vehicle=vehicle, identifier=ecu.identifier, for_update=True
-    )
+    locked = await require_ecu(session, vehicle=vehicle, identifier=ecu.identifier, for_update=True)
     request_payload = {**command.model_dump(mode="json"), "fault_code": fault_code}
     existing_command = await _existing_simulation_command(
         session, ecu=locked, command_id=command.command_id
@@ -963,9 +943,7 @@ async def publish_ecu_signal(
     actor_user_id: UUID,
     correlation_id: UUID | None,
 ) -> tuple[EcuSimulationCommand, bool]:
-    locked = await require_ecu(
-        session, vehicle=vehicle, identifier=ecu.identifier, for_update=True
-    )
+    locked = await require_ecu(session, vehicle=vehicle, identifier=ecu.identifier, for_update=True)
     request_payload = {**command.model_dump(mode="json"), "signal_name": signal_name}
     existing = await _existing_simulation_command(
         session, ecu=locked, command_id=command.command_id
@@ -1194,12 +1172,9 @@ async def transfer_signal_route(
     target.signals = []
     for item in target_signals:
         is_target = (
-            item.direction is EcuSignalDirection.CONSUMED
-            and item.name == route.target_signal
+            item.direction is EcuSignalDirection.CONSUMED and item.name == route.target_signal
         )
-        target.signals.append(
-            (updated_target if is_target else item).model_dump(mode="json")
-        )
+        target.signals.append((updated_target if is_target else item).model_dump(mode="json"))
     previous_target_version = target.version
     target.version += 1
     result = {
@@ -1285,9 +1260,7 @@ def _signal_with_value(
         raise EcuSignalContractError(reason=str(reason)) from exc
 
 
-def _apply_fault_operational_state(
-    ecu: ElectronicControlUnit, faults: list[EcuFault]
-) -> None:
+def _apply_fault_operational_state(ecu: ElectronicControlUnit, faults: list[EcuFault]) -> None:
     critical = any(
         fault.active
         and fault.severity is EcuFaultSeverity.CRITICAL
@@ -1396,9 +1369,7 @@ def _profile_state(
     return state.model_copy(update={"cyclic_tasks": tasks, "behavior_state": behavior_state})
 
 
-def _memory_state(
-    state: EcuStatePayload, *, use_default_region: bool
-) -> EcuStatePayload:
+def _memory_state(state: EcuStatePayload, *, use_default_region: bool) -> EcuStatePayload:
     regions = state.memory_regions
     if use_default_region:
         regions = [
