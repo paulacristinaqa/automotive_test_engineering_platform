@@ -667,6 +667,56 @@ and recorded automatic cleanup. Sampled CPU 36–79%, GPU 9–17%, not measured
 peaks. English Markdown updated, DOCX unchanged; no commit/PR/merge performed.
 Next is normal ten-snapshot completion; see dashboard-aaos-retry-exhaustion.md.
 
+## X-7.19 — Normal completion (initial attempts and resolution)
+
+Added an opt-in actual-AAOS ten-snapshot scenario with a single-connection
+check, final sequence/preview retention, empty token input and 32-second
+terminal observation. Four new host cases require all three checkpoints.
+The scenario alone uses a ten-minute disposable JWT fixture; other runner
+modes explicitly retain five minutes. Production configuration is unchanged.
+
+Three device attempts were made. The first failed before LIVE confirmation
+under the narrow five-minute setup budget. The second failed in the combined
+completion phase. Timing review moved the origin from UI recognition of LIVE
+to Connect and added a host TCP-acceptance duration check. The third reached
+COMPLETE and passed timing/stale-status checks, but failed reading/validating
+the final preview. Consequently retention, credential cleanup and no-restart
+are not yet accepted. Further long runs were paused to diagnose the precise
+assertion rather than repeat unchanged tests. A finer preview-sequence phase
+was added afterward but has not yet been rebuilt/executed.
+
+57 host tests, Ruff/mypy and diff checks passed before the final diagnostic
+split. Android initial build/lint passed (37 seconds, 59 JVM tests, zero errors/
+15 existing warnings); instrumentation timing rebuild passed in 19 seconds.
+Backend integration passed in 24.33, 19.11 and 19.28 seconds. All failed runs
+cleaned owned resources; no new restore success is claimed for X-7.19.
+Sampled CPU 26–62%, GPU 10–19%, not measured peaks. English Markdown updated;
+DOCX unchanged. No commit/PR/merge. Next work is preview diagnostics and the
+remaining normal-completion assertions, not a new roadmap feature.
+
+### Resumed validation — successful acceptance
+
+Explicitly refreshed the preview accessibility node before reading its text,
+split lookup/text/sequence diagnostic phases, and added safe local failure
+screenshots after the form stage. The resumed actual API 35 run passed: ten
+snapshots on one connection, COMPLETE with stale indication, empty credential
+input and the identical sequence-10 preview retained for 32 seconds without
+automatic restart. The final screenshot was inspected. The earlier failure
+was consistent with stale accessibility data, but its exact cause cannot be
+proved from the older combined diagnostics. No runtime behavior was changed.
+
+Instrumentation build passed in 22 seconds; retained JVM evidence has 59 tests.
+All 57 host tests passed again in 5.05 seconds, with Ruff/mypy passing on six
+files. Two integration tests passed in 20.28 seconds. Sampled CPU 36–74%, GPU
+5–16%, with 10.3 GiB free RAM in a device-stage sample; not measured peaks.
+The targeted X-7.19 gate is now passed. Next is trusted-proxy deployment
+acceptance, with broader accessibility/device-matrix gaps still explicit.
+
+Final restore passed (87 tables/292 rows, 79.828 seconds). Owned containers
+and emulator were confirmed absent; final sampled CPU was 40%, GPU 5%.
+Both repository diff checks passed. English Markdown updated; DOCX unchanged.
+Changes remain local and uncommitted, with no PR or merge performed.
+
 ## Remaining acceptance work after populated verification
 
 X-6: live updates, exports, retention and performance hardening. Full OTA and formal standards

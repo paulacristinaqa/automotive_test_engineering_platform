@@ -1,5 +1,11 @@
 # Volume X Dashboard Requirements
 
+## X-7.19 AAOS normal completion
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-066 | Receive ten ordered snapshots on one connection, end in COMPLETE, retain the final stale preview with empty credential input and no automatic restart. | Actual AAOS PASS after refreshing the accessibility node; sequence 10, one TCP connection, empty credential input, unchanged preview for 32 seconds and inspected screenshot |
+
 ## X-7.18 AAOS retry exhaustion
 
 | ID | Requirement | Evidence |

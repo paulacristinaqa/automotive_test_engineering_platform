@@ -7,7 +7,7 @@ Backend tests do not establish graphical client acceptance or automotive safety 
 |---|---|---|
 | Windows Python backend | Unit contracts, lint and types | Local automated suite |
 | Linux containers | Authenticated snapshot, forbidden role, exports and read-only queries | Docker integration suite |
-| Android/AAOS client | Header-based authentication, reconnect, stale indicator and permission loss | Not validated by backend tests |
+| Android/AAOS client | Header-based authentication, reconnect, stale indicator and permission loss | X-7.11–X-7.19 targeted engineering-panel cases passed, including actual normal completion; broader accessibility/device coverage and arbitrary network partitions remain gaps |
 | Browser dashboard | Actual browser login/stream, origin protection, reconnect and expired-session behavior | X-7.4 login; X-7.5 lifecycle/basic keyboard; X-7.6 targeted responsive/skip-link checks passed; screen-reader/contrast/browser matrix remain gaps |
 | Trusted reverse proxy | Transport peer integrity, shared quota, TLS and resource limits | Deployment acceptance pending |
 
