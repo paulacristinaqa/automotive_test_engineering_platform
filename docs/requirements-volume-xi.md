@@ -71,7 +71,7 @@ Thresholds are illustrative bench values, not a real ACU calibration. Test case 
 | BENCH-F-024 | At ignition on, the ACU runs a 6 s self-test with the warning lamp on, then switches the lamp off when no fault is active, and sends an E2E-protected status message every 100 ms. | ACU-T01 |
 | BENCH-F-025 | Each of the four squib loops is valid between 1.5 and 5.0 Ω; below, above and open (≥ 20 Ω) raise loop DTCs B1001-B1004 with failure types 0x1A, 0x1B and 0x13. | ACU-T02, ACU-T03 |
 | BENCH-F-026 | A failing condition sets testFailed and pending at once and confirmed after 500 ms; a repaired condition clears testFailed and keeps confirmed until a DTC clear; the lamp follows active confirmed faults. | ACU-T02, ACU-T03, ACU-T14 |
-| BENCH-F-027 | Supply voltage below 9 V or above 16 V raises B1010 with failure type 0x16 or 0x17. | ACU-T04 |
+| BENCH-F-027 | Supply voltage below 9 V or above 16 V raises B1010 with failure type 0x16 or 0x17, confirmed after 2 s so an engine start does not confirm it. | ACU-T04, HIL-T06 |
 | BENCH-F-028 | The vehicle status message is supervised; 500 ms without it raises U0121. | ACU-T05 |
 | BENCH-F-029 | Deployment needs a delta-v over a 30 ms window confirmed by a safing sensor of at least 3 g: pretensioners at 6 km/h (driver if buckled, passenger if occupied), airbags at 14 km/h (passenger only if occupied and enabled), and nothing during the 200 ms arming delay. | ACU-T07, ACU-T08, ACU-T09, ACU-T13 |
 | BENCH-F-030 | A hammer blow whose main-sensor delta-v exceeds the airbag threshold but is not confirmed by the safing sensor causes no deployment. | ACU-T06 |
@@ -89,6 +89,33 @@ Thresholds are illustrative bench values, not a real ACU calibration. Test case 
 | BENCH-NF-010 | ACU CAN frames must be encoded from the same DBC that is exported, and decode with cantools. | `tests/test_bench_airbag.py` |
 | BENCH-NF-011 | A test case must report a failed check instead of raising when the ACU misbehaves. | `tests/test_bench_airbag_demo.py` |
 
+## XI-4 Bench instruments
+
+Test case IDs refer to `tools/run_hil_bench_demo.py`. Voltage profiles follow the shape of
+ISO 16750-2 tests with shortened durations; they are not certified test levels.
+
+### Functional requirements
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| BENCH-F-036 | Instruments accept SCPI commands with long or short mnemonics and optional nodes, IEEE 488.2 common commands (`*IDN?`, `*RST`, `*CLS`, `*OPC?`), channel lists such as `(@1,3)` and `(@1:4)`, and report errors through a `SYST:ERR?` queue with SCPI codes (-113, -200, -222, -224). | HIL-T01, HIL-T15 |
+| BENCH-F-037 | A programmable supply sets and reads back KL30 voltage, switches its output, measures supply current and captures peak current. | HIL-T03, HIL-T14 |
+| BENCH-F-038 | The supply runs named voltage profiles on logical time: momentary drop (4.5 V, 100 ms), dropout (0 V, 300 ms), starting profile, slow decrease and increase, and overvoltage (18 V). | HIL-T04 to HIL-T08 |
+| BENCH-F-039 | A relay card switches KL15 on channel 1 and reports channel states. | HIL-T01 |
+| BENCH-F-040 | A fault-injection box sets each squib loop to nominal, open, short to ground, short to battery or a substitute resistance, and the ACU reports failure types 0x11, 0x12, 0x13, 0x1A and 0x1B, including at the window boundaries. | HIL-T09, HIL-T10, HIL-T11 |
+| BENCH-F-041 | A multimeter measures terminal voltage, supply current and loop resistance, reporting an open loop as overload (9.9E37). | HIL-T07, HIL-T11 |
+| BENCH-F-042 | A climate chamber ramps temperature at a set rate; loop resistance drifts by 0.39 %/K from its 25 °C value, and the ACU raises B1060-4B above 85 °C. | HIL-T12, HIL-T13 |
+| BENCH-F-043 | The ACU draws at most 100 µA with KL15 off, constant 1.8 W when running and 1.75 A per firing squib for 2 ms; it survives supply drops up to its 150 ms energy reserve and repeats its self-test after longer ones. | HIL-T02 to HIL-T06, HIL-T14 |
+| BENCH-F-044 | Provide a HiL campaign that drives the ACU only through instruments and UDS, logs every SCPI command with its time and answer, and writes JSON and Markdown reports. | `tools/run_hil_bench_demo.py`, `tests/test_bench_hil_demo.py` |
+
+### Non-functional requirements
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| BENCH-NF-012 | `SimulatedLink.run_until` limits time relative to the call, and a diagnostic request that gets no result raises instead of returning an older response. | `tests/test_bench_link.py` |
+| BENCH-NF-013 | Instrument errors never raise into the test script; they go to the error queue, as on real instruments. | `tests/test_bench_scpi.py`, HIL-T15 |
+| BENCH-NF-014 | The HiL campaign must fail on an ACU with excessive quiescent current, a supply debounce shorter than an engine start, a missing energy reserve or a wrong resistance window. | `tests/test_bench_hil_demo.py` |
+
 ## Deliberate limits
 
 - The bench simulates the network and the logic of a test bench. It does not model analog
@@ -97,6 +124,7 @@ Thresholds are illustrative bench values, not a real ACU calibration. Test case 
   `virtual` interface.
 - ISO-TP messages are limited to 4,095 bytes; the 32-bit first-frame length escape is not
   implemented. Functional (broadcast) addressing is not modelled.
+- Instruments are models: no measurement noise, accuracy class, settling time or current limit.
 - The ACU deployment algorithm, thresholds and timings are illustrative. Real calibrations are
   confidential, use more sensors (side, satellite, rollover) and are validated with physical
   crash tests.

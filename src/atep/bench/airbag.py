@@ -63,11 +63,20 @@ def dtc_code(text: str, failure_type: int = 0x00) -> int:
 
 class FailureType(IntEnum):
     NO_SUB_TYPE = 0x00
+    SHORT_TO_GROUND = 0x11
+    SHORT_TO_BATTERY = 0x12
     CIRCUIT_OPEN = 0x13
     VOLTAGE_BELOW_THRESHOLD = 0x16
     VOLTAGE_ABOVE_THRESHOLD = 0x17
     RESISTANCE_BELOW_THRESHOLD = 0x1A
     RESISTANCE_ABOVE_THRESHOLD = 0x1B
+    OVER_TEMPERATURE = 0x4B
+
+
+class LoopShort(StrEnum):
+    NONE = "none"
+    GROUND = "ground"
+    BATTERY = "battery"
 
 
 class Loop(StrEnum):
@@ -96,6 +105,7 @@ LOOP_DID = {
     Loop.PASSENGER_PRETENSIONER: 0x4004,
 }
 SUPPLY_DTC = "B1010"
+TEMPERATURE_DTC = "B1060"
 CRASH_RECORDED_DTC = dtc_code("B1050")
 LOST_VEHICLE_STATUS_DTC = dtc_code("U0121")
 
@@ -132,6 +142,14 @@ class AcuCalibration:
     arming_delay_us: int = 200_000
     energy_reserve_us: int = 150_000
     fault_debounce_us: int = 500_000
+    # Supply faults debounce longer so an engine start does not set a DTC.
+    supply_debounce_us: int = 2_000_000
+    harness_temperature_coefficient: float = 0.0039
+    over_temperature_c: float = 85.0
+    operating_power_w: float = 1.8
+    quiescent_current_a: float = 50e-6
+    firing_current_a: float = 1.75
+    firing_duration_us: int = 2_000
     window_us: int = 30_000
     belt_threshold_kmh: float = 6.0
     airbag_threshold_kmh: float = 14.0
@@ -320,7 +338,7 @@ class AcuDiagnostics(VirtualEcu):
         acu = self.acu
         for loop, loop_did in LOOP_DID.items():
             if did == loop_did:
-                ohms = acu.resistance[loop]
+                ohms = acu.effective_resistance(loop)
                 centi = 0xFFFF if not math.isfinite(ohms) else min(round(ohms * 100), 0xFFFF)
                 return centi.to_bytes(2, "big")
         if did == DID_SUPPLY_VOLTAGE:
@@ -353,6 +371,9 @@ class AirbagControlUnit:
         self.transport = IsoTpConfig(tx_id=ACU_DIAG_RESPONSE_ID, rx_id=ACU_DIAG_REQUEST_ID)
         self.diag = AcuDiagnostics(self, self.transport)
         self.resistance: dict[Loop, float] = {loop: 2.2 for loop in Loop}
+        self.loop_short: dict[Loop, LoopShort] = {loop: LoopShort.NONE for loop in Loop}
+        self.temperature_c = 25.0
+        self._firings: list[tuple[int, bool]] = []
         self.kl30_v = 12.0
         self.kl15 = False
         self.driver_buckled = True
@@ -481,6 +502,62 @@ class AirbagControlUnit:
         )
         self._samples = deque(merged)
 
+    def set_loop_short(self, now_us: int, loop: Loop, short: LoopShort) -> None:
+        self._advance(now_us)
+        self.loop_short[loop] = short
+        self._evaluate(now_us)
+
+    def set_temperature(self, now_us: int, celsius: float) -> None:
+        self._advance(now_us)
+        self.temperature_c = celsius
+        self._evaluate(now_us)
+
+    def effective_resistance(self, loop: Loop) -> float:
+        """Loop resistance at the current temperature; the set value applies at 25 °C."""
+        ohms = self.resistance[loop]
+        if not math.isfinite(ohms):
+            return math.inf
+        drift = 1 + self.cal.harness_temperature_coefficient * (self.temperature_c - 25.0)
+        return ohms * drift
+
+    def _loop_valid(self, loop: Loop) -> bool:
+        ohms = self.effective_resistance(loop)
+        return (
+            self.loop_short[loop] is LoopShort.NONE
+            and self.cal.loop_min_ohm <= ohms <= self.cal.loop_max_ohm
+        )
+
+    # Supply current ----------------------------------------------------------
+
+    def supply_current_a(self) -> float:
+        """Current drawn from KL30 now: quiescent when off, constant power when running."""
+        if self.kl30_v < 0.5:
+            return 0.0
+        if not self.can_active:
+            return self.cal.quiescent_current_a
+        current = self.cal.operating_power_w / self.kl30_v
+        firing = sum(
+            1
+            for at_us, from_supply in self._firings
+            if from_supply and at_us <= self.now_us < at_us + self.cal.firing_duration_us
+        )
+        return current + firing * self.cal.firing_current_a
+
+    def peak_supply_current_a(self, since_us: int) -> float:
+        """Highest supply current since `since_us`, including squib firing pulses."""
+        base = self.cal.operating_power_w / max(self.kl30_v, self.cal.minimum_operating_v)
+        times = [at for at, from_supply in self._firings if from_supply and at >= since_us]
+        overlap = max(
+            (
+                sum(1 for other in times if start <= other < start + self.cal.firing_duration_us)
+                for start in times
+            ),
+            default=0,
+        )
+        if overlap == 0:
+            return self.supply_current_a()
+        return base + overlap * self.cal.firing_current_a
+
     def clear_dtcs(self) -> None:
         """UDS 0x14: the crash record stays; conditions still present are detected again."""
         for code in list(self.dtcs):
@@ -534,9 +611,9 @@ class AirbagControlUnit:
         crash.delta_v_kmh = max(crash.delta_v_kmh, delta_v)
         if loop in crash.fired or loop in crash.failed:
             return
-        ohms = self.resistance[loop]
-        if self.cal.loop_min_ohm <= ohms <= self.cal.loop_max_ohm:
+        if self._loop_valid(loop):
             crash.fired[loop] = at_us
+            self._firings.append((at_us, self.reserve_until is None))
             # A fired squib is an open circuit afterwards.
             self.resistance[loop] = math.inf
         else:
@@ -583,10 +660,16 @@ class AirbagControlUnit:
     def _failing_codes(self) -> set[int]:
         codes: set[int] = set()
         fired = set(self.crash.fired) if self.crash else set()
-        for loop, ohms in self.resistance.items():
+        for loop in Loop:
             if loop in fired:
                 continue
-            if ohms >= self.cal.loop_open_ohm:
+            ohms = self.effective_resistance(loop)
+            short = self.loop_short[loop]
+            if short is LoopShort.GROUND:
+                codes.add(dtc_code(LOOP_DTC[loop], FailureType.SHORT_TO_GROUND))
+            elif short is LoopShort.BATTERY:
+                codes.add(dtc_code(LOOP_DTC[loop], FailureType.SHORT_TO_BATTERY))
+            elif ohms >= self.cal.loop_open_ohm:
                 codes.add(dtc_code(LOOP_DTC[loop], FailureType.CIRCUIT_OPEN))
             elif ohms > self.cal.loop_max_ohm:
                 codes.add(dtc_code(LOOP_DTC[loop], FailureType.RESISTANCE_ABOVE_THRESHOLD))
@@ -602,7 +685,14 @@ class AirbagControlUnit:
             and self.monitor.state("vehicle_status") is SupervisionState.TIMEOUT
         ):
             codes.add(LOST_VEHICLE_STATUS_DTC)
+        if self.temperature_c > self.cal.over_temperature_c:
+            codes.add(dtc_code(TEMPERATURE_DTC, FailureType.OVER_TEMPERATURE))
         return codes
+
+    def _debounce_us(self, code: int) -> int:
+        if code >> 8 == dtc_code(SUPPLY_DTC) >> 8:
+            return self.cal.supply_debounce_us
+        return self.cal.fault_debounce_us
 
     def _evaluate(self, now_us: int) -> None:
         if not self.operational(now_us):
@@ -622,7 +712,7 @@ class AirbagControlUnit:
             if code not in failing:
                 dtc.status &= ~TEST_FAILED
                 self._failing_since.pop(code, None)
-            elif now_us - self._failing_since[code] >= self.cal.fault_debounce_us:
+            elif now_us - self._failing_since[code] >= self._debounce_us(code):
                 dtc.status |= CONFIRMED
         self._record_lamp()
 
@@ -707,7 +797,7 @@ class AirbagControlUnit:
             if self.in_self_test:
                 values.append(self.powered_since + self.cal.self_test_us)
             values.extend(
-                since + self.cal.fault_debounce_us
+                since + self._debounce_us(code)
                 for code, since in self._failing_since.items()
                 if not self.dtcs[code].status & CONFIRMED
             )

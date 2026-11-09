@@ -106,14 +106,19 @@ class SimulatedLink:
             self._queue(index, node.poll(self.now_us))
 
     def run_until(
-        self, done: Callable[[], bool], *, limit_us: int = 60_000_000, max_steps: int = 100_000
+        self, done: Callable[[], bool], *, timeout_us: int = 60_000_000, max_steps: int = 100_000
     ) -> bool:
-        """Step until `done()` is true. Returns False if time ran past `limit_us`."""
+        """Step until `done()` is true.
+
+        Returns False when nothing is left to do or when more than `timeout_us` of
+        logical time passed since this call started.
+        """
+        deadline = self.now_us + timeout_us
         self._poll_all()
         for _ in range(max_steps):
             if done():
                 return True
-            if not self.step() or self.now_us > limit_us:
+            if not self.step() or self.now_us > deadline:
                 return done()
         raise RuntimeError("simulated link made no progress; a node keeps a stale deadline")
 

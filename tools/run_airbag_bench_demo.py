@@ -9,14 +9,10 @@ the ACU DBC, and Vector traces of the severe-crash case.
 """
 
 import argparse
-import hashlib
-import json
 import math
 import sys
 from collections.abc import Callable
-from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
-from enum import IntEnum, StrEnum
 from pathlib import Path
 
 from atep.bench.airbag import (
@@ -38,6 +34,16 @@ from atep.bench.airbag import (
     hammer_blow,
 )
 from atep.bench.airbag_bench import AcuBench
+from atep.bench.campaign import (
+    CampaignReport,
+    Check,
+    TestCase,
+    dtc_status,
+    print_results,
+    run_case,
+    write_artifact,
+    write_reports,
+)
 from atep.bench.e2e import E2EStatus
 from atep.bench.vector_dbc import encode_dbc, render_dbc
 from atep.bench.vector_trace import render_asc, render_blf
@@ -57,37 +63,6 @@ def low_crash(start_us: int) -> CrashPulse:
 
 CONFIRMED_ACTIVE = "0x2D"  # testFailed, pending, confirmed, failed since last clear
 CONFIRMED_HEALED = "0x2C"
-
-
-@dataclass
-class Check:
-    name: str
-    expected: object
-    actual: object
-
-    @property
-    def passed(self) -> bool:
-        return self.expected == self.actual
-
-
-@dataclass
-class CaseResult:
-    case_id: str
-    title: str
-    requirements: list[str]
-    checks: list[Check] = field(default_factory=list)
-
-    @property
-    def passed(self) -> bool:
-        return bool(self.checks) and all(check.passed for check in self.checks)
-
-
-@dataclass(frozen=True)
-class TestCase:
-    case_id: str
-    title: str
-    requirements: tuple[str, ...]
-    run: Callable[[AcuBench], list[Check]]
 
 
 def _loops(bench: AcuBench) -> list[str]:
@@ -123,12 +98,12 @@ def _loop_fault(loop: Loop, ohms: float, failure: FailureType) -> Callable[[AcuB
         bench.power_on()
         bench.acu.set_loop_resistance(bench.now_us, loop, ohms)
         bench.wait(400_000)
-        before_debounce = (_status(bench.read_dtcs().get(code)), bench.acu.lamp_on)
+        before_debounce = (dtc_status(bench.read_dtcs().get(code)), bench.acu.lamp_on)
         bench.wait(200_000)
-        confirmed = (_status(bench.read_dtcs().get(code)), bench.acu.lamp_on, bench.acu.state)
+        confirmed = (dtc_status(bench.read_dtcs().get(code)), bench.acu.lamp_on, bench.acu.state)
         bench.acu.set_loop_resistance(bench.now_us, loop, 2.2)
         bench.wait(100_000)
-        healed = (_status(bench.read_dtcs().get(code)), bench.acu.lamp_on)
+        healed = (dtc_status(bench.read_dtcs().get(code)), bench.acu.lamp_on)
         clear = bench.ask("14FFFFFF").response
         return [
             Check("DTC and lamp before 500 ms debounce", ("0x25", False), before_debounce),
@@ -149,11 +124,13 @@ def t04_undervoltage(bench: AcuBench) -> list[Check]:
     code = dtc_code(SUPPLY_DTC, FailureType.VOLTAGE_BELOW_THRESHOLD)
     bench.power_on()
     bench.acu.set_power(bench.now_us, kl30_v=8.5)
-    bench.wait(600_000)
-    low = (_status(bench.read_dtcs().get(code)), bench.acu.lamp_on)
+    bench.wait(2_100_000)
+    low = (dtc_status(bench.read_dtcs().get(code)), bench.acu.lamp_on)
     bench.acu.set_power(bench.now_us, kl30_v=17.0)
-    bench.wait(600_000)
-    high = _status(bench.read_dtcs().get(dtc_code(SUPPLY_DTC, FailureType.VOLTAGE_ABOVE_THRESHOLD)))
+    bench.wait(2_100_000)
+    high = dtc_status(
+        bench.read_dtcs().get(dtc_code(SUPPLY_DTC, FailureType.VOLTAGE_ABOVE_THRESHOLD))
+    )
     bench.acu.set_power(bench.now_us, kl30_v=13.5)
     bench.wait(100_000)
     return [
@@ -172,9 +149,9 @@ def t05_lost_communication(bench: AcuBench) -> list[Check]:
     bench.power_on()
     bench.vcu.set_active(bench.now_us, False)
     bench.wait(400_000)
-    early = _status(bench.read_dtcs().get(LOST_VEHICLE_STATUS_DTC))
+    early = dtc_status(bench.read_dtcs().get(LOST_VEHICLE_STATUS_DTC))
     bench.wait(700_000)
-    lost = (_status(bench.read_dtcs().get(LOST_VEHICLE_STATUS_DTC)), bench.acu.lamp_on)
+    lost = (dtc_status(bench.read_dtcs().get(LOST_VEHICLE_STATUS_DTC)), bench.acu.lamp_on)
     bench.vcu.set_active(bench.now_us, True)
     bench.wait(200_000)
     return [
@@ -183,7 +160,7 @@ def t05_lost_communication(bench: AcuBench) -> list[Check]:
         Check(
             "U0121 after the VCU returns",
             CONFIRMED_HEALED,
-            _status(bench.read_dtcs().get(LOST_VEHICLE_STATUS_DTC)),
+            dtc_status(bench.read_dtcs().get(LOST_VEHICLE_STATUS_DTC)),
         ),
     ]
 
@@ -256,7 +233,7 @@ def t08_severe_occupied(bench: AcuBench) -> list[Check]:
         Check("Crash record DID: stored, fired, failed", bytes([1, 0x0F, 0]), record[3:6]),
         Check("Crash speed in record (km/h)", 50, int.from_bytes(record[8:10], "big")),
         Check("State and lamp", (AcuState.CRASH, True), (bench.acu.state, bench.acu.lamp_on)),
-        Check("Crash DTC", CONFIRMED_ACTIVE, _status(bench.read_dtcs().get(CRASH_RECORDED_DTC))),
+        Check("Crash DTC", CONFIRMED_ACTIVE, dtc_status(bench.read_dtcs().get(CRASH_RECORDED_DTC))),
     ]
 
 
@@ -359,7 +336,7 @@ def t15_no_second_deployment(bench: AcuBench) -> list[Check]:
     ]
 
 
-CASES = (
+CASES: tuple[TestCase[AcuBench], ...] = (
     TestCase("ACU-T01", "Power-up self-test and cyclic status", ("BENCH-F-024",), t01_self_test),
     TestCase(
         "ACU-T02",
@@ -414,124 +391,28 @@ CASES = (
 )
 
 
-@dataclass
-class CampaignReport:
-    cases: list[CaseResult]
-    files: dict[str, str] = field(default_factory=dict)
-
-    @property
-    def passed(self) -> bool:
-        return all(case.passed for case in self.cases)
-
-
-def run_case(case: TestCase) -> tuple[CaseResult, AcuBench]:
-    bench = AcuBench()
-    result = CaseResult(case.case_id, case.title, list(case.requirements))
-    result.checks = case.run(bench)
-    return result, bench
-
-
-def _text(value: object) -> str:
-    """Readable report text: hex for bytes and DTC maps, names for enums."""
-    if isinstance(value, bytes):
-        return value.hex(" ").upper() or "(empty)"
-    if isinstance(value, dict):
-        return "{" + ", ".join(f"0x{k:06X}: 0x{v:02X}" for k, v in value.items()) + "}"
-    if isinstance(value, StrEnum):
-        return value.value
-    if isinstance(value, IntEnum):
-        return value.name
-    if isinstance(value, (list, tuple)):
-        return "(" + ", ".join(_text(item) for item in value) + ")"
-    return str(value)
-
-
-def _status(value: int | None) -> str | None:
-    """DTC status byte as hex text, or None when the DTC is absent."""
-    return None if value is None else f"0x{value:02X}"
-
-
-def markdown(report: CampaignReport) -> str:
-    lines = [
-        "# ACU system-test campaign",
-        "",
-        f"Result: {'PASSED' if report.passed else 'FAILED'} - "
-        f"{sum(case.passed for case in report.cases)}/{len(report.cases)} test cases passed.",
-        "",
-        "| Test case | Title | Requirements | Checks | Result |",
-        "|---|---|---|---|---|",
-    ]
-    for case in report.cases:
-        passed = sum(check.passed for check in case.checks)
-        lines.append(
-            f"| {case.case_id} | {case.title} | {', '.join(case.requirements)} | "
-            f"{passed}/{len(case.checks)} | {'PASS' if case.passed else 'FAIL'} |"
-        )
-    for case in report.cases:
-        lines += [
-            "",
-            f"## {case.case_id} {case.title}",
-            "",
-            "| Check | Expected | Actual | Result |",
-            "|---|---|---|---|",
-        ]
-        for check in case.checks:
-            lines.append(
-                f"| {check.name} | {_text(check.expected)} | {_text(check.actual)} | "
-                f"{'PASS' if check.passed else 'FAIL'} |"
-            )
-    return "\n".join(lines) + "\n"
-
-
-def _write(path: Path, content: bytes, report: CampaignReport) -> None:
-    path.write_bytes(content)
-    report.files[path.name] = hashlib.sha256(content).hexdigest()
-
-
 def run_campaign(output: Path) -> CampaignReport:
     output.mkdir(parents=True, exist_ok=True)
-    results: list[CaseResult] = []
+    report = CampaignReport("ACU system-test campaign", [])
     severe_trace = None
     for case in CASES:
-        result, bench = run_case(case)
-        results.append(result)
+        bench = AcuBench()
+        report.cases.append(run_case(case, bench))
         if case.case_id == "ACU-T08":
             severe_trace = bench.link.trace
-    report = CampaignReport(results)
-    _write(output / "acu.dbc", encode_dbc(render_dbc(airbag_network_spec())), report)
+    write_artifact(output / "acu.dbc", encode_dbc(render_dbc(airbag_network_spec())), report)
     if severe_trace is not None:
-        _write(
+        write_artifact(
             output / "acu-severe-crash.asc",
             render_asc(severe_trace, measurement_start=MEASUREMENT_START).encode("utf-8"),
             report,
         )
-        _write(
+        write_artifact(
             output / "acu-severe-crash.blf",
             render_blf(severe_trace, measurement_start=MEASUREMENT_START),
             report,
         )
-    _write(output / "report.md", markdown(report).encode("utf-8"), report)
-    summary = {
-        "passed": report.passed,
-        "cases": [
-            asdict(case)
-            | {
-                "passed": case.passed,
-                "checks": [
-                    {
-                        "name": c.name,
-                        "expected": _text(c.expected),
-                        "actual": _text(c.actual),
-                        "passed": c.passed,
-                    }
-                    for c in case.checks
-                ],
-            }
-            for case in results
-        ],
-        "files": report.files,
-    }
-    (output / "report.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    write_reports(output, report)
     return report
 
 
@@ -540,12 +421,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", type=Path, default=Path("out/airbag-bench"))
     args = parser.parse_args(argv)
     report = run_campaign(args.output)
-    for case in report.cases:
-        failed = [check.name for check in case.checks if not check.passed]
-        print(
-            f"[{'PASS' if case.passed else 'FAIL'}] {case.case_id} {case.title}"
-            + (f" - failed: {failed}" if failed else "")
-        )
+    print_results(report.cases)
     print(f"{'PASSED' if report.passed else 'FAILED'}; files in {args.output}")
     return 0 if report.passed else 1
 

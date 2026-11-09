@@ -14,6 +14,14 @@ from atep.bench.airbag import (
     VehicleStatusSender,
 )
 from atep.bench.e2e import E2EChecker, E2EStatus
+from atep.bench.instruments import (
+    BenchRack,
+    ClimateChamber,
+    FaultInjectionBox,
+    Multimeter,
+    PowerSupply,
+    RelayCard,
+)
 from atep.bench.isotp import IsoTpConfig
 from atep.bench.link import SimulatedLink
 from atep.bench.uds import UdsClient, UdsOutcome, UdsResult
@@ -63,7 +71,9 @@ class AcuBench:
     def ask(self, request_hex: str) -> UdsResult:
         request = bytes.fromhex(request_hex)
         self.link.submit(self.tester, self.tester.request(request, self.now_us))
-        self.link.run_until(lambda: self.tester.idle)
+        # The tester's own P2/P2* timers end every request well within this timeout.
+        if not self.link.run_until(lambda: self.tester.idle, timeout_us=30_000_000):
+            raise RuntimeError(f"no result for UDS request {request_hex}")
         return self.tester.last
 
     def read_dtcs(self, mask: int = 0xFF) -> dict[int, int]:
@@ -89,3 +99,48 @@ class AcuBench:
         config = STATUS_E2E if arbitration_id == ACU_STATUS_ID else CRASH_E2E
         checker = E2EChecker(config)
         return [checker.check(frame.data) for frame in self.frames(arbitration_id)]
+
+
+@dataclass
+class HilBench(AcuBench):
+    """The ACU bench with a SCPI instrument rack, operated like a HiL test system.
+
+    The supply output starts off and KL15 open, so the ACU is unpowered until the
+    rack switches it on.
+    """
+
+    rack: BenchRack = field(init=False)
+    psu: PowerSupply = field(init=False)
+    chamber: ClimateChamber = field(init=False)
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        self.acu.kl30_v = 0.0
+        self.psu = PowerSupply(self.acu)
+        self.chamber = ClimateChamber(self.acu)
+        self.link.nodes.extend([self.psu, self.chamber])
+        self.rack = BenchRack(
+            {
+                "PSU": self.psu,
+                "REL": RelayCard(self.acu),
+                "FIB": FaultInjectionBox(self.acu),
+                "DMM": Multimeter(self.acu),
+                "CHAM": self.chamber,
+            },
+            self.link,
+        )
+
+    def scpi(self, address: str, command: str) -> str | None:
+        return self.rack.send(address, command)
+
+    def switch_on(self, *, volts: float = 12.0, settle_us: int = 6_100_000) -> None:
+        """Supply on, ignition on, wait for the self-test: the usual start of a HiL test."""
+        self.scpi("PSU", f"VOLT {volts}")
+        self.scpi("PSU", "OUTP ON")
+        self.scpi("REL", "ROUT:CLOS (@1)")
+        self.wait(settle_us)
+
+    def run_profile(self, name: str, *, margin_us: int = 200_000) -> None:
+        self.scpi("PSU", f"PROG:RUN {name}")
+        profile = self.psu.profiles[name]
+        self.wait(profile.duration_us + margin_us)

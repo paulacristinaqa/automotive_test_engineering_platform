@@ -16,7 +16,7 @@ decisions while preserving cross-volume traceability.
 | VIII | Test Framework | Complete - VIII-1 through VIII-7 | `docs/workbook-volume-viii.md` | `docs/ATEP_Volume_VIII_Test_Framework_Engineering_Workbook.docx` |
 | IX | AI Test Engineer | Complete - IX-1 through IX-7 | `docs/workbook-volume-ix.md` | `docs/ATEP_Volume_IX_AI_Test_Engineer_Engineering_Workbook.docx` |
 | X | Dashboard | In progress - X-1 through X-6 delivered; X-7.1 to X-7.23 acceptance increments passed; full deployment gate pending | `docs/workbook-volume-x.md` | `docs/ATEP_Volume_X_Dashboard_Engineering_Workbook.docx` |
-| XI | Virtual Test Bench | In progress - XI-1 to XI-3 implemented | `docs/workbook-volume-xi.md` | `docs/ATEP_Volume_XI_Virtual_Test_Bench_Engineering_Workbook.docx` |
+| XI | Virtual Test Bench | In progress - XI-1 to XI-4 implemented | `docs/workbook-volume-xi.md` | `docs/ATEP_Volume_XI_Virtual_Test_Bench_Engineering_Workbook.docx` |
 | XII | DevOps | Planned | To be created when development begins | To be created |
 | XIII | Enterprise Features | Planned | To be created when development begins | To be created |
 

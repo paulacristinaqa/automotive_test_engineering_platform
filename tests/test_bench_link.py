@@ -4,6 +4,8 @@ from uuid import uuid4
 import pytest
 
 from atep.bench.bus import BenchBusConfig, open_bench_bus
+from atep.bench.cyclic import CyclicSender
+from atep.bench.e2e import E2EConfig
 from atep.bench.isotp import IsoTpConfig
 from atep.bench.link import BusNodeRunner, SimulatedLink, classic_frame_time_us
 from atep.bench.uds import UdsClient, UdsOutcome, physical_addressing
@@ -76,6 +78,18 @@ def test_fd_frames_use_the_data_bitrate() -> None:
 def test_run_until_reports_limits_and_stale_deadlines() -> None:
     link = SimulatedLink([Burst([])])
     assert link.run_until(lambda: False) is False
+
+
+def test_run_until_timeout_is_relative_to_the_call() -> None:
+    """Regression: the limit used to be absolute, so every call after 60 s gave up at once."""
+    sender = CyclicSender(0x101, 1_000_000, E2EConfig(data_id=1, length=8))
+    link = SimulatedLink([sender])
+    link.advance_to(120_000_000)
+    target = link.now_us + 3_000_000
+    assert link.run_until(lambda: link.now_us >= target, timeout_us=5_000_000) is True
+    start = link.now_us
+    assert link.run_until(lambda: False, timeout_us=2_500_000) is False
+    assert 2_500_000 <= link.now_us - start <= 3_500_000
     with pytest.raises(RuntimeError, match="no progress"):
         SimulatedLink([Stuck()]).run_until(lambda: False, max_steps=50)
     with pytest.raises(RuntimeError, match="no progress"):

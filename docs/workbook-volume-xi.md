@@ -1,10 +1,11 @@
 # ATEP Volume XI Virtual Test Bench Engineering Workbook
 
-Version 0.3.0 completes XI-1 to XI-3. XI-1 delivers Vector-compatible DBC, ASC and BLF
+Version 0.4.0 completes XI-1 to XI-4. XI-1 delivers Vector-compatible DBC, ASC and BLF
 artifacts and a python-can bench bus. XI-2 adds ISO-TP, a UDS tester with P2/P2* timing, a
 virtual ECU, cyclic message supervision and E2E protection, all running on logical time. XI-3
 adds a virtual airbag control unit as the device under test, with a 15-case system-test
-campaign.
+campaign. XI-4 adds SCPI bench instruments (supply with voltage profiles, KL15 relay, fault box,
+multimeter, climate chamber) and a 15-case HiL campaign.
 
 ## Scope and architecture
 
@@ -70,6 +71,22 @@ Architecture details are in [virtual-bench.md](virtual-bench.md).
   safing. They exposed two weaknesses in the first draft of the campaign: a case that crashed
   instead of failing, and a hammer blow too weak to need the safing sensor.
 
+### XI-4
+
+- Drive instruments with SCPI strings, not Python calls, so test scripts read like the scripts
+  of a real HiL rack and SCPI mistakes are tested too.
+- Keep instrument errors in a `SYST:ERR?` queue instead of raising, as real instruments do.
+- Run voltage profiles and temperature ramps as bench nodes on logical time, so a 25 s profile
+  costs milliseconds and stays deterministic.
+- Debounce supply DTCs for 2 s and loop DTCs for 500 ms. The HiL campaign showed that a common
+  debounce would confirm an undervoltage DTC on every engine start.
+- Move `Check`, `TestCase` and report writing to `atep.bench.campaign`, shared by the ACU and
+  HiL campaigns and ready for XI-6.
+- Findings while building XI-4: `SimulatedLink.run_until` treated its limit as absolute time, so
+  every diagnostic request after 60 s of logical time silently returned the previous answer; and
+  the climate chamber changed temperature at the instant of the command. Both are fixed and have
+  regression tests.
+
 ## Tests and objectives
 
 | Objective | Test |
@@ -91,6 +108,9 @@ Architecture details are in [virtual-bench.md](virtual-bench.md).
 | The XI-2 demo passes on the simulated link and on a python-can bus | `tests/test_bench_ecu_demo.py` |
 | DTC encoding, crash pulses, power cycles, energy reserve, DIDs, DBC decoding of ACU frames | `tests/test_bench_airbag.py` |
 | The 15-case ACU campaign passes, is reproducible and fails on defective ACUs | `tests/test_bench_airbag_demo.py` |
+| SCPI parsing, channel lists, parameters, common commands and the error queue | `tests/test_bench_scpi.py` |
+| Profiles, supply, relay, fault box, multimeter, chamber, current model, shorts and drift | `tests/test_bench_instruments.py` |
+| The 15-case HiL campaign passes, is reproducible and fails on four kinds of defective ACU | `tests/test_bench_hil_demo.py` |
 
 ## Risks and technical debt
 
@@ -107,6 +127,8 @@ Architecture details are in [virtual-bench.md](virtual-bench.md).
 - The virtual ECU and the ACU keep their own in-memory state and are not connected to the ATEP
   diagnostics domain in PostgreSQL. The bench is meant to run standalone; a bridge can come with
   XI-7 if campaign evidence must be stored by the platform.
+- Instruments have no noise, accuracy class, settling time or current limit; profiles are
+  shortened ISO 16750-2 shapes, not certified levels.
 - The ACU model is illustrative: one frontal axis, no side or rollover sensing, no occupant
   classification, simplified squib timing and no firing current.
 
@@ -127,7 +149,12 @@ XI-3 is complete. `tools/run_airbag_bench_demo.py` passes 15 system-test cases t
 BENCH-F-024 to BENCH-F-034, writes a JSON and Markdown report, the ACU DBC and Vector traces of
 the severe crash, and produces identical files on every run.
 
+## XI-4 outcome
+
+XI-4 is complete. `tools/run_hil_bench_demo.py` passes 15 HiL cases traced to BENCH-F-036 to
+BENCH-F-043 using only SCPI instruments and UDS, and writes reports and a timestamped SCPI log.
+
 ## Next increment
 
-XI-4 Bench instruments: a programmable power supply with ISO 16750-2-style profiles and a
-fault-injection box driving the ACU through SCPI-style commands.
+XI-5 Transients and EMC concepts: ISO 7637-2-style pulses and bus disturbances judged by
+functional status class.

@@ -14,9 +14,10 @@ vTESTstudio and HiL benches.
   monitoring, a two-sensor deployment decision, warning lamp and self-test, energy reserve,
   debounced DTCs, E2E-protected status and crash messages, UDS diagnostics, and a 15-case
   system-test campaign.
-- [ ] **XI-4 Bench instruments** - programmable power supply (KL30/KL15, undervoltage, cranking,
-  overvoltage profiles), fault-injection box, multimeter and climate chamber with SCPI-style
-  commands.
+- [x] **XI-4 Bench instruments** - SCPI layer with error queue; programmable supply with
+  ISO 16750-2-style profiles (momentary drop, dropout, starting profile, slow decrease and
+  increase, overvoltage); relay card for KL15; fault-injection box (open, shorts, substitute
+  resistance); multimeter; climate chamber; ACU current model; 15-case HiL campaign.
 - [ ] **XI-5 Transients and EMC concepts** - voltage transient pulses and bus disturbances judged
   by functional status class. Conceptual only; no real EMC measurement.
 - [ ] **XI-6 vTESTstudio-style authoring** - event-driven test units (`on_message`, `on_timer`,
@@ -26,6 +27,6 @@ vTESTstudio and HiL benches.
 
 ## Next recommended increment
 
-XI-4 Bench instruments. A programmable power supply with ISO 16750-2-style profiles (slow
-decrease, cranking, undervoltage, overvoltage) and a fault-injection box will drive the XI-3 ACU
-through SCPI-style commands, the way a HiL operator does.
+XI-5 Transients and EMC concepts. The XI-4 supply can already play voltage profiles; XI-5 adds
+ISO 7637-2-style transient pulses and bus disturbances, judged by functional status class (A to
+E), without claiming a real EMC measurement.

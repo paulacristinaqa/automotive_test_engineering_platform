@@ -209,6 +209,63 @@ requirements and compares each observation with an expected value. The campaign 
 `report.json`, `report.md`, `acu.dbc` and `acu-severe-crash.asc/.blf`. Load `acu.dbc` in CANoe or
 CANalyzer to decode the trace.
 
+## XI-4 Bench instruments
+
+`HilBench` (`atep.bench.airbag_bench`) adds a rack of SCPI instruments to the ACU bench. The
+supply output starts off and KL15 open, so a test powers the ACU the way an operator does.
+Every command goes through `BenchRack.send`, which logs time, address, command and answer.
+
+```mermaid
+flowchart LR
+    Script["Test case (Python)"] -->|SCPI| Rack["BenchRack + log"]
+    Script -->|UDS over ISO-TP| Tester["UdsClient"]
+    Rack --> PSU["PSU: KL30, profiles, current"]
+    Rack --> REL["REL: KL15 relay"]
+    Rack --> FIB["FIB: loop faults 1-4"]
+    Rack --> DMM["DMM: V, I, R"]
+    Rack --> CHAM["CHAM: temperature"]
+    PSU --> ACU["Virtual ACU"]
+    REL --> ACU
+    FIB --> ACU
+    CHAM --> ACU
+    DMM -.measures.-> ACU
+    Tester --> ACU
+```
+
+### SCPI commands
+
+| Address | Commands |
+|---|---|
+| all | `*IDN?`, `*RST`, `*CLS`, `*OPC?`, `SYST:ERR?` |
+| PSU | `VOLT <V>`, `VOLT?`, `OUTP ON\|OFF`, `OUTP?`, `MEAS:VOLT?`, `MEAS:CURR?`, `MEAS:CURR:PEAK?`, `SENS:CURR:PEAK:CLE`, `PROG:RUN <profile>`, `PROG:STAT?`, `PROG:CAT?` |
+| REL | `ROUT:CLOS (@1)`, `ROUT:OPEN (@1)`, `ROUT:CLOS? (@1)`; channel 1 is KL15 |
+| FIB | `ROUT:CLOS (@n)` (nominal 2.2 Ω), `ROUT:OPEN (@n)`, `ROUT:SHOR:GND (@n)`, `ROUT:SHOR:BATT (@n)`, `SOUR:RES <ohm>,(@n)`, `ROUT:STAT? (@n)`; channels 1-4 are driver airbag, passenger airbag, driver and passenger pretensioner |
+| DMM | `MEAS:VOLT:DC?`, `MEAS:CURR:DC?`, `MEAS:RES? (@n)` |
+| CHAM | `TEMP <°C>`, `TEMP?`, `TEMP:SETP?`, `TEMP:RATE <°C/min>`, `TEMP:RATE?` |
+
+Long forms (`:VOLTage`, `MEASure:CURRent?`) and the optional `OUTPut:STATe` node are accepted.
+
+### Voltage profiles
+
+| Profile | Shape | Expected ACU behaviour |
+|---|---|---|
+| `momentary_drop` | 4.5 V for 100 ms | No reset: the 150 ms energy reserve bridges it |
+| `dropout` | 0 V for 300 ms | Reset and new self-test |
+| `starting_profile` | 4.5 V for 15 ms, 6.5 V for 1 s, recovery | No reset, undervoltage DTC not confirmed (2 s debounce) |
+| `slow_decrease_increase` | 12 V to 0 V and back at 1 V/s | Off below 6 V, restart above, undervoltage DTC stored |
+| `overvoltage` | 18 V for 3 s | Overvoltage DTC confirmed after 2 s, healed afterwards |
+
+### HiL campaign
+
+```bash
+python tools/run_hil_bench_demo.py --output out/hil-bench
+```
+
+Fifteen cases cover rack identification, quiescent current, constant input power, every voltage
+profile, loop shorts, the resistance window at its boundaries (1.4, 1.5, 5.0 and 5.1 Ω), loop
+resistance measurement, harness drift over temperature, over-temperature, squib firing current
+and SCPI error handling. The campaign writes `report.json`, `report.md` and `scpi-log.txt`.
+
 ## Limits
 
 - The bench simulates the network and test logic. There is no electrical layer, no bit stuffing
