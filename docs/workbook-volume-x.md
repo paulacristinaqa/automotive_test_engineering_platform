@@ -717,6 +717,40 @@ and emulator were confirmed absent; final sampled CPU was 40%, GPU 5%.
 Both repository diff checks passed. English Markdown updated; DOCX unchanged.
 Changes remain local and uncommitted, with no PR or merge performed.
 
+## X-7.20 — Reverse-proxy identity boundary
+
+Introduced an opt-in Nginx Compose overlay for the first deployment gate slice,
+separate from AAOS execution. Uvicorn trusts only the proxy's dedicated IP.
+Nginx replaces transport identity/scheme headers and strips alternate forwarding
+and client-certificate claims; duplicate client headers cannot create separate
+Redis handshake identities. The fixture is loopback HTTP, not production TLS.
+
+The real sequential run passed: after 29 invalid-credential upgrades, attempt
+30 with a valid token received a snapshot; attempt 31 was denied. All rotating
+duplicate X-Forwarded-For/Forwarded claims shared one observed Redis bucket
+with count 31 and a valid TTL. Only that disposable bucket was reset; no Redis
+flush or admission-policy change was used. Six exact-trust/untrusted-peer
+middleware cases and four existing admission cases passed (10 tests in 0.62s).
+Both integration tests passed in 18.68s; Ruff, strict mypy and diff checks passed.
+
+The pinned official Nginx image resolved to 1.30.5. Inspection confirmed a
+64 MiB memory limit, 0.25 CPU, 32 PIDs, read-only root and UID/GID 101. Temporary
+directories live in 8 MiB tmpfs. An initial readonly-path startup failure was
+diagnosed with isolated nginx -t and corrected without loosening filesystem
+permissions. Two denial-loop attempts exceeded the test deadline; HTTP Upgrade
+probes replaced the WebSocket close lifecycle for rejected handshakes. The
+accepted path remains a real WebSocket. These failures are recorded in
+dashboard-proxy-boundary.md rather than presented as clean first-run success.
+
+Host CPU samples were 36–57%, GPU 5–20%, with 14.0 GiB free RAM in one sample;
+these are not measured peaks. No emulator, paid API or cloud service was used.
+English Markdown updated; DOCX unchanged. TLS/certificate verification and
+upstream isolation are next, not implied passes. No commit/PR/merge performed.
+
+Final restore passed (87 tables/283 rows, 76.719 seconds). The runner removed
+owned containers and networks; the final container query was empty. Final
+CPU sample was 35%, GPU 7%. Changes remain local and uncommitted.
+
 ## Remaining acceptance work after populated verification
 
 X-6: live updates, exports, retention and performance hardening. Full OTA and formal standards

@@ -1,5 +1,11 @@
 # Volume X Dashboard Requirements
 
+## X-7.20 Proxy identity boundary
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-067 | Trust forwarding only from the configured proxy, overwrite client-supplied identity claims at the edge and preserve the Redis handshake budget despite forged/duplicate headers. | Six Uvicorn boundary cases, four admission tests, real Nginx snapshot at attempt 30 and denial at 31 in one Redis bucket; dashboard-proxy-boundary.md |
+
 ## X-7.19 AAOS normal completion
 
 | ID | Requirement | Evidence |
