@@ -1,5 +1,11 @@
 # Volume X Dashboard Requirements
 
+## X-7.16 AAOS transport stall and recovery
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-063 | On real AAOS, mark a stalled snapshot stale, retain it through transport interruption, back off before reconnecting, and return to LIVE only with a fresh snapshot and empty token input. | X-7.16 instrumented PASS, exactly two TCP connections, elapsed-time checks and inspected stale/recovered screenshots; dashboard-aaos-network-recovery.md |
+
 ## X-7.15 AAOS active-user deactivation
 
 | ID | Requirement | Evidence |

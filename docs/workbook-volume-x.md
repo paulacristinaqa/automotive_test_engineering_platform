@@ -587,6 +587,39 @@ Changes remain local and uncommitted; no PR/merge was performed. The next gate
 is real network failure/reconnect/staleness, followed by remaining completion
 and deployment acceptance.
 
+## X-7.16 — AAOS stalled transport, staleness and recovery
+
+Added a loopback-only, bounded TCP fault fixture and a separate opt-in Android
+network scenario. After a real LIVE checkpoint, forwarding pauses; Android
+marks the unchanged preview STALE. The host then cuts the connection, Android
+retains stale evidence while RECONNECTING, and the restored route permits one
+delayed reconnect to a fresh LIVE snapshot. Host/device elapsed-time guards
+and an exact two-connection assertion supplement the visible state checks.
+The application retry and authentication policies are unchanged; only a preview
+test tag was added to runtime presentation. No paid service is used.
+
+Thirty-one coordinator/fixture tests passed, with Ruff and strict mypy passing.
+Android build/lint completed in 1m14s with one worker and no emulator, 57 passing
+JVM tests, zero lint errors and 15 existing warnings. The successful actual
+API 35 run passed both integration tests in 19.17 seconds and all four ordered
+network checkpoints. Both local screenshots were inspected: empty token input,
+explicit STALE / NOT LIVE, then CURRENT SERVER QUERY with a newer timestamp.
+
+The first device attempt stopped before LIVE for an undetermined reason.
+Allowlisted phase diagnostics were added; the repeat passed without changing
+production behavior or weakening assertions. One successful run is recorded,
+not repeated-run reliability. Sampled CPU was 20–63%, GPU 7–12%; free RAM during
+device execution included 10.4 and 12.1 GiB. These are samples, not peak bounds.
+See `dashboard-aaos-network-recovery.md` for reproduction and limitations.
+Next are remaining retry-terminal cases and normal ten-snapshot completion,
+before the broader deployment gate. English Markdown is updated; DOCX unchanged.
+
+Final restore passed (87 tables/292 rows, 77.0 seconds). All 31 targeted tests
+passed again in 3.71 seconds with Ruff/mypy and diff checks passing. Owned
+emulator and integration containers were confirmed removed; final sampled
+CPU was 31%, GPU 12%. Changes remain local and uncommitted; no PR/merge was
+performed in this increment.
+
 ## Remaining acceptance work after populated verification
 
 X-6: live updates, exports, retention and performance hardening. Full OTA and formal standards
