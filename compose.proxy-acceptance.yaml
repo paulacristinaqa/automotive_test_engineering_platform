@@ -12,7 +12,7 @@ services:
     entrypoint: ["nginx", "-g", "daemon off;"]
     user: "101:101"
     ports:
-      - "127.0.0.1:18800:8080"
+      - "127.0.0.1:${ATEP_ACCEPTANCE_PROXY_PORT:-18800}:8080"
     volumes:
       - ./deploy/acceptance/nginx.conf:/etc/nginx/nginx.conf:ro
     read_only: true

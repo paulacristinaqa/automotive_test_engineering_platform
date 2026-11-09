@@ -14,6 +14,8 @@ from pathlib import Path
 import httpx
 from websockets.asyncio.client import connect
 
+from tools.acceptance_ports import PROXY_HTTP, PROXY_TLS, port
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -70,7 +72,7 @@ def trusted_context(certificate: Path) -> ssl.SSLContext:
 
 
 def handshake(context: ssl.SSLContext, hostname: str) -> str | None:
-    with socket.create_connection(("127.0.0.1", 18443), timeout=5) as raw:
+    with socket.create_connection(("127.0.0.1", port(PROXY_TLS)), timeout=5) as raw:
         with context.wrap_socket(raw, server_hostname=hostname) as secured:
             return secured.version()
 
@@ -103,7 +105,7 @@ async def acceptance(certificate: Path) -> None:
     await asyncio.to_thread(rejected_certificate, ssl.create_default_context(), "localhost")
     await asyncio.to_thread(rejected_certificate, context, "wrong-host.invalid")
     async with httpx.AsyncClient(
-        base_url="https://localhost:18443", verify=context, trust_env=False, timeout=10
+        base_url=f"https://localhost:{port(PROXY_TLS)}", verify=context, trust_env=False, timeout=10
     ) as api:
         ready = await api.get("/health/ready")
         assert ready.status_code == 200 and ready.json()["status"] == "ready"
@@ -117,7 +119,7 @@ async def acceptance(certificate: Path) -> None:
         response.raise_for_status()
         token = response.json()["access_token"]
     async with connect(
-        "wss://localhost:18443/api/v1/dashboard/stream/operations",
+        f"wss://localhost:{port(PROXY_TLS)}/api/v1/dashboard/stream/operations",
         ssl=context,
         proxy=None,
         additional_headers={"Authorization": f"Bearer {token}"},
@@ -152,10 +154,10 @@ def main(project: str, *, lifecycle: bool = False) -> None:
                 )
             )
             assert not ports, "Backend must have no host port bindings"
-            for port in (18000, 18800):
+            for closed in (18000, port(PROXY_HTTP)):
                 with socket.socket() as probe:
                     probe.settimeout(2)
-                    assert probe.connect_ex(("127.0.0.1", port)) != 0
+                    assert probe.connect_ex(("127.0.0.1", closed)) != 0
             print("PASS: API has no published ports; former API/HTTP ports are closed", flush=True)
             asyncio.run(acceptance(directory / "server.crt"))
             if lifecycle:

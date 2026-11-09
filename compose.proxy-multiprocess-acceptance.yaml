@@ -26,8 +26,8 @@ services:
         ipv4_address: 172.30.241.21
   proxy:
     ports: !override
-      - "127.0.0.1:18801:8081"
-      - "127.0.0.1:18802:8082"
+      - "127.0.0.1:${ATEP_ACCEPTANCE_REPLICA_A_PORT:-18801}:8081"
+      - "127.0.0.1:${ATEP_ACCEPTANCE_REPLICA_B_PORT:-18802}:8082"
     volumes:
       - ./deploy/acceptance/nginx-multiprocess.conf:/etc/nginx/nginx.conf:ro
       - ./deploy/acceptance/proxy-multiprocess-headers.conf:/etc/nginx/proxy-acceptance-headers.conf:ro

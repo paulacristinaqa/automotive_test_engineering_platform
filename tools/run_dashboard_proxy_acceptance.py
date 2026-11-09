@@ -11,6 +11,7 @@ import redis.asyncio as redis
 from websockets.asyncio.client import connect
 from websockets.exceptions import InvalidStatus
 
+from tools.acceptance_ports import PROXY_HTTP, PROXY_REPLICA_A, PROXY_REPLICA_B, port
 from tools.run_dashboard_tls_acceptance import command
 
 PREFIX = b"atep:rate-limit:dashboard-handshake:peer:"
@@ -27,8 +28,10 @@ async def counts(client: redis.Redis) -> dict[bytes, int]:
 
 def target(index: int, multi_process: bool) -> tuple[int, str | None]:
     if not multi_process:
-        return 18800, None
-    return (18801, "172.30.241.20:8000") if index % 2 else (18802, "172.30.241.21:8000")
+        return port(PROXY_HTTP), None
+    if index % 2:
+        return port(PROXY_REPLICA_A), "172.30.241.20:8000"
+    return port(PROXY_REPLICA_B), "172.30.241.21:8000"
 
 
 def verify_upstream(actual: str | None, expected: str | None) -> None:

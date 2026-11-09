@@ -15,7 +15,12 @@ param(
     [switch]$DashboardCertificateLifecycleAcceptance,
     [switch]$DashboardMultiProcessAcceptance,
     [switch]$StartAaosEmulator,
-    [switch]$UseExistingImages
+    [switch]$UseExistingImages,
+    # Proxy fixture host ports; move them if Windows reserves the defaults (netsh excludedportrange).
+    [ValidateRange(1024, 65535)][int]$ProxyPort = 18800,
+    [ValidateRange(1024, 65535)][int]$ProxyReplicaAPort = 18801,
+    [ValidateRange(1024, 65535)][int]$ProxyReplicaBPort = 18802,
+    [ValidateRange(1024, 65535)][int]$ProxyTlsPort = 18443
 )
 
 $ErrorActionPreference = "Stop"
@@ -66,6 +71,10 @@ $env:ATEP_INTEGRATION_JWT_SECRET = ([guid]::NewGuid().ToString("N") + [guid]::Ne
 $env:ATEP_INTEGRATION_ADMIN_EMAIL = "integration-admin@atep.example.com"
 $env:ATEP_INTEGRATION_ADMIN_PASSWORD = "Integration-$([guid]::NewGuid().ToString('N'))!"
 $env:ATEP_INTEGRATION_API_PORT = "18000"
+$env:ATEP_ACCEPTANCE_PROXY_PORT = "$ProxyPort"
+$env:ATEP_ACCEPTANCE_REPLICA_A_PORT = "$ProxyReplicaAPort"
+$env:ATEP_ACCEPTANCE_REPLICA_B_PORT = "$ProxyReplicaBPort"
+$env:ATEP_ACCEPTANCE_TLS_PORT = "$ProxyTlsPort"
 $env:ATEP_INTEGRATION_ACCESS_TOKEN_MINUTES = if ($DashboardAaosNormalCompletion) { "10" } else { "5" }
 $env:ATEP_INTEGRATION_DASHBOARD_UI_ENABLED = if ($DashboardUiAcceptance -or $DashboardLifecycleAcceptance -or $DashboardPresentationAcceptance) { "true" } else { "false" }
 $env:ATEP_INTEGRATION_POSTGRES_PORT = "15432"

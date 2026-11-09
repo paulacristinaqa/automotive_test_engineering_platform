@@ -9,6 +9,7 @@ import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from tools.acceptance_ports import PROXY_TLS, port
 from tools.run_dashboard_tls_acceptance import (
     acceptance,
     certificates,
@@ -58,7 +59,7 @@ def fingerprint(certificate: Path) -> str:
 
 
 def served_fingerprint(context: ssl.SSLContext) -> str:
-    with socket.create_connection(("127.0.0.1", 18443), timeout=5) as raw:
+    with socket.create_connection(("127.0.0.1", port(PROXY_TLS)), timeout=5) as raw:
         with context.wrap_socket(raw, server_hostname="localhost") as secured:
             certificate = secured.getpeercert(binary_form=True)
             if certificate is None:
@@ -69,7 +70,7 @@ def served_fingerprint(context: ssl.SSLContext) -> str:
 def wait_for_listener() -> None:
     for attempt in range(20):
         try:
-            with socket.create_connection(("127.0.0.1", 18443), timeout=1):
+            with socket.create_connection(("127.0.0.1", port(PROXY_TLS)), timeout=1):
                 return
         except OSError:
             if attempt == 19:
