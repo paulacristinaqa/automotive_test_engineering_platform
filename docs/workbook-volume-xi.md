@@ -1,11 +1,13 @@
 # ATEP Volume XI Virtual Test Bench Engineering Workbook
 
-Version 0.4.0 completes XI-1 to XI-4. XI-1 delivers Vector-compatible DBC, ASC and BLF
+Version 0.5.0 completes XI-1 to XI-5. XI-1 delivers Vector-compatible DBC, ASC and BLF
 artifacts and a python-can bench bus. XI-2 adds ISO-TP, a UDS tester with P2/P2* timing, a
 virtual ECU, cyclic message supervision and E2E protection, all running on logical time. XI-3
 adds a virtual airbag control unit as the device under test, with a 15-case system-test
 campaign. XI-4 adds SCPI bench instruments (supply with voltage profiles, KL15 relay, fault box,
-multimeter, climate chamber) and a 15-case HiL campaign.
+multimeter, climate chamber) and a 15-case HiL campaign. XI-5 adds a transient generator, ACU
+input protection, CAN error frames with bus-off, functional status classification and an
+EMC-concept campaign.
 
 ## Scope and architecture
 
@@ -87,6 +89,22 @@ Architecture details are in [virtual-bench.md](virtual-bench.md).
   the climate chamber changed temperature at the instant of the command. Both are fixed and have
   regression tests.
 
+### XI-5
+
+- Treat EMC as a test-plan discipline: each exposure has a required functional status class
+  and the campaign checks "this class or better" with an `at_most` check.
+- Classify from observations (resets, readiness, status gaps, lost frames, DTCs, recovery)
+  instead of hard-coding the expected class, so a model change shows up as a class change.
+- Check "no unintended deployment" in every EMC test; any deployment is class E.
+- Model CAN retransmission and bus-off instead of dropping disturbed frames. The first draft
+  dropped frames after 16 attempts, which made pulse 3a look far worse than a real controller,
+  and every status frame aligned with the bursts was lost.
+- Latch the firing path off on a clamped input above 30 V until the next ignition cycle: a
+  safe state that gives class D for the load dump by design.
+- Findings while building XI-5: a long CAN burst gives a U0121 that stays pending, not
+  confirmed, because the timeout lasts less than the debounce; and SCPI parameter order matters
+  (`PULS:COUN 1` before a long `PULS:WIDT`), as on real generators.
+
 ## Tests and objectives
 
 | Objective | Test |
@@ -111,6 +129,8 @@ Architecture details are in [virtual-bench.md](virtual-bench.md).
 | SCPI parsing, channel lists, parameters, common commands and the error queue | `tests/test_bench_scpi.py` |
 | Profiles, supply, relay, fault box, multimeter, chamber, current model, shorts and drift | `tests/test_bench_instruments.py` |
 | The 15-case HiL campaign passes, is reproducible and fails on four kinds of defective ACU | `tests/test_bench_hil_demo.py` |
+| FSC classification, pulses, input protection, firing inhibit, error frames, bus-off, TRG SCPI | `tests/test_bench_emc.py` |
+| The 7-case EMC campaign passes, is reproducible and fails on three kinds of defective ACU | `tests/test_bench_emc_demo.py` |
 
 ## Risks and technical debt
 
@@ -127,6 +147,7 @@ Architecture details are in [virtual-bench.md](virtual-bench.md).
 - The virtual ECU and the ACU keep their own in-memory state and are not connected to the ATEP
   diagnostics domain in PostgreSQL. The bench is meant to run standalone; a bridge can come with
   XI-7 if campaign evidence must be stored by the platform.
+- EMC results are behavioural: no coupling physics and no emission or immunity measurement.
 - Instruments have no noise, accuracy class, settling time or current limit; profiles are
   shortened ISO 16750-2 shapes, not certified levels.
 - The ACU model is illustrative: one frontal axis, no side or rollover sensing, no occupant
@@ -154,7 +175,13 @@ the severe crash, and produces identical files on every run.
 XI-4 is complete. `tools/run_hil_bench_demo.py` passes 15 HiL cases traced to BENCH-F-036 to
 BENCH-F-043 using only SCPI instruments and UDS, and writes reports and a timestamped SCPI log.
 
+## XI-5 outcome
+
+XI-5 is complete. `tools/run_emc_bench_demo.py` meets the required functional status class in
+all 7 tests without any deployment, writes an EMC test plan with achieved classes, and a trace
+whose error frames show in CANoe.
+
 ## Next increment
 
-XI-5 Transients and EMC concepts: ISO 7637-2-style pulses and bus disturbances judged by
-functional status class.
+XI-6 vTESTstudio-style authoring: event-driven test units, test tables, verdicts and an ALM
+traceability export.

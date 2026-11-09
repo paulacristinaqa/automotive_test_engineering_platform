@@ -106,6 +106,7 @@ LOOP_DID = {
 }
 SUPPLY_DTC = "B1010"
 TEMPERATURE_DTC = "B1060"
+FIRING_INHIBIT_DTC = dtc_code("B1070", 0x17)
 CRASH_RECORDED_DTC = dtc_code("B1050")
 LOST_VEHICLE_STATUS_DTC = dtc_code("U0121")
 
@@ -150,6 +151,12 @@ class AcuCalibration:
     quiescent_current_a: float = 50e-6
     firing_current_a: float = 1.75
     firing_duration_us: int = 2_000
+    # Input protection: an RC filter absorbs shorter pulses, a TVS diode clamps the input,
+    # and a clamped input above `firing_inhibit_v` latches the firing path off until the
+    # next ignition cycle, so a supply transient can never cause a deployment.
+    input_filter_us: int = 1_000
+    tvs_clamp_v: float = 33.0
+    firing_inhibit_v: float = 30.0
     window_us: int = 30_000
     belt_threshold_kmh: float = 6.0
     airbag_threshold_kmh: float = 14.0
@@ -388,6 +395,11 @@ class AirbagControlUnit:
         self.crash: CrashRecord | None = None
         self.lamp_history: list[tuple[int, bool]] = [(0, False)]
         self.power_cycles = 0
+        self.firing_inhibited = False
+        self.transients_absorbed = 0
+        self.readiness_history: list[tuple[int, bool]] = [(0, False)]
+        self._transient_end_us: int | None = None
+        self._pre_transient_v = 0.0
         self._failing_since: dict[int, int] = {}
         self._samples: deque[tuple[int, float, float, int]] = deque()
         self._window: deque[tuple[int, float, float, int]] = deque()
@@ -456,6 +468,10 @@ class AirbagControlUnit:
             self.kl30_v = kl30_v
         if kl15 is not None:
             self.kl15 = kl15
+        self._apply_power(now_us)
+        self._evaluate(now_us)
+
+    def _apply_power(self, now_us: int) -> None:
         supplied = self.kl30_v >= self.cal.minimum_operating_v
         if not self.kl15:
             self._shutdown()
@@ -467,7 +483,47 @@ class AirbagControlUnit:
         elif supplied and self.reserve_until is not None:
             self.reserve_until = None
             self._next_status_at = now_us + self.cal.status_period_us
+
+    def apply_transient(self, now_us: int, peak_v: float, duration_us: int) -> None:
+        """A supply pulse as the ACU input sees it, after the vehicle's own suppression.
+
+        Shorter than the input filter: absorbed. Negative: blocked by the reverse-polarity
+        diode, so the ACU sees a supply interruption. Positive: clamped by the TVS diode;
+        above the firing-inhibit level the firing path latches off.
+        """
+        if duration_us <= 0:
+            raise ValueError("a transient needs a positive duration")
+        self._advance(now_us)
+        if duration_us < self.cal.input_filter_us or self._transient_end_us is not None:
+            self.transients_absorbed += 1
+            return
+        self._pre_transient_v = self.kl30_v
+        self._transient_end_us = now_us + duration_us
+        if peak_v < 0:
+            self.kl30_v = 0.0
+        else:
+            self.kl30_v = min(peak_v, self.cal.tvs_clamp_v)
+            if self.kl30_v > self.cal.firing_inhibit_v and self.powered_since is not None:
+                self.firing_inhibited = True
+        self._apply_power(now_us)
         self._evaluate(now_us)
+
+    def _end_transient_if_due(self, at_us: int) -> None:
+        end = self._transient_end_us
+        if end is not None and at_us >= end:
+            self._transient_end_us = None
+            self.kl30_v = self._pre_transient_v
+            self._apply_power(end)
+
+    @property
+    def ready(self) -> bool:
+        """Able to deploy now: running, armed and the firing path not inhibited."""
+        return (
+            self.operational()
+            and self.powered_since is not None
+            and self.now_us >= self.powered_since + self.cal.arming_delay_us
+            and not self.firing_inhibited
+        )
 
     def set_loop_resistance(self, now_us: int, loop: Loop, ohms: float) -> None:
         if ohms < 0:
@@ -570,6 +626,7 @@ class AirbagControlUnit:
 
     def _power_on(self, now_us: int) -> None:
         self.powered_since = now_us
+        self.firing_inhibited = False
         self.reserve_until = None
         self.power_cycles += 1
         self.diag = AcuDiagnostics(self, self.transport)
@@ -624,7 +681,7 @@ class AirbagControlUnit:
         while self._window and self._window[0][0] <= at_us - self.cal.window_us:
             self._window.popleft()
         assert self.powered_since is not None
-        if at_us < self.powered_since + self.cal.arming_delay_us:
+        if self.firing_inhibited or at_us < self.powered_since + self.cal.arming_delay_us:
             return
         if self.crash is not None and at_us > self.crash.first_fire_us + self.cal.crash_event_us:
             return
@@ -646,10 +703,12 @@ class AirbagControlUnit:
     def _advance(self, now_us: int) -> None:
         while self._samples and self._samples[0][0] <= now_us:
             at_us, main_g, safing_g, period_us = self._samples.popleft()
+            self._end_transient_if_due(at_us)
             if self.reserve_until is not None and at_us >= self.reserve_until:
                 self._shutdown()
             if self.operational(at_us):
                 self._algorithm(at_us, main_g, safing_g, period_us)
+        self._end_transient_if_due(now_us)
         if self.reserve_until is not None and now_us >= self.reserve_until:
             self._shutdown()
         self.now_us = max(self.now_us, now_us)
@@ -687,6 +746,8 @@ class AirbagControlUnit:
             codes.add(LOST_VEHICLE_STATUS_DTC)
         if self.temperature_c > self.cal.over_temperature_c:
             codes.add(dtc_code(TEMPERATURE_DTC, FailureType.OVER_TEMPERATURE))
+        if self.firing_inhibited:
+            codes.add(FIRING_INHIBIT_DTC)
         return codes
 
     def _debounce_us(self, code: int) -> int:
@@ -720,6 +781,9 @@ class AirbagControlUnit:
         lamp = self.lamp_on
         if self.lamp_history[-1][1] != lamp:
             self.lamp_history.append((self.now_us, lamp))
+        ready = self.ready
+        if self.readiness_history[-1][1] != ready:
+            self.readiness_history.append((self.now_us, ready))
 
     # CAN ---------------------------------------------------------------------
 
@@ -792,10 +856,15 @@ class AirbagControlUnit:
             values.append(self._samples[0][0])
         if self.reserve_until is not None:
             values.append(self.reserve_until)
+        if self._transient_end_us is not None:
+            values.append(self._transient_end_us)
         if self.operational():
             assert self.powered_since is not None
             if self.in_self_test:
                 values.append(self.powered_since + self.cal.self_test_us)
+            armed_at = self.powered_since + self.cal.arming_delay_us
+            if self.now_us < armed_at:
+                values.append(armed_at)
             values.extend(
                 since + self._debounce_us(code)
                 for code, since in self._failing_since.items()

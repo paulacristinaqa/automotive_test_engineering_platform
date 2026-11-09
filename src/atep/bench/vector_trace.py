@@ -27,6 +27,7 @@ class TraceFrame:
     is_fd: bool = False
     bitrate_switch: bool = False
     channel: int = 1
+    is_error_frame: bool = False
 
     def __post_init__(self) -> None:
         if self.timestamp_us < 0:
@@ -37,6 +38,8 @@ class TraceFrame:
             raise ValueError("bitrate switch requires a CAN FD frame")
         if len(self.data) > (64 if self.is_fd else 8):
             raise ValueError("payload is longer than the frame type allows")
+        if self.is_error_frame and self.data:
+            raise ValueError("an error frame carries no payload")
 
 
 def anchor_from(moment: datetime) -> datetime:
@@ -58,6 +61,8 @@ def _asc_time(timestamp_us: int) -> str:
 
 
 def _asc_line(frame: TraceFrame) -> str:
+    if frame.is_error_frame:
+        return f"{_asc_time(frame.timestamp_us)} {frame.channel}  ErrorFrame"
     arb_id = f"{frame.arbitration_id:X}" + ("x" if frame.is_extended_id else "")
     data = frame.data.hex(" ").upper()
     if not frame.is_fd:
@@ -106,7 +111,8 @@ def to_message(frame: TraceFrame, *, start_s: float = 0.0) -> can.Message:
         bitrate_switch=frame.bitrate_switch,
         data=frame.data,
         channel=frame.channel - 1,
-        check=True,
+        is_error_frame=frame.is_error_frame,
+        check=not frame.is_error_frame,
     )
 
 

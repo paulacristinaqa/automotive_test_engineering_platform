@@ -18,8 +18,10 @@ vTESTstudio and HiL benches.
   ISO 16750-2-style profiles (momentary drop, dropout, starting profile, slow decrease and
   increase, overvoltage); relay card for KL15; fault-injection box (open, shorts, substitute
   resistance); multimeter; climate chamber; ACU current model; 15-case HiL campaign.
-- [ ] **XI-5 Transients and EMC concepts** - voltage transient pulses and bus disturbances judged
-  by functional status class. Conceptual only; no real EMC measurement.
+- [x] **XI-5 Transients and EMC concepts** - SCPI transient generator (ISO 7637-2-style pulses
+  1, 2a, 3a, 3b and load dump 5b), ACU input protection with a latched firing inhibit, CAN error
+  frames with retransmission and bus-off, functional status classification A-E, and a 7-case EMC
+  campaign with a test plan. Conceptual only; no real EMC measurement.
 - [ ] **XI-6 vTESTstudio-style authoring** - event-driven test units (`on_message`, `on_timer`,
   `wait_for_signal`), test tables, verdicts, HTML/XML reports and ALM traceability export.
 - [ ] **XI-7 System test campaign** - test specification, plan, execution on the virtual bench,
@@ -27,6 +29,6 @@ vTESTstudio and HiL benches.
 
 ## Next recommended increment
 
-XI-5 Transients and EMC concepts. The XI-4 supply can already play voltage profiles; XI-5 adds
-ISO 7637-2-style transient pulses and bus disturbances, judged by functional status class (A to
-E), without claiming a real EMC measurement.
+XI-6 vTESTstudio-style authoring. The shared campaign model (`atep.bench.campaign`) already holds
+cases, checks with limits and reports; XI-6 adds event-driven test units, test tables, verdicts
+and an ALM traceability export.

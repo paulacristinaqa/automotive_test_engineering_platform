@@ -266,6 +266,73 @@ profile, loop shorts, the resistance window at its boundaries (1.4, 1.5, 5.0 and
 resistance measurement, harness drift over temperature, over-temperature, squib firing current
 and SCPI error handling. The campaign writes `report.json`, `report.md` and `scpi-log.txt`.
 
+## XI-5 Transients and EMC concepts
+
+XI-5 shows how an EMC/transient test plan is written and judged. It is a behavioural model, not
+an EMC measurement: levels are illustrative and the ACU reaction comes from its input-protection
+model.
+
+### Transient generator (TRG)
+
+| Pulse | Shape (illustrative) | Coupling | ACU reaction |
+|---|---|---|---|
+| 1 | -100 V, 2 ms, every 0.5 s, 10x | Supply | Reverse-polarity diode blocks it: a 2 ms interruption bridged by the energy reserve; no CAN while on reserve |
+| 2a | +50 V, 50 µs, every 0.5 s, 10x | Supply | Absorbed by the 1 ms input filter |
+| 3a / 3b | 10 ms bursts every 100 ms, 10x | CAN | Each attempt in a burst is an error frame; frames are retransmitted after the burst |
+| 5b | 35 V for 400 ms (load dump, Us 87 V suppressed) | Supply | TVS clamps to 33 V; above 30 V the firing path latches off until the next ignition cycle (B1070-17, lamp on) |
+
+Commands: `PULS:CAT?`, `PULS:SEL <name>`, `PULS:LEV <V>`, `PULS:WIDT <s>`, `PULS:COUN <n>`,
+`PULS:RUN`, `PULS:STAT?`. The width must stay shorter than the repetition period, so set
+`PULS:COUN 1` before a long `PULS:WIDT`.
+
+### CAN disturbance model
+
+Inside a disturbance window every transmission attempt is destroyed and written to the trace as
+an error frame (`ErrorFrame` in ASC). The controller retransmits automatically; after 32 errors
+in a row it goes bus-off and waits 128 × 11 bit times (2.8 ms at 500 kbit/s) before trying again.
+A disturbance therefore delays frames. Only a frame still unsent after 2 s is lost.
+
+### Functional status classification
+
+`atep.bench.emc.observe` watches the ACU from the start of an exposure until a recovery period
+after it, optionally probing it mid-exposure, and classifies the result:
+
+```mermaid
+flowchart TD
+    Start["Exposure finished"] --> Dep{"Any deployment?"}
+    Dep -->|yes| E["E"]
+    Dep -->|no| Auto{"Recovered by itself?"}
+    Auto -->|no| Cycle{"Recovered after an ignition cycle?"}
+    Cycle -->|yes| D["D"]
+    Cycle -->|no| E
+    Auto -->|yes| Lost{"Reset or firing readiness lost?"}
+    Lost -->|yes| C["C"]
+    Lost -->|no| Tol{"Status gap > 1.5 periods, lost frames or new DTC?"}
+    Tol -->|yes| B["B"]
+    Tol -->|no| A["A"]
+```
+
+### EMC campaign
+
+```bash
+python tools/run_emc_bench_demo.py --output out/emc-bench
+```
+
+| Test | Exposure | Required class | Achieved |
+|---|---|---|---|
+| EMC-T01 | Pulse 1 | B | B (status gaps while on reserve) |
+| EMC-T02 | Pulse 2a | A | A |
+| EMC-T03 | Pulse 3a on CAN | A | A (frames delayed about 10 ms) |
+| EMC-T04 | Pulse 3b on CAN | A | A |
+| EMC-T05 | Load dump 5b | D | D (safe state until ignition cycle) |
+| EMC-T06 | 800 ms CAN burst | B | B (U0121 pending, recovered) |
+| EMC-T07 | 300 ms supply interruption | C | C (reset and new self-test) |
+
+Every test also checks that the ACU did not deploy. Class D for the load dump is intended: an
+airbag ECU must rather disable its firing path than risk an unintended deployment, and it
+signals that state with the lamp and a DTC. The campaign writes `emc-test-plan.md`, the reports,
+`acu.dbc` and `emc-pulse-3a.asc/.blf`, whose error frames show in CANoe.
+
 ## Limits
 
 - The bench simulates the network and test logic. There is no electrical layer, no bit stuffing

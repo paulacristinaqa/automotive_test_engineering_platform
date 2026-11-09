@@ -21,6 +21,7 @@ from atep.bench.instruments import (
     Multimeter,
     PowerSupply,
     RelayCard,
+    TransientGenerator,
 )
 from atep.bench.isotp import IsoTpConfig
 from atep.bench.link import SimulatedLink
@@ -112,13 +113,15 @@ class HilBench(AcuBench):
     rack: BenchRack = field(init=False)
     psu: PowerSupply = field(init=False)
     chamber: ClimateChamber = field(init=False)
+    trg: TransientGenerator = field(init=False)
 
     def __post_init__(self) -> None:
         super().__post_init__()
         self.acu.kl30_v = 0.0
         self.psu = PowerSupply(self.acu)
         self.chamber = ClimateChamber(self.acu)
-        self.link.nodes.extend([self.psu, self.chamber])
+        self.trg = TransientGenerator(self.acu, self.link)
+        self.link.nodes.extend([self.psu, self.chamber, self.trg])
         self.rack = BenchRack(
             {
                 "PSU": self.psu,
@@ -126,6 +129,7 @@ class HilBench(AcuBench):
                 "FIB": FaultInjectionBox(self.acu),
                 "DMM": Multimeter(self.acu),
                 "CHAM": self.chamber,
+                "TRG": self.trg,
             },
             self.link,
         )

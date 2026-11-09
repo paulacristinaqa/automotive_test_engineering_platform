@@ -14,13 +14,25 @@ from pathlib import Path
 
 @dataclass
 class Check:
+    """Expected versus actual. `at_most` passes when actual <= expected (a limit)."""
+
     name: str
     expected: object
     actual: object
+    at_most: bool = False
 
     @property
     def passed(self) -> bool:
+        if self.at_most:
+            try:
+                return bool(self.actual <= self.expected)  # type: ignore[operator]
+            except TypeError:
+                return False
         return self.expected == self.actual
+
+    @property
+    def expected_text(self) -> str:
+        return ("<= " if self.at_most else "") + report_text(self.expected)
 
 
 @dataclass
@@ -109,7 +121,7 @@ def markdown(report: CampaignReport) -> str:
         ]
         for check in case.checks:
             lines.append(
-                f"| {check.name} | {report_text(check.expected)} | {report_text(check.actual)} | "
+                f"| {check.name} | {check.expected_text} | {report_text(check.actual)} | "
                 f"{'PASS' if check.passed else 'FAIL'} |"
             )
     return "\n".join(lines) + "\n"
@@ -128,7 +140,7 @@ def summary(report: CampaignReport) -> dict[str, object]:
                 "checks": [
                     {
                         "name": check.name,
-                        "expected": report_text(check.expected),
+                        "expected": check.expected_text,
                         "actual": report_text(check.actual),
                         "passed": check.passed,
                     }

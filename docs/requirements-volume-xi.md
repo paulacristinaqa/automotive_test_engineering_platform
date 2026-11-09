@@ -116,6 +116,32 @@ ISO 16750-2 tests with shortened durations; they are not certified test levels.
 | BENCH-NF-013 | Instrument errors never raise into the test script; they go to the error queue, as on real instruments. | `tests/test_bench_scpi.py`, HIL-T15 |
 | BENCH-NF-014 | The HiL campaign must fail on an ACU with excessive quiescent current, a supply debounce shorter than an engine start, a missing energy reserve or a wrong resistance window. | `tests/test_bench_hil_demo.py` |
 
+## XI-5 Transients and EMC concepts
+
+This increment models how an EMC/transient test plan is written and judged. It is not an EMC
+measurement: pulse levels are illustrative shapes of ISO 7637-2 pulses and the ISO 16750-2 load
+dump, and the ACU reaction comes from a behavioural input-protection model. Test case IDs refer
+to `tools/run_emc_bench_demo.py`.
+
+### Functional requirements
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| BENCH-F-045 | A SCPI transient generator lists, selects, adjusts (level, width, count) and runs pulses 1, 2a, 3a, 3b and 5b, applied to the ACU supply input or coupled into CAN, and reports RUNNING or IDLE. | EMC-T01 to EMC-T06 |
+| BENCH-F-046 | ACU input protection: pulses shorter than 1 ms are absorbed; negative pulses become a supply interruption behind the reverse-polarity diode; positive pulses are clamped at 33 V; a clamped input above 30 V latches the firing path off until the next ignition cycle and raises B1070-17. | EMC-T02, EMC-T05 |
+| BENCH-F-047 | Classify each exposure into functional status class A to E from resets, loss of firing readiness, status-message gaps above 1.5 periods, lost frames, new DTCs, automatic recovery and recovery after an ignition cycle; any deployment is class E. | EMC-T01 to EMC-T07 |
+| BENCH-F-048 | A CAN disturbance destroys every transmission attempt in its window: each attempt is recorded as an error frame in ASC and BLF traces, retransmission is automatic, 32 consecutive errors cause bus-off with a 128 x 11-bit recovery, and a frame still unsent after 2 s is lost. | EMC-T03, EMC-T04, EMC-T06 |
+| BENCH-F-049 | A disturbance that blocks the vehicle status beyond its timeout sets U0121, which stays pending, not confirmed, when it heals within the 500 ms debounce. | EMC-T06 |
+| BENCH-F-050 | Provide an EMC campaign whose test plan states the required class per test, checks that every test ends without deployment, and writes the plan with achieved classes, reports, the ACU DBC and a trace with error frames. | `tools/run_emc_bench_demo.py`, `tests/test_bench_emc_demo.py` |
+
+### Non-functional requirements
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| BENCH-NF-015 | Every EMC test must check that the ACU did not deploy. | EMC-T01 to EMC-T07 |
+| BENCH-NF-016 | The EMC campaign must fail on an ACU without firing inhibit, with too short an input filter, or with an energy reserve that cannot bridge pulse 1. | `tests/test_bench_emc_demo.py` |
+| BENCH-NF-017 | Campaign checks support limits (`at_most`) as well as equality, so a required class "B or better" is expressed directly. | `tests/test_bench_emc.py` |
+
 ## Deliberate limits
 
 - The bench simulates the network and the logic of a test bench. It does not model analog
@@ -124,6 +150,8 @@ ISO 16750-2 tests with shortened durations; they are not certified test levels.
   `virtual` interface.
 - ISO-TP messages are limited to 4,095 bytes; the 32-bit first-frame length escape is not
   implemented. Functional (broadcast) addressing is not modelled.
+- EMC results are behavioural: no coupling physics, no radiated or conducted emission or
+  immunity tests, and pulse levels are illustrative, not ISO severity levels.
 - Instruments are models: no measurement noise, accuracy class, settling time or current limit.
 - The ACU deployment algorithm, thresholds and timings are illustrative. Real calibrations are
   confidential, use more sensors (side, satellite, rollover) and are validated with physical

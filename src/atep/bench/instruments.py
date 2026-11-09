@@ -7,6 +7,7 @@
 | FIB | Fault-injection box | Squib loops 1-4: open, short to GND/battery, resistance |
 | DMM | Digital multimeter | Terminal voltage, supply current, loop resistance |
 | CHAM | Climate chamber | ACU and harness temperature, with a ramp rate |
+| TRG | Transient generator | ISO 7637-2-style pulses on the supply or coupled into CAN |
 
 Voltage profiles follow the shape of ISO 16750-2 tests with shortened durations
 so a campaign runs in seconds of logical time. They are not certified test levels.
@@ -17,6 +18,8 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from atep.bench.airbag import AirbagControlUnit, Loop, LoopShort
+from atep.bench.emc import PULSES, Coupling, TransientPulse
+from atep.bench.link import SimulatedLink
 from atep.bench.scpi import (
     DATA_OUT_OF_RANGE,
     EXECUTION_ERROR,
@@ -430,6 +433,100 @@ class ClimateChamber(Instrument):
 
     def next_deadline_us(self) -> int | None:
         return self._next_at
+
+
+class TransientGenerator(Instrument):
+    """Plays transient pulses: on the ACU supply input, or as disturbances coupled into CAN."""
+
+    identity = "ATEP,VIRTUAL-TRANSIENT-GEN,0006,1.0"
+
+    def __init__(self, acu: AirbagControlUnit, link: SimulatedLink) -> None:
+        super().__init__()
+        self.acu = acu
+        self.link = link
+        self.selected: TransientPulse = PULSES["1"]
+        self._pending: list[int] = []
+        self._active: TransientPulse | None = None
+        self._busy_until = 0
+
+    def reset(self, now_us: int) -> None:
+        self.selected = PULSES["1"]
+        self._pending = []
+        self._active = None
+
+    def _override(self, **values: float | int) -> None:
+        current = self.selected
+        self.selected = TransientPulse(
+            current.name,
+            current.standard,
+            current.description,
+            float(values.get("peak_v", current.peak_v)),
+            int(values.get("width_us", current.width_us)),
+            int(values.get("period_us", current.period_us)),
+            int(values.get("count", current.count)),
+            current.coupling,
+        )
+
+    def handle(self, command: ScpiCommand, now_us: int) -> str | None:
+        header = command.header
+        pulse = self.selected
+        if header == "PULS:CAT" and command.query:
+            return ",".join(PULSES)
+        if header == "PULS:SEL":
+            if command.query:
+                return pulse.name
+            if not command.args or command.args[0].lower() not in PULSES:
+                raise ScpiError(DATA_OUT_OF_RANGE, "Unknown pulse")
+            self.selected = PULSES[command.args[0].lower()]
+            return None
+        if header == "PULS:LEV":
+            if command.query:
+                return format_number(pulse.peak_v)
+            self._override(peak_v=command.number(minimum=-600.0, maximum=600.0))
+            return None
+        if header == "PULS:WIDT":
+            if command.query:
+                return format_number(pulse.width_us / 1_000_000)
+            seconds = command.number(minimum=1e-6, maximum=10.0)
+            try:
+                self._override(width_us=round(seconds * 1_000_000))
+            except ValueError as error:
+                raise ScpiError(DATA_OUT_OF_RANGE, "Width exceeds the period") from error
+            return None
+        if header == "PULS:COUN":
+            if command.query:
+                return str(pulse.count)
+            self._override(count=int(command.number(minimum=1, maximum=10_000)))
+            return None
+        if header == "PULS:RUN":
+            if self._pending:
+                raise ScpiError(EXECUTION_ERROR, "Generator busy")
+            self._active = pulse
+            starts = pulse.starts(now_us)
+            if pulse.coupling is Coupling.CAN:
+                for start in starts:
+                    self.link.add_disturbance(start, start + pulse.width_us)
+                self._pending = []
+            else:
+                self._pending = starts
+                self.poll(now_us)
+            self._busy_until = now_us + pulse.duration_us
+            return None
+        if header == "PULS:STAT" and command.query:
+            return "RUNNING" if now_us < self._busy_until else "IDLE"
+        raise ScpiError(UNDEFINED_HEADER, "Undefined header")
+
+    def on_frame(self, frame: TraceFrame, now_us: int) -> list[TraceFrame]:
+        return []
+
+    def poll(self, now_us: int) -> list[TraceFrame]:
+        while self._pending and self._pending[0] <= now_us and self._active is not None:
+            at_us = self._pending.pop(0)
+            self.acu.apply_transient(at_us, self._active.peak_v, self._active.width_us)
+        return []
+
+    def next_deadline_us(self) -> int | None:
+        return self._pending[0] if self._pending else None
 
 
 class RackClock(Protocol):

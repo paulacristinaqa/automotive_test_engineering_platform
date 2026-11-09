@@ -66,6 +66,7 @@ def from_message(message: can.Message, *, start_s: float = 0.0) -> TraceFrame:
         is_fd=message.is_fd,
         bitrate_switch=message.bitrate_switch,
         channel=channel + 1,
+        is_error_frame=message.is_error_frame,
     )
 
 

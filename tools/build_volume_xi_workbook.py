@@ -6,8 +6,8 @@ SOURCE = workbook.ROOT / "docs" / "workbook-volume-xi.md"
 OUTPUT = workbook.ROOT / "docs" / "ATEP_Volume_XI_Virtual_Test_Bench_Engineering_Workbook.docx"
 VOLUME_NUMBER = "XI"
 VOLUME_NAME = "Virtual Test Bench"
-DOCUMENT_VERSION = "0.4.0"
-DOCUMENT_STATUS = "Implemented increments: XI-1 to XI-4"
+DOCUMENT_VERSION = "0.5.0"
+DOCUMENT_STATUS = "Implemented increments: XI-1 to XI-5"
 BASELINE_DATE = "9 November 2026"
 
 

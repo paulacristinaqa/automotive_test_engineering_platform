@@ -45,6 +45,16 @@ class SimulatedLink:
     now_us: int = 0
     trace: list[TraceFrame] = field(default_factory=list)
     _bus_free_at: int = 0
+    # Disturbance windows (start, end): every transmission attempt inside one is destroyed.
+    disturbances: list[tuple[int, int]] = field(default_factory=list)
+    error_frame_us: int = 50
+    # A transmitter that sees 32 errors in a row reaches bus-off (TEC > 255) and must wait
+    # 128 x 11 recessive bits before it may retry. A frame still not sent after
+    # `max_delay_us` is counted as lost.
+    errors_to_bus_off: int = 32
+    max_delay_us: int = 2_000_000
+    bus_off_events: int = 0
+    lost: list[TraceFrame] = field(default_factory=list)
     _in_flight: list[tuple[int, int, int, TraceFrame]] = field(default_factory=list)
     _order: int = 0
 
@@ -56,9 +66,41 @@ class SimulatedLink:
         data = -(-(8 * len(frame.data) + 40) * 1000 // self.data_bitrate_kbps)
         return arbitration + data
 
+    def disturbed(self, at_us: int) -> bool:
+        return any(start <= at_us < end for start, end in self.disturbances)
+
+    def add_disturbance(self, start_us: int, end_us: int) -> None:
+        if end_us <= start_us:
+            raise ValueError("a disturbance must have a positive duration")
+        self.disturbances.append((start_us, end_us))
+
+    @property
+    def bus_off_recovery_us(self) -> int:
+        return -(-128 * 11 * 1000 // self.bitrate_kbps)
+
+    def error_frames(self) -> list[TraceFrame]:
+        return [frame for frame in self.trace if frame.is_error_frame]
+
     def _queue(self, sender: int, frames: list[TraceFrame]) -> None:
         for frame in frames:
-            start = max(frame.timestamp_us, self.now_us, self._bus_free_at)
+            ready = max(frame.timestamp_us, self.now_us, self._bus_free_at)
+            start = ready
+            # A disturbed attempt ends in an error frame and CAN retransmits automatically,
+            # through bus-off recovery if needed, so a disturbance delays frames.
+            attempts = 0
+            while self.disturbed(start) and start - ready <= self.max_delay_us:
+                self.trace.append(
+                    TraceFrame(start, 0, False, b"", channel=frame.channel, is_error_frame=True)
+                )
+                start += self.error_frame_us
+                attempts += 1
+                if attempts % self.errors_to_bus_off == 0:
+                    self.bus_off_events += 1
+                    start += self.bus_off_recovery_us
+            if start - ready > self.max_delay_us:
+                self._bus_free_at = start
+                self.lost.append(frame)
+                continue
             placed = TraceFrame(
                 timestamp_us=start,
                 arbitration_id=frame.arbitration_id,

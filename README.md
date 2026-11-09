@@ -113,6 +113,9 @@ An intended end-to-end scenario is:
 - SCPI bench instruments around the ACU (programmable supply with ISO 16750-2-style profiles,
   KL15 relay, squib fault-injection box, multimeter, climate chamber) and a 15-case HiL campaign
   with a timestamped command log;
+- transient and EMC concepts: ISO 7637-2-style pulses from a SCPI transient generator, ACU input
+  protection with a latched firing inhibit, CAN error frames with bus-off, and functional status
+  classification (A-E) checked against an EMC test plan;
 - Ruff, strict mypy, pytest, and GitHub Actions quality gates.
 
 ## Architecture
@@ -402,7 +405,7 @@ operational guidance, and review worksheets.
 | VIII | Test Framework | Complete — VIII-1 through VIII-7, including bounded performance and stress evidence |
 | IX | AI Test Engineer | Complete IX-1 through IX-7 with cross-platform cited AI evidence |
 | X | Dashboard | In progress - X-1 through X-6 backend scope delivered (X-5 reduced scope); X-7.11 to X-7.19 actual AAOS acceptance and X-7.20 to X-7.23 local proxy, TLS, shared-admission and certificate-lifecycle acceptance passed; combined TLS/multiprocess profile and full deployment gate pending |
-| XI | Virtual Test Bench | In progress - XI-1 Vector artifacts and bench bus; XI-2 ISO-TP, UDS timing, virtual ECU, supervision and E2E; XI-3 virtual airbag control unit and system-test campaign; XI-4 SCPI bench instruments and HiL campaign |
+| XI | Virtual Test Bench | In progress - XI-1 Vector artifacts and bench bus; XI-2 ISO-TP, UDS timing, virtual ECU, supervision and E2E; XI-3 virtual airbag control unit and system-test campaign; XI-4 SCPI bench instruments and HiL campaign; XI-5 transients and EMC-concept campaign |
 | XII | DevOps | Planned |
 | XIII | Enterprise Features | Planned |
 

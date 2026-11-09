@@ -21,6 +21,7 @@ OVERLOAD = "9.9E37"  # SCPI value for an over-range reading
 # Long SCPI mnemonics and their short forms (the upper-case part of the long form).
 LONG_FORMS = {
     "BATTERY": "BATT",
+    "CATALOG": "CAT",
     "CLEAR": "CLE",
     "CLOSE": "CLOS",
     "CURRENT": "CURR",
@@ -39,6 +40,11 @@ LONG_FORMS = {
     "STATUS": "STAT",
     "SYSTEM": "SYST",
     "TEMPERATURE": "TEMP",
+    "COUNT": "COUN",
+    "LEVEL": "LEV",
+    "PULSE": "PULS",
+    "SELECT": "SEL",
+    "WIDTH": "WIDT",
     "VOLTAGE": "VOLT",
 }
 
