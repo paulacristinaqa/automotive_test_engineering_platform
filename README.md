@@ -102,6 +102,8 @@ An intended end-to-end scenario is:
   fail-closed environment enablement, and retained manifest evidence;
 - protected main-only GHCR publishing with commit-addressed images, signed SLSA provenance and
   CycloneDX SBOM attestations, plus fail-closed provenance verification before promotion;
+- Vector-compatible DBC, ASC and BLF exports of CAN evidence, and a python-can bench bus
+  (virtual, SocketCAN, Vector, PEAK, slcan) with a demo cross-checked by cantools;
 - Ruff, strict mypy, pytest, and GitHub Actions quality gates.
 
 ## Architecture
@@ -367,6 +369,10 @@ companion project also passes 27 unit tests, Android lint, and debug APK assembl
 - [Volume X — Dashboard roadmap](docs/roadmap-volume-x.md)
 - [Volume X — Dashboard editable workbook](docs/workbook-volume-x.md)
 - [Volume X — Dashboard formatted workbook](docs/ATEP_Volume_X_Dashboard_Engineering_Workbook.docx)
+- [Volume XI — Virtual Test Bench architecture](docs/virtual-bench.md)
+- [Volume XI — Virtual Test Bench requirements](docs/requirements-volume-xi.md)
+- [Volume XI — Virtual Test Bench roadmap](docs/roadmap-volume-xi.md)
+- [Volume XI — Virtual Test Bench editable workbook](docs/workbook-volume-xi.md)
 
 The workbook is a living English-language engineering record containing requirements,
 architecture decisions, implementation evidence, test objectives, risks, technical debt,
@@ -386,8 +392,9 @@ operational guidance, and review worksheets.
 | VIII | Test Framework | Complete — VIII-1 through VIII-7, including bounded performance and stress evidence |
 | IX | AI Test Engineer | Complete IX-1 through IX-7 with cross-platform cited AI evidence |
 | X | Dashboard | In progress - X-1 through X-6 backend scope delivered (X-5 reduced scope); X-7.11 to X-7.19 actual AAOS acceptance and X-7.20 to X-7.23 local proxy, TLS, shared-admission and certificate-lifecycle acceptance passed; combined TLS/multiprocess profile and full deployment gate pending |
-| XI | DevOps | Planned |
-| XII | Enterprise Features | Planned |
+| XI | Virtual Test Bench | In progress - XI-1 Vector artifacts and python-can bench bus implemented |
+| XII | DevOps | Planned |
+| XIII | Enterprise Features | Planned |
 
 The runnable CarSystemUI showcase connects simulated or AAOS property changes to this telemetry
 contract through a persistent, idempotent Vehicle Gateway. Its read-only CarPropertyManager/VHAL
