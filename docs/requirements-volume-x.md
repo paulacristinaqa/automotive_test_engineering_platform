@@ -1,5 +1,12 @@
 # Volume X Dashboard Requirements
 
+## X-7.12 active-session AAOS permission loss
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-058 | On a real AAOS LIVE session, observe removal of dashboard permission at the next server authorization check and clear displayed evidence/credential input. | Instrumented PASS and inspected denied-state screenshot; dashboard-aaos-permission-loss.md |
+| DASH-NF-059 | Coordinate fixture revocation only after an exact device LIVE checkpoint, once, with bounded subprocess output/time and host-only administrator credentials. | Seven coordinator tests; real host/device checkpoint and revocation PASS |
+
 ## X-7.11 real AAOS smoke acceptance
 
 | ID | Requirement | Evidence |

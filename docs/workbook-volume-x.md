@@ -491,6 +491,34 @@ Android retained 57 passing JVM tests and lint with zero errors/15 warnings.
 Owned emulator and disposable containers were confirmed removed. Changes are
 saved locally; no commit/PR/merge or DOCX regeneration was performed in this run.
 
+## X-7.12 — Active-session AAOS permission loss
+
+A dedicated disposable user starts with only `dashboard:read`. The Android
+instrumentation waits for LIVE, emits an exact checkpoint, and the host then
+removes that user's fixture role through the public API. Administrator credentials
+are no longer sent to the Android smoke; both permitted sessions use the narrow
+dashboard-reader token. No production authorization or refresh settings change.
+
+The real device scenario passed: FORBIDDEN was observed at the next authorization
+check, the credential field was empty and the accessible tree contained no snapshot.
+The retained local screenshot was inspected. This does not establish instantaneous
+revocation, inactive-user acceptance or whole-process memory erasure.
+
+Seven new host coordinator tests cover exact/missing/duplicate checkpoints,
+bounded timeout/output, callback failure and child failure. All passed, as did
+Ruff/strict mypy. Android build/lint passed in 27 seconds with one worker, retaining
+57 passing JVM tests and zero lint errors/15 warnings. Two integration tests
+passed in 19.93 seconds. Sampled host CPU was 27–57%, GPU 10–21%; one active-device
+sample had 10.5 GiB RAM free. Compilation and emulator execution were sequential.
+
+See `dashboard-aaos-permission-loss.md` for reproduction and evidence boundaries.
+The restore drill passed (87 tables/296 rows, 77.594 seconds), and the owned
+emulator/temporary containers were confirmed removed. Final sampled CPU was 33%.
+Changes remain local and uncommitted; no PR or merge was performed in this increment.
+Expiry, inactive-user handling, reconnect/staleness and ten-snapshot completion
+remain pending; trusted-proxy acceptance follows the Android gate. No paid service
+was added. Markdown is current; DOCX has not been regenerated.
+
 ## Remaining acceptance work after populated verification
 
 X-6: live updates, exports, retention and performance hardening. Full OTA and formal standards
