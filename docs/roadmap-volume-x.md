@@ -64,10 +64,10 @@ Redis handshake admission through local Nginx (`dashboard-proxy-boundary.md`).
 X-7.21 passes local TLS/certificate validation and API host-port isolation
 (`dashboard-proxy-tls.md`). X-7.22 passes bounded shared-admission validation with
 two independent single-worker replicas (`dashboard-multiprocess-admission.md`),
-without a stress, automatic-balancing or production-capacity claim. X-7.23 local
-certificate lifecycle tooling (expiry and restart-based replacement) is implemented
-with targeted tests, but live acceptance awaits Docker Desktop. Resume that gate
-before moving to another increment (`dashboard-certificate-lifecycle.md`). The complete deployment
+without a stress, automatic-balancing or production-capacity claim. X-7.23 passes
+live local certificate lifecycle acceptance: an explicitly trusted expired certificate
+fails with verification code 10, and a restart-based replacement recovers verified
+HTTPS/WSS (`dashboard-certificate-lifecycle.md`). The complete deployment
 gate, broader accessibility and device/browser matrix remain open.
 The broader Android gate is not yet complete.
 Screen-reader/contrast/browser-matrix checks and real network partitions

@@ -1,6 +1,6 @@
 # X-7.23 — Local certificate expiry and replacement
 
-Status: implemented; live Docker acceptance pending.
+Status: live Docker acceptance passed on 2026-11-09.
 
 ## Contract
 
@@ -39,7 +39,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/run_integration_tests.
 This enables the existing TLS profile, which removes API host port publishing
 during TLS acceptance. It must not be combined with the multiprocess or emulator
 profile. Use `-UseExistingImages` only when the existing application image matches
-backend source. OpenSSL must support `x509 -not_before/-not_after`; the local
+backend source. If Windows reserves the default proxy ports (check with
+`netsh interface ipv4 show excludedportrange protocol=tcp`), move them with
+`-ProxyPort`, `-ProxyReplicaAPort`, `-ProxyReplicaBPort` or `-ProxyTlsPort`; the
+compose files and runners read the same `ATEP_ACCEPTANCE_*_PORT` variables. OpenSSL must support `x509 -not_before/-not_after`; the local
 Git for Windows OpenSSL 3.5.6 supports both. No new package was installed.
 
 The runner stops the proxy before removing temporary certificates, then stops
@@ -58,8 +61,25 @@ cleanup removes owned containers and networks, including on failure.
 
 On 2026-10-26, 28 targeted tests passed in 3.01 seconds, including six new
 lifecycle cases. Strict mypy passed for the three changed/new Python files.
-Docker Desktop was not running at preflight. **No real Nginx expiry, replacement,
-HTTPS/WSS recovery or restore pass is claimed for X-7.23 yet.**
+Docker Desktop was not running at preflight, so no live gate ran that day.
+
+On 2026-11-09 the live run passed with Docker Desktop 29.6.1:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools/run_integration_tests.ps1 -DashboardCertificateLifecycleAcceptance -ProxyPort 18900 -ProxyReplicaAPort 18901 -ProxyReplicaBPort 18902
+```
+
+- Integration tests: 2 passed.
+- PASS: API has no published ports; former API/HTTP ports are closed.
+- PASS: TLS 1.2/1.3, verified HTTPS/WSS, untrusted and wrong-host rejection.
+- PASS: explicitly trusted expired certificate rejected with verification code 10.
+- PASS: old trust rejected; new certificate served; HTTPS/WSS recovery verified.
+- PostgreSQL restore drill passed: 87 tables, 284 rows, 87.1 s.
+- Every `atep-integration` container and network was removed afterwards.
+
+The first attempt that day did not start: Windows had reserved ports 18716-18815,
+including the default proxy port 18800. The ports became configurable (defaults
+unchanged) and the run used 18900-18902; the TLS port stayed at 18443.
 
 Remaining exclusions include CA-chain renewal, revocation, seamless reload,
 expiry during an already established stream, Android/browser trust and combined

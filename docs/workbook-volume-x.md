@@ -816,7 +816,7 @@ acceptance (expiry and replacement); the full release matrix is still open.
 English Markdown updated; DOCX unchanged. No commit, PR or merge was performed.
 Changes remain local, together with earlier uncommitted increments.
 
-## X-7.23 — Certificate lifecycle implementation; Docker validation pending
+## X-7.23 — Certificate lifecycle
 
 On 2026-10-26, implemented DASH-NF-070 as an opt-in extension of the existing
 TLS runner. OpenSSL creates a certificate valid from two days ago to yesterday
@@ -839,6 +839,21 @@ not run for this increment. X-7.23 remains in progress; do not advance its roadm
 status until that evidence is collected. Initial CPU/GPU samples were 9%/1%.
 See dashboard-certificate-lifecycle.md for reproduction and exclusions. Markdown
 updated in English; DOCX unchanged. No commit, PR or merge performed.
+
+### Live acceptance — 2026-11-09
+
+With Docker Desktop available again, the live gate ran and passed: two integration
+tests, the X-7.21 TLS baseline, rejection of the explicitly trusted expired
+certificate with verification code 10, a served replacement certificate with old
+trust rejected and verified HTTPS/WSS recovery, the PostgreSQL restore drill
+(87 tables, 284 rows) and full cleanup of the disposable stack.
+
+The first attempt failed before any test: Windows (Hyper-V/WinNAT) had reserved
+ports 18716-18815, which include the proxy fixture ports 18800-18802. The fix made
+the four fixture ports configurable through `ATEP_ACCEPTANCE_*_PORT` variables and
+runner parameters, keeping the documented defaults; three tests cover defaults,
+overrides and invalid values. The passing run used ports 18900-18902. X-7.23 is
+complete; the combined TLS/multiprocess profile and full deployment gate remain open.
 
 ## Remaining acceptance work after populated verification
 
