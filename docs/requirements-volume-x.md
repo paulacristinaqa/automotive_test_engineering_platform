@@ -1,5 +1,11 @@
 # Volume X Dashboard Requirements
 
+## X-7.17 AAOS expiry during reconnect backoff
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-064 | Expire a real AAOS local session while waiting to reconnect, clear credentials/evidence and prevent automatic reconnect after route recovery while the same server JWT remains valid. | X-7.17 instrumented PASS, same-token active/authorized HTTP 200, 32-second terminal observation, one TCP connection and inspected screenshot; dashboard-aaos-retry-expiry.md |
+
 ## X-7.16 AAOS transport stall and recovery
 
 | ID | Requirement | Evidence |

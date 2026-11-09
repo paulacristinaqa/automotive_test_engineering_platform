@@ -620,6 +620,35 @@ emulator and integration containers were confirmed removed; final sampled
 CPU was 31%, GPU 12%. Changes remain local and uncommitted; no PR/merge was
 performed in this increment.
 
+## X-7.17 — AAOS expiry during reconnect backoff
+
+The next retry-terminal work is split into two bounded increments: expiry
+during retry first, actual-device five-retry exhaustion next (at least 450
+seconds of production backoff). This preserves the planned acceptance scope
+without accelerating production timers or claiming JVM tests as device proof.
+
+A new opt-in scenario reaches LIVE, cuts the local TCP route, observes
+RECONNECTING and then local AUTH_REQUIRED. A 40-second input uses the existing
+ten-second safety margin. The host verifies that the same JWT still receives
+HTTP 200 for an active, authorized account, then restores the route. Android
+remains terminal for 32 seconds and the host confirms only one accepted
+connection. The inspected screenshot has an empty token field and no envelope.
+No production runtime behavior or paid service was added.
+
+Five coordinator tests require every ordered phase; a new JVM boundary test
+proves expiry wins at the exact retry deadline and rejects late callbacks.
+All 36 coordinator/proxy tests and 58 Android JVM tests passed. Android build
+took 37 seconds; lint had zero errors and 15 existing warnings. Two integration
+tests passed in 19.79 seconds. Ruff, strict mypy, PowerShell parsing and diff
+checks passed. CPU samples were 53–67%, GPU 6–10%, with 12.9 GiB free RAM during
+device execution; these are not measured peaks. See
+`dashboard-aaos-retry-expiry.md`. English Markdown updated; DOCX unchanged.
+
+Final restore passed with 87 tables/292 rows in 76.125 seconds. All 36 targeted
+tests passed again in 3.86 seconds with Ruff/mypy and diff checks passing.
+Owned containers/emulator were confirmed removed; final CPU sample was 34%,
+GPU 8%. Changes remain local and uncommitted; no PR/merge was performed.
+
 ## Remaining acceptance work after populated verification
 
 X-6: live updates, exports, retention and performance hardening. Full OTA and formal standards
