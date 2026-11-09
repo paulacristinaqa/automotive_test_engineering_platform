@@ -1,0 +1,10 @@
+# Apply after integration and proxy-acceptance; never a production certificate setup.
+services:
+  api:
+    ports: !reset []
+  proxy:
+    ports: !override
+      - "127.0.0.1:18443:8443"
+    volumes:
+      - ./deploy/acceptance/nginx-tls.conf:/etc/nginx/nginx.conf:ro
+      - ${ATEP_ACCEPTANCE_TLS_DIRECTORY:?required}:/etc/nginx/acceptance-tls:ro

@@ -1,5 +1,11 @@
 # Volume X Dashboard Requirements
 
+## X-7.21 Local TLS and upstream isolation
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-068 | Verify HTTPS/WSS with explicit local trust and hostname validation, reject untrusted/mismatched certificates, and remove direct API host publishing during the TLS phase. | TLS 1.2/1.3 handshakes, HTTPS login, WSS snapshot, certificate negative cases, Docker bindings inspection and closed-port probes; dashboard-proxy-tls.md |
+
 ## X-7.20 Proxy identity boundary
 
 | ID | Requirement | Evidence |

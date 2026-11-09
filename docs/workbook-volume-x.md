@@ -751,6 +751,37 @@ Final restore passed (87 tables/283 rows, 76.719 seconds). The runner removed
 owned containers and networks; the final container query was empty. Final
 CPU sample was 35%, GPU 7%. Changes remain local and uncommitted.
 
+## X-7.21 — Local TLS and API host-port isolation
+
+Implemented DASH-NF-068 using a third Compose overlay and a dedicated TLS
+Nginx configuration. The acceptance runner removes API host publishing and
+replaces the HTTP proxy binding with loopback HTTPS. It creates a one-day local
+self-signed certificate, uses explicit process-local trust, and removes the
+temporary key material after stopping the proxy. No trust-store changes or paid
+services are required. Git for Windows supplies OpenSSL because the pinned Nginx
+image does not include its command-line executable.
+
+Four new unit tests verify trust settings and the negative-test oracle; combined
+with the ten boundary/admission tests, fourteen passed in 0.77 seconds. Ruff and
+strict mypy passed for both new Python files. Two integration tests passed in
+18.20 seconds. Real TLS 1.2/1.3 negotiation, untrusted-certificate rejection,
+hostname mismatch rejection, verified HTTPS login and authenticated WSS snapshot
+all passed. Docker inspection showed no API port bindings, and TCP probes showed
+the former 18000/18800 endpoints closed during the TLS phase.
+
+The restore drill passed: 87 tables, 283 rows, 76.25 seconds, migration
+0064_ai_evidence_projections. Owned containers/networks and TLS temporary
+directories were absent after cleanup. CPU samples were 24–39%, GPU 5–11%, not
+measured maxima. Tests were sequential without an emulator. The existing app
+image was reused; backend source is unchanged by this increment.
+
+See dashboard-proxy-tls.md for reproduction and limitations: internal HTTP,
+reachable trusted Docker peers, unchanged dependency publishing, no production
+certificate lifecycle, no browser/AAOS TLS trust or capacity claim. Next is
+bounded multi-worker/shared-admission deployment validation. The full X-7 gate
+remains open. English Markdown updated; DOCX unchanged. No commit, PR or merge
+performed; these changes and preceding increments remain local.
+
 ## Remaining acceptance work after populated verification
 
 X-6: live updates, exports, retention and performance hardening. Full OTA and formal standards
