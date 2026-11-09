@@ -342,10 +342,12 @@ class TestModule:
             raise ValueError(f"duplicate test case id {case.case_id}")
         self.cases.append(case)
 
-    def run(self) -> TestModuleResult:
+    def run(self, bench_factory: Callable[[], HilBench] | None = None) -> TestModuleResult:
+        """Run every case on a fresh bench from `bench_factory` (default: the module's own)."""
+        factory = bench_factory or self.bench_factory
         module = TestModuleResult(self.title)
         for case in self.cases:
-            module.cases.append(run_test_case(case, self.bench_factory()))
+            module.cases.append(run_test_case(case, factory()))
         return module
 
 

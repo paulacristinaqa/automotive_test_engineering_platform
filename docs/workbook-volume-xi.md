@@ -1,6 +1,6 @@
 # ATEP Volume XI Virtual Test Bench Engineering Workbook
 
-Version 0.6.0 completes XI-1 to XI-6. XI-1 delivers Vector-compatible DBC, ASC and BLF
+Version 1.0.0 completes Volume XI (XI-1 to XI-7). XI-1 delivers Vector-compatible DBC, ASC and BLF
 artifacts and a python-can bench bus. XI-2 adds ISO-TP, a UDS tester with P2/P2* timing, a
 virtual ECU, cyclic message supervision and E2E protection, all running on logical time. XI-3
 adds a virtual airbag control unit as the device under test, with a 15-case system-test
@@ -8,7 +8,9 @@ campaign. XI-4 adds SCPI bench instruments (supply with voltage profiles, KL15 r
 multimeter, climate chamber) and a 15-case HiL campaign. XI-5 adds a transient generator, ACU
 input protection, CAN error frames with bus-off, functional status classification and an
 EMC-concept campaign. XI-6 adds vTESTstudio-style test units and JSON test tables, CANoe-style,
-JUnit, HTML and traceability reports, and a requirement coverage matrix.
+JUnit, HTML and traceability reports, and a requirement coverage matrix. XI-7 delivers the ACU
+system test: plan, specification, exit criteria, release recommendation, defect drafts and an
+evidence manifest.
 
 ## Scope and architecture
 
@@ -123,6 +125,21 @@ Architecture details are in [virtual-bench.md](virtual-bench.md).
   written as a bare string passed validation and would only fail at run time. All are fixed
   and covered by tests.
 
+### XI-7
+
+- Write the test plan and specification as documents a reviewer can read, and map the plan to
+  the Automotive SPICE SYS.5 base practices, because a system test is judged on its evidence as
+  much as on its results.
+- Identify the test object from the ACU itself (UDS DIDs) and fingerprint its calibration and
+  CAN database, so a report always says exactly what was tested.
+- Make the release recommendation a computed result of six exit criteria, never a manual call,
+  and keep it advice to the release decision.
+- Prove the campaign can block a release with seeded-defect variants, the system-level
+  counterpart of the negative-campaign tests of XI-3 to XI-5.
+- Findings while building XI-7: the ACU still reported the generic XI-2 software version;
+  the high-threshold variant showed that a test case can fail because its own precondition
+  stopped holding, which the defect-handling rules now call out for review.
+
 ## Tests and objectives
 
 | Objective | Test |
@@ -153,6 +170,7 @@ Architecture details are in [virtual-bench.md](virtual-bench.md).
 | Placeholders, parameter expansion, validation messages, shipped table | `tests/test_bench_testtable.py` |
 | XML, JUnit, HTML, CSV and coverage outputs; determinism | `tests/test_bench_reports.py` |
 | 53 cases from five modules pass; no requirement uncovered or undefined | `tests/test_bench_test_units_demo.py` |
+| Exit criteria, defect drafts, identification, release recommendation, seeded defects, manifest | `tests/test_bench_system_test.py` |
 
 ## Risks and technical debt
 
@@ -211,7 +229,15 @@ XI-6 is complete. `tools/run_test_units_demo.py` runs 53 test cases from an even
 unit, a JSON test table and the three campaigns, all passing, and writes CANoe-style XML,
 JUnit, HTML, traceability CSV and a coverage matrix with no requirement left uncovered.
 
-## Next increment
+## XI-7 outcome
 
-XI-7 System test campaign: test specification and plan, consolidated execution, report and
-traceability matrix that close Volume XI.
+XI-7 is complete. `tools/run_acu_system_test.py` runs 53 test cases on the baseline ACU, meets all
+six exit criteria and recommends the release; each of the three seeded-defect variants is
+rejected with its defects drafted.
+
+## Volume XI outcome
+
+Volume XI is complete. The virtual bench covers the path from CAN artifacts (XI-1) and ECU
+communication (XI-2) to a device under test (XI-3), HiL instruments (XI-4), transient concepts
+(XI-5), test authoring and traceability (XI-6) and a system test with a release recommendation
+(XI-7). The next planned volume is Volume XII DevOps.

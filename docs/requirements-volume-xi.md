@@ -1,5 +1,7 @@
 # Volume XI Virtual Test Bench Requirements
 
+Status: complete (XI-1 to XI-7).
+
 Volume XI brings ATEP closer to a system-test bench: Vector-compatible artifacts, a real CAN
 software stack, a virtual device under test, simulated bench instruments, and vTESTstudio-style
 test authoring. It does not replace a hardware bench; see the limits at the end.
@@ -162,6 +164,28 @@ to `tools/run_emc_bench_demo.py`.
 | BENCH-NF-018 | Every report must be identical for identical runs: times come from the logical clock and a fixed report date. | `tests/test_bench_reports.py`, `tests/test_bench_test_units_demo.py` |
 | BENCH-NF-019 | Every requirement in this document must be verified by a system test case or a unit test, and test cases must cite only requirements defined here. | `tests/test_bench_test_units_demo.py` |
 | BENCH-NF-020 | Test tables must be editable without Python; the shipped table is validated by the test suite. | `tests/test_bench_testtable.py` |
+
+## XI-7 System test campaign
+
+The system test is planned in [acu-system-test-plan.md](acu-system-test-plan.md) and specified
+in [acu-system-test-specification.md](acu-system-test-specification.md).
+
+### Functional requirements
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| BENCH-F-057 | Identify the test object by its UDS DIDs (F195 software version, F190 VIN) and by SHA-256 fingerprints of its calibration and CAN database, and the environment by every instrument's `*IDN?` answer and the tool versions. | `tests/test_bench_system_test.py` |
+| BENCH-F-058 | Evaluate six exit criteria (executed, passed, requirement coverage, safety-related cases, no unintended deployment, EMC classes) and recommend a release only when all are met. | `tests/test_bench_system_test.py` |
+| BENCH-F-059 | Draft one defect per test case that did not pass, with failing steps, expected and actual values and requirements; rate it High when it traces to a safety-related requirement. | `tests/test_bench_system_test.py` |
+| BENCH-F-060 | Write a test summary report, a test catalogue, the XI-6 reports, the campaign artifacts and an evidence manifest with the SHA-256 of every file. | `tools/run_acu_system_test.py`, `tests/test_bench_system_test.py` |
+| BENCH-F-061 | Provide seeded-defect variants of the ACU calibration for which the system test must not recommend a release. | `tests/test_bench_system_test.py` |
+
+### Non-functional requirements
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| BENCH-NF-021 | The evidence manifest must be identical for identical runs of the same revision. | `tests/test_bench_system_test.py` |
+| BENCH-NF-022 | The test plan states scope, strategy, environment, entry and exit criteria, defect handling, risks and deliverables, and maps them to Automotive SPICE SYS.5. | Review of `docs/acu-system-test-plan.md`; `tests/test_bench_system_test.py` |
 
 ## Deliberate limits
 

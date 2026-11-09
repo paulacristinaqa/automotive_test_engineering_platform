@@ -22,6 +22,7 @@ from atep.bench.airbag import (
     DID_CRASH_RECORD,
     LOST_VEHICLE_STATUS_DTC,
     SUPPLY_DTC,
+    AcuCalibration,
     AcuState,
     CrashPulse,
     CrashSeverity,
@@ -391,12 +392,12 @@ CASES: tuple[TestCase[AcuBench], ...] = (
 )
 
 
-def run_campaign(output: Path) -> CampaignReport:
+def run_campaign(output: Path, calibration: AcuCalibration | None = None) -> CampaignReport:
     output.mkdir(parents=True, exist_ok=True)
     report = CampaignReport("ACU system-test campaign", [])
     severe_trace = None
     for case in CASES:
-        bench = AcuBench()
+        bench = AcuBench(calibration=calibration)
         report.cases.append(run_case(case, bench))
         if case.case_id == "ACU-T08":
             severe_trace = bench.link.trace

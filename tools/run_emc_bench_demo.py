@@ -17,7 +17,12 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from atep.bench.airbag import FIRING_INHIBIT_DTC, LOST_VEHICLE_STATUS_DTC, airbag_network_spec
+from atep.bench.airbag import (
+    FIRING_INHIBIT_DTC,
+    LOST_VEHICLE_STATUS_DTC,
+    AcuCalibration,
+    airbag_network_spec,
+)
 from atep.bench.airbag_bench import HilBench
 from atep.bench.campaign import (
     CampaignReport,
@@ -243,12 +248,12 @@ def test_plan_markdown(cases: list[CaseResult]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def run_campaign(output: Path) -> CampaignReport:
+def run_campaign(output: Path, calibration: AcuCalibration | None = None) -> CampaignReport:
     output.mkdir(parents=True, exist_ok=True)
     report = CampaignReport("EMC-concept campaign", [])
     burst_trace = None
     for case in CASES:
-        bench = HilBench()
+        bench = HilBench(calibration=calibration)
         report.cases.append(run_case(case, bench))
         if case.case_id == "EMC-T03":
             burst_trace = bench.link.trace

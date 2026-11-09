@@ -420,6 +420,42 @@ python tools/run_test_units_demo.py --output out/test-units
 Runs the event-driven test unit (5 cases), the JSON test table (11 cases) and the ACU, HiL and
 EMC campaigns (37 cases), and writes every report above.
 
+## XI-7 System test campaign
+
+XI-7 delivers the ACU system test the way a system test engineer hands it over: a
+[test plan](acu-system-test-plan.md), a [test specification](acu-system-test-specification.md),
+one automated run and a test summary report with a release recommendation.
+
+```bash
+python tools/run_acu_system_test.py --output out/acu-system-test
+python tools/run_acu_system_test.py --variant no-firing-inhibit --output out/defective
+```
+
+```mermaid
+flowchart LR
+    Plan["Test plan + specification"] --> Run["run_acu_system_test.py"]
+    Variant["ACU calibration (variant)"] --> Run
+    Run --> Id["Identify test object (DIDs, SHA-256) and environment (*IDN?)"]
+    Run --> Exec["53 test cases: unit, table, ACU, HiL, EMC"]
+    Exec --> EC["Exit criteria EC-1..EC-6"]
+    EC --> Rec{"All met?"}
+    Rec -->|yes| Yes["Release recommended"]
+    Rec -->|no| No["Not recommended + defect drafts"]
+    Exec --> Evidence["Reports, traces, SCPI log, manifest"]
+```
+
+| Variant | Result |
+|---|---|
+| `baseline` | 53/53 passed, 6/6 exit criteria met, release recommended |
+| `short-supply-debounce` | HIL-T06 fails (engine start confirms a DTC): not recommended |
+| `no-firing-inhibit` | EMC-T05 fails, safety-related: not recommended |
+| `high-airbag-threshold` | 10 safety-related cases fail, including the misuse case whose precondition no longer holds: not recommended |
+
+The summary report lists the test object (software version and VIN read over UDS, calibration
+and DBC fingerprints), the environment, results per module, each exit criterion with its detail,
+and one defect draft per failing case. `evidence-manifest.json` holds the SHA-256 of every
+delivered file.
+
 ## Limits
 
 - The bench simulates the network and test logic. There is no electrical layer, no bit stuffing

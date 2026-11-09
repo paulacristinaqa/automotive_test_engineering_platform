@@ -20,7 +20,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-from atep.bench.airbag import STATUS_E2E, Loop, half_sine_pulse
+from atep.bench.airbag import STATUS_E2E, AcuCalibration, Loop, half_sine_pulse
+from atep.bench.airbag_bench import HilBench
 from atep.bench.e2e import E2EChecker, E2EStatus
 from atep.bench.reports import parse_requirements, write_all
 from atep.bench.testtable import load_test_table
@@ -136,13 +137,26 @@ def loop_resistances(t: TestContext) -> None:
         )
 
 
+def run_modules(
+    evidence: Path, calibration: AcuCalibration | None = None
+) -> list[TestModuleResult]:
+    """Run every test definition against one ACU calibration; campaign files go to `evidence`."""
+
+    def bench() -> HilBench:
+        return HilBench(calibration=calibration)
+
+    return [
+        unit.run(bench),
+        load_test_table(TABLE).run(bench),
+        module_from_campaign(run_airbag_bench_demo.run_campaign(evidence / "acu", calibration)),
+        module_from_campaign(run_hil_bench_demo.run_campaign(evidence / "hil", calibration)),
+        module_from_campaign(run_emc_bench_demo.run_campaign(evidence / "emc", calibration)),
+    ]
+
+
 def run_all(output: Path) -> tuple[list[TestModuleResult], dict[str, str]]:
-    modules = [unit.run(), load_test_table(TABLE).run()]
     with tempfile.TemporaryDirectory() as scratch:
-        base = Path(scratch)
-        modules.append(module_from_campaign(run_airbag_bench_demo.run_campaign(base / "acu")))
-        modules.append(module_from_campaign(run_hil_bench_demo.run_campaign(base / "hil")))
-        modules.append(module_from_campaign(run_emc_bench_demo.run_campaign(base / "emc")))
+        modules = run_modules(Path(scratch))
     requirements = parse_requirements(REQUIREMENTS.read_text(encoding="utf-8"))
     files = write_all(
         output, modules, requirements=requirements, title="Volume XI bench test report"

@@ -25,11 +25,14 @@ vTESTstudio and HiL benches.
 - [x] **XI-6 vTESTstudio-style authoring** - event-driven test units (`on_message`, `on_timer`,
   `wait_for_signal`, `expect_diag`), JSON test tables with parameters, worst-wins verdicts,
   CANoe-style XML, JUnit, HTML and traceability CSV reports, and a requirement coverage matrix.
-- [ ] **XI-7 System test campaign** - test specification, plan, execution on the virtual bench,
-  report and traceability matrix for the virtual airbag control unit.
+- [x] **XI-7 System test campaign** - test plan and specification mapped to Automotive SPICE
+  SYS.5, test object and environment identification, six exit criteria, release recommendation,
+  defect drafts, an evidence manifest, and seeded-defect variants that block the release.
 
-## Next recommended increment
+## Status
 
-XI-7 System test campaign. Everything is in place to write the ACU system test as an engineer
-would deliver it: a test specification and plan, execution of all test definitions on the virtual
-bench, one consolidated report and a traceability matrix that closes Volume XI.
+Volume XI is complete. The next planned volume is Volume XII DevOps.
+
+Candidate follow-ups for the bench, not yet planned: export arbitration batches and multi-bus
+campaigns as traces; store campaign evidence through the ATEP artifact API; ReqIF export of
+the traceability matrix.

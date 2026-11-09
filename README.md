@@ -119,6 +119,9 @@ An intended end-to-end scenario is:
 - vTESTstudio-style test authoring: event-driven test units with CAPL-like primitives, JSON test
   tables with parameters, worst-wins verdicts, CANoe-style XML, JUnit, HTML and traceability CSV
   reports, and a requirement coverage matrix read from the requirements document;
+- an ACU system test with a test plan and specification mapped to Automotive SPICE SYS.5, six
+  exit criteria, a computed release recommendation, defect drafts, an evidence manifest and
+  seeded-defect variants that block the release;
 - Ruff, strict mypy, pytest, and GitHub Actions quality gates.
 
 ## Architecture
@@ -389,6 +392,8 @@ companion project also passes 27 unit tests, Android lint, and debug APK assembl
 - [Volume XI — Virtual Test Bench roadmap](docs/roadmap-volume-xi.md)
 - [Volume XI — Virtual Test Bench editable workbook](docs/workbook-volume-xi.md)
 - [Volume XI — Virtual Test Bench formatted workbook](docs/ATEP_Volume_XI_Virtual_Test_Bench_Engineering_Workbook.docx)
+- [Volume XI — ACU system test plan](docs/acu-system-test-plan.md)
+- [Volume XI — ACU system test specification](docs/acu-system-test-specification.md)
 
 The workbook is a living English-language engineering record containing requirements,
 architecture decisions, implementation evidence, test objectives, risks, technical debt,
@@ -408,7 +413,7 @@ operational guidance, and review worksheets.
 | VIII | Test Framework | Complete — VIII-1 through VIII-7, including bounded performance and stress evidence |
 | IX | AI Test Engineer | Complete IX-1 through IX-7 with cross-platform cited AI evidence |
 | X | Dashboard | In progress - X-1 through X-6 backend scope delivered (X-5 reduced scope); X-7.11 to X-7.19 actual AAOS acceptance and X-7.20 to X-7.23 local proxy, TLS, shared-admission and certificate-lifecycle acceptance passed; combined TLS/multiprocess profile and full deployment gate pending |
-| XI | Virtual Test Bench | In progress - XI-1 Vector artifacts and bench bus; XI-2 ISO-TP, UDS timing, virtual ECU, supervision and E2E; XI-3 virtual airbag control unit and system-test campaign; XI-4 SCPI bench instruments and HiL campaign; XI-5 transients and EMC-concept campaign; XI-6 test units, test tables, reports and coverage |
+| XI | Virtual Test Bench | Complete - XI-1 through XI-7: Vector artifacts, ECU communication, virtual airbag ECU, HiL instruments, EMC concepts, test authoring and an ACU system test with release recommendation |
 | XII | DevOps | Planned |
 | XIII | Enterprise Features | Planned |
 

@@ -15,6 +15,7 @@ from pathlib import Path
 from atep.bench.airbag import (
     SUPPLY_DTC,
     TEMPERATURE_DTC,
+    AcuCalibration,
     AcuState,
     FailureType,
     dtc_code,
@@ -377,12 +378,12 @@ CASES: tuple[TestCase[HilBench], ...] = (
 )
 
 
-def run_campaign(output: Path) -> CampaignReport:
+def run_campaign(output: Path, calibration: AcuCalibration | None = None) -> CampaignReport:
     output.mkdir(parents=True, exist_ok=True)
     report = CampaignReport("HiL bench campaign", [])
     log: list[str] = []
     for case in CASES:
-        bench = HilBench()
+        bench = HilBench(calibration=calibration)
         report.cases.append(run_case(case, bench))
         log += [f"# {case.case_id} {case.title}", bench.rack.log_text()]
     write_artifact(output / "scpi-log.txt", "\n".join(log).encode("utf-8"), report)

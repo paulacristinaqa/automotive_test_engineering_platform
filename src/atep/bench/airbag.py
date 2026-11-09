@@ -110,6 +110,7 @@ FIRING_INHIBIT_DTC = dtc_code("B1070", 0x17)
 CRASH_RECORDED_DTC = dtc_code("B1050")
 LOST_VEHICLE_STATUS_DTC = dtc_code("U0121")
 
+ACU_SOFTWARE_VERSION = "ACU-SW-1.0.0"
 DID_SUPPLY_VOLTAGE = 0x4010
 DID_CRASH_RECORD = 0x4020
 DID_SYSTEM_STATE = 0x4030
@@ -338,7 +339,12 @@ class AcuDiagnostics(VirtualEcu):
     """UDS server of the ACU: DTCs and DIDs come from the live ACU model."""
 
     def __init__(self, acu: "AirbagControlUnit", config: IsoTpConfig) -> None:
-        super().__init__(config, EcuDiagnosticProfile(dtcs=[]))
+        identification = {
+            0xF190: b"WATEP000000000001",
+            0xF18C: b"ACU-SN-0001",
+            0xF195: ACU_SOFTWARE_VERSION.encode("ascii"),
+        }
+        super().__init__(config, EcuDiagnosticProfile(readable=identification, dtcs=[]))
         self.acu = acu
 
     def read_data(self, did: int) -> bytes | None:
