@@ -558,6 +558,35 @@ Documentation remains in English Markdown; DOCX is unchanged. Changes are local
 and uncommitted; no PR or merge was performed. Next is inactive-user acceptance,
 followed by the remaining real network/reconnect and normal-completion gates.
 
+## X-7.15 — AAOS active-user deactivation
+
+A separate disposable dashboard reader reaches LIVE before the host disables
+its account through the public status API. The role remains assigned; the host
+checks HTTP 401 with the same token. Timing guards reserve an unexpired JWT
+window longer than the 65-second device assertion, and the client uses a longer
+600-second local budget. Thus expiry or role removal cannot substitute for the
+intended cause. Production policies and server refresh intervals are unchanged.
+
+Six new coordinator cases cover successful ordering, early/duplicate signals,
+missing completion, server-expiry ordering and failed deactivation. All 22
+coordinator tests passed, as did Ruff/strict mypy. Android build/lint passed in
+30 seconds with one worker and no emulator, retaining 57 passing JVM tests and
+zero lint errors/15 warnings. Real-device verification passed: LIVE transitioned
+to AUTH_REQUIRED within the unexpired window, with empty token input and no
+displayed envelope. The host confirmed an inactive account, retained role and
+HTTP 401 using the same JWT. The local screenshot was inspected; previous AAOS
+scenarios also passed. Two integration tests passed in 20.52 seconds.
+CPU samples were 40–71%, GPU 13–18%; device-stage samples retained 10.4 GiB RAM
+free. See `dashboard-aaos-inactive-user.md`. No paid service was introduced.
+Markdown remains current and DOCX unchanged.
+
+Final restore passed (87 tables/310 rows, 81.578 seconds), and all 22 coordinator
+tests passed again in 1.16 seconds with Ruff/mypy passing. Owned emulator and
+temporary containers were confirmed removed; final sampled CPU was 39%.
+Changes remain local and uncommitted; no PR/merge was performed. The next gate
+is real network failure/reconnect/staleness, followed by remaining completion
+and deployment acceptance.
+
 ## Remaining acceptance work after populated verification
 
 X-6: live updates, exports, retention and performance hardening. Full OTA and formal standards

@@ -1,5 +1,11 @@
 # Volume X Dashboard Requirements
 
+## X-7.15 AAOS active-user deactivation
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-062 | Observe deactivation after a real AAOS LIVE checkpoint, reaching AUTH_REQUIRED with credential/evidence cleanup before JWT/local expiry and without removing the assigned role. | X-7.15 instrumented PASS, inactive-account/retained-role response, same-token HTTP 401 and inspected screenshot |
+
 ## X-7.13 / X-7.14 AAOS expiration acceptance
 
 | ID | Requirement | Evidence |
