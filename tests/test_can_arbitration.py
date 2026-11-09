@@ -204,9 +204,7 @@ async def test_arbitration_advances_to_next_ready_time_and_measures_idle_bus() -
     bus = _network(target, nodes)
     command = _command(nodes).model_copy(
         update={
-            "contenders": [
-                _command(nodes).contenders[0].model_copy(update={"ready_offset_us": 50})
-            ]
+            "contenders": [_command(nodes).contenders[0].model_copy(update={"ready_offset_us": 50})]
         }
     )
     execution, _, _ = await execute_arbitration(
@@ -268,9 +266,7 @@ async def test_arbitration_replay_conflict_version_and_contract_validation() -> 
         )
     bad_producer = command.model_copy(
         update={
-            "contenders": [
-                command.contenders[0].model_copy(update={"producer_node_id": uuid4()})
-            ]
+            "contenders": [command.contenders[0].model_copy(update={"producer_node_id": uuid4()})]
         }
     )
     with pytest.raises(CanNetworkContractError) as producer_conflict:

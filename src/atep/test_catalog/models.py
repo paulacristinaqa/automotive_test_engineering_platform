@@ -10,9 +10,7 @@ from atep.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
 class TestDefinition(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "test_definitions"
-    __table_args__ = (
-        UniqueConstraint("definition_id", name="uq_test_definitions_definition_id"),
-    )
+    __table_args__ = (UniqueConstraint("definition_id", name="uq_test_definitions_definition_id"),)
 
     definition_id: Mapped[str] = mapped_column(String(64), index=True)
     created_by_user_id: Mapped[UUID] = mapped_column(

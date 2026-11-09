@@ -46,9 +46,7 @@ def _request_hash(command: EcuScenarioExecuteCommand) -> str:
     ).hexdigest()
 
 
-async def _vehicle_ecus(
-    session: AsyncSession, *, vehicle: Vehicle
-) -> list[ElectronicControlUnit]:
+async def _vehicle_ecus(session: AsyncSession, *, vehicle: Vehicle) -> list[ElectronicControlUnit]:
     result = await session.execute(
         select(ElectronicControlUnit)
         .where(ElectronicControlUnit.vehicle_id == vehicle.id)
@@ -239,9 +237,7 @@ async def _execute_action(
         outcome = "published"
     else:
         assert action.route_id is not None
-        route = await _require_route_by_identifier(
-            session, gateway=ecu, identifier=action.route_id
-        )
+        route = await _require_route_by_identifier(session, gateway=ecu, identifier=action.route_id)
         source = await session.get(ElectronicControlUnit, route.source_ecu_id)
         target = await session.get(ElectronicControlUnit, route.target_ecu_id)
         if source is None or target is None:

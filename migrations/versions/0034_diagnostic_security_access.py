@@ -32,9 +32,7 @@ def upgrade() -> None:
             "failed_attempts >= 0 AND failed_attempts <= 3",
             name="ck_diagnostic_security_attempts",
         ),
-        sa.CheckConstraint(
-            "target_level IN (0, 1)", name="ck_diagnostic_security_target_level"
-        ),
+        sa.CheckConstraint("target_level IN (0, 1)", name="ck_diagnostic_security_target_level"),
         sa.CheckConstraint("version >= 1", name="ck_diagnostic_security_version"),
         sa.ForeignKeyConstraint(["ecu_id"], ["electronic_control_units.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),

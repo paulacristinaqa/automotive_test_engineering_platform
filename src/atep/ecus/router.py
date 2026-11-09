@@ -86,9 +86,7 @@ from atep.vehicles.service import require_vehicle
 
 router = APIRouter(prefix="/vehicles/{vehicle_id}/ecus", tags=["ecus"])
 profiles_router = APIRouter(prefix="/ecu-profiles", tags=["ecu-profiles"])
-scenarios_router = APIRouter(
-    prefix="/vehicles/{vehicle_id}/ecu-scenarios", tags=["ecu-scenarios"]
-)
+scenarios_router = APIRouter(prefix="/vehicles/{vehicle_id}/ecu-scenarios", tags=["ecu-scenarios"])
 ecus_read = require_permissions(PermissionName.ECUS_READ.value)
 ecus_manage = require_permissions(PermissionName.ECUS_MANAGE.value)
 
@@ -149,9 +147,7 @@ async def get_scenario_endpoint(
     _: Annotated[User, Depends(ecus_read)],
 ) -> EcuScenarioExecutionResponse:
     vehicle = await require_vehicle(session, vehicle_id)
-    scenario = await require_scenario_execution(
-        session, vehicle=vehicle, execution_id=execution_id
-    )
+    scenario = await require_scenario_execution(session, vehicle=vehicle, execution_id=execution_id)
     return scenario_response(scenario, vehicle=vehicle)
 
 
@@ -228,9 +224,7 @@ def ecu_reset_response(
         boot_count=int(command.result["boot_count"]),
         memory_preserved=bool(command.result["memory_preserved"]),
         volatile_cells_reset=int(command.result["volatile_cells_reset"]),
-        non_volatile_cells_preserved=int(
-            command.result["non_volatile_cells_preserved"]
-        ),
+        non_volatile_cells_preserved=int(command.result["non_volatile_cells_preserved"]),
         faults_preserved=bool(command.result["faults_preserved"]),
         duplicate=duplicate,
         created_at=command.created_at,
@@ -326,9 +320,7 @@ async def get_ecu_endpoint(
     _: Annotated[User, Depends(ecus_read)],
 ) -> EcuResponse:
     vehicle = await require_vehicle(session, vehicle_id)
-    return ecu_response(
-        await require_ecu(session, vehicle=vehicle, identifier=ecu_id), vehicle
-    )
+    return ecu_response(await require_ecu(session, vehicle=vehicle, identifier=ecu_id), vehicle)
 
 
 @router.put("/{ecu_id}/state", response_model=EcuResponse)
@@ -442,9 +434,7 @@ async def list_memory_snapshots_endpoint(
 ) -> EcuMemorySnapshotPage:
     vehicle = await require_vehicle(session, vehicle_id)
     ecu = await require_ecu(session, vehicle=vehicle, identifier=ecu_id)
-    snapshots, total = await list_memory_snapshots(
-        session, ecu=ecu, limit=limit, offset=offset
-    )
+    snapshots, total = await list_memory_snapshots(session, ecu=ecu, limit=limit, offset=offset)
     return EcuMemorySnapshotPage(
         items=[memory_snapshot_response(item, vehicle, ecu) for item in snapshots],
         total=total,
@@ -453,9 +443,7 @@ async def list_memory_snapshots_endpoint(
     )
 
 
-@router.post(
-    "/{ecu_id}/memory/snapshots/{snapshot_id}/restore", response_model=EcuResponse
-)
+@router.post("/{ecu_id}/memory/snapshots/{snapshot_id}/restore", response_model=EcuResponse)
 async def restore_memory_snapshot_endpoint(
     vehicle_id: str,
     ecu_id: str,
@@ -719,9 +707,7 @@ async def list_signal_routes_endpoint(
 ) -> EcuSignalRoutePage:
     vehicle = await require_vehicle(session, vehicle_id)
     gateway = await require_ecu(session, vehicle=vehicle, identifier=ecu_id)
-    routes, total = await list_signal_routes(
-        session, gateway=gateway, limit=limit, offset=offset
-    )
+    routes, total = await list_signal_routes(session, gateway=gateway, limit=limit, offset=offset)
     return EcuSignalRoutePage(
         items=[signal_route_response(item, vehicle, gateway) for item in routes],
         total=total,

@@ -1,11 +1,86 @@
 # Volume X Dashboard Requirements
 
+## X-7.23 Certificate lifecycle
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-070 | Reject an explicitly trusted expired certificate with the expiration-specific error, then serve a different replacement certificate and recover verified HTTPS/WSS with explicit updated client trust. | Six local fixture/oracle cases; live Docker acceptance on 2026-11-09 passed: expired certificate rejected with verification code 10, replacement served, old trust rejected, HTTPS/WSS recovered, restore drill passed; dashboard-certificate-lifecycle.md |
+
+## X-7.22 Multiprocess shared admission
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-069 | Two independently verified API processes must share one Redis handshake budget behind the trusted proxy; switching processes or spoofing forwarding headers must not create a fresh allowance. | Both replicas served snapshots; alternating attempts 1–29 consumed one counter, attempt 30 passed on B, 31 failed on A and 32 failed on B; eight oracle tests and bounded real Docker acceptance; dashboard-multiprocess-admission.md |
+
+## X-7.21 Local TLS and upstream isolation
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-068 | Verify HTTPS/WSS with explicit local trust and hostname validation, reject untrusted/mismatched certificates, and remove direct API host publishing during the TLS phase. | TLS 1.2/1.3 handshakes, HTTPS login, WSS snapshot, certificate negative cases, Docker bindings inspection and closed-port probes; dashboard-proxy-tls.md |
+
+## X-7.20 Proxy identity boundary
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-067 | Trust forwarding only from the configured proxy, overwrite client-supplied identity claims at the edge and preserve the Redis handshake budget despite forged/duplicate headers. | Six Uvicorn boundary cases, four admission tests, real Nginx snapshot at attempt 30 and denial at 31 in one Redis bucket; dashboard-proxy-boundary.md |
+
+## X-7.19 AAOS normal completion
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-066 | Receive ten ordered snapshots on one connection, end in COMPLETE, retain the final stale preview with empty credential input and no automatic restart. | Actual AAOS PASS after refreshing the accessibility node; sequence 10, one TCP connection, empty credential input, unchanged preview for 32 seconds and inspected screenshot |
+
+## X-7.18 AAOS retry exhaustion
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-065 | Exhaust five transport retries at production backoff intervals, clear evidence on STOPPED, and avoid automatic restart beyond maximum backoff. | X-7.18 actual AAOS PASS, six TCP accepts, five timing checks, 122-second terminal observation and inspected screenshot |
+
+## X-7.17 AAOS expiry during reconnect backoff
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-064 | Expire a real AAOS local session while waiting to reconnect, clear credentials/evidence and prevent automatic reconnect after route recovery while the same server JWT remains valid. | X-7.17 instrumented PASS, same-token active/authorized HTTP 200, 32-second terminal observation, one TCP connection and inspected screenshot; dashboard-aaos-retry-expiry.md |
+
+## X-7.16 AAOS transport stall and recovery
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-063 | On real AAOS, mark a stalled snapshot stale, retain it through transport interruption, back off before reconnecting, and return to LIVE only with a fresh snapshot and empty token input. | X-7.16 instrumented PASS, exactly two TCP connections, elapsed-time checks and inspected stale/recovered screenshots; dashboard-aaos-network-recovery.md |
+
+## X-7.15 AAOS active-user deactivation
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-062 | Observe deactivation after a real AAOS LIVE checkpoint, reaching AUTH_REQUIRED with credential/evidence cleanup before JWT/local expiry and without removing the assigned role. | X-7.15 instrumented PASS, inactive-account/retained-role response, same-token HTTP 401 and inspected screenshot |
+
+## X-7.13 / X-7.14 AAOS expiration acceptance
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-060 | Expire a real AAOS local session, clear the form/evidence and avoid automatic restart while the exact JWT remains valid on the server. | X-7.13 instrumented PASS, 32-second terminal-state observation and HTTP 200 permission probe |
+| DASH-NF-061 | Observe natural server JWT expiration on a LIVE AAOS session before its deliberately longer local deadline, with account/permission unchanged. | X-7.14 instrumented PASS, exact-token HTTP 401 and independent active/authorized-account probe |
+
+## X-7.12 active-session AAOS permission loss
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-058 | On a real AAOS LIVE session, observe removal of dashboard permission at the next server authorization check and clear displayed evidence/credential input. | Instrumented PASS and inspected denied-state screenshot; dashboard-aaos-permission-loss.md |
+| DASH-NF-059 | Coordinate fixture revocation only after an exact device LIVE checkpoint, once, with bounded subprocess output/time and host-only administrator credentials. | Seven coordinator tests; real host/device checkpoint and revocation PASS |
+
+## X-7.11 real AAOS smoke acceptance
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-056 | Verify a real native snapshot, empty credential field and background/return cleanup on AAOS, without automatic session restart. | API 35 instrumentation PASS; local LIVE screenshot; dashboard-aaos-acceptance.md |
+| DASH-NF-057 | Reject a valid token without dashboard permission on the real Android client, clearing the input and displaying no snapshot. | Disposable no-role AAOS instrumentation PASS; dashboard-aaos-acceptance.md |
+
 ## X-7.10 Android engineering presentation
 
 | ID | Requirement | Evidence |
 |---|---|---|
 | DASH-NF-054 | Own one native session, invalidate queued callbacks on replacement/stop, and close partially started transports. | Companion session unit tests |
-| DASH-NF-055 | Provide masked transient token entry, bounded evidence preview and background cleanup without automatic restart. | Compose/ViewModel/Activity implementation; device acceptance pending |
+| DASH-NF-055 | Provide masked transient token entry, bounded evidence preview and background cleanup without automatic restart. | Compose/ViewModel/Activity implementation; X-7.11 basic device smoke passed; broader acceptance pending |
 
 ## X-7.9 native transport prerequisite
 

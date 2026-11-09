@@ -459,9 +459,7 @@ async def test_campaign_exact_replay_is_mutation_free_and_changed_reuse_conflict
 async def test_campaign_prevalidation_rejects_unknown_route_without_mutation() -> None:
     vehicle, network, _, _, _ = configured_context()
     command = campaign().model_copy(
-        update={
-            "steps": [campaign().steps[0].model_copy(update={"route_id": "unknown-route"})]
-        }
+        update={"steps": [campaign().steps[0].model_copy(update={"route_id": "unknown-route"})]}
     )
     with pytest.raises(MultiBusCampaignContractError) as error:
         await execute_multibus_campaign(

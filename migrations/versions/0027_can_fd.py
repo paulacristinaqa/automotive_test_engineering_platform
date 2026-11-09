@@ -12,24 +12,16 @@ depends_on = None
 def upgrade() -> None:
     op.add_column(
         "can_networks",
-        sa.Column(
-            "can_fd_enabled", sa.Boolean(), server_default=sa.false(), nullable=False
-        ),
+        sa.Column("can_fd_enabled", sa.Boolean(), server_default=sa.false(), nullable=False),
     )
+    op.add_column("can_networks", sa.Column("data_bitrate_kbps", sa.Integer(), nullable=True))
     op.add_column(
-        "can_networks", sa.Column("data_bitrate_kbps", sa.Integer(), nullable=True)
+        "can_frame_transmissions",
+        sa.Column("protocol", sa.String(16), server_default="classic", nullable=False),
     )
     op.add_column(
         "can_frame_transmissions",
-        sa.Column(
-            "protocol", sa.String(16), server_default="classic", nullable=False
-        ),
-    )
-    op.add_column(
-        "can_frame_transmissions",
-        sa.Column(
-            "bitrate_switch", sa.Boolean(), server_default=sa.false(), nullable=False
-        ),
+        sa.Column("bitrate_switch", sa.Boolean(), server_default=sa.false(), nullable=False),
     )
 
 

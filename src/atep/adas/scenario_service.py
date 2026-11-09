@@ -203,9 +203,7 @@ async def execute_scenario(
         scene_revision=scene.revision,
         request_hash=request_hash,
         status=(
-            ScenarioStatus.PASSED
-            if passed_count == len(assertions)
-            else ScenarioStatus.FAILED
+            ScenarioStatus.PASSED if passed_count == len(assertions) else ScenarioStatus.FAILED
         ).value,
         maneuver=maneuver.value,
         alerts=[item.model_dump(mode="json") for item in alerts],
@@ -270,7 +268,5 @@ def _inject_faults(
         elif fault.fault_type == AdasFaultType.MISCLASSIFY_PREDICTION:
             replacement = fault.replacement_classification
             assert replacement is not None
-            output.append(
-                prediction.model_copy(update={"classification": replacement})
-            )
+            output.append(prediction.model_copy(update={"classification": replacement}))
     return output

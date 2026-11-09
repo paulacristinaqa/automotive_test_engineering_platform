@@ -54,7 +54,9 @@ An intended end-to-end scenario is:
 - users, roles, permissions, protected system-role invariants, and deny-by-default RBAC;
 - immutable administrative audit evidence with bounded search and formula-safe CSV export;
 - PostgreSQL persistence and Alembic migrations;
-- Redis-backed distributed authentication and API rate limiting;
+- Redis-backed distributed authentication and API rate limiting keyed on verified users;
+- fail-closed JWT configuration with an HMAC algorithm allow-list and placeholder-secret rejection;
+- bearer-protected API metrics scraping, mandatory in production;
 - transactional outbox and asynchronous RabbitMQ publication;
 - persistent module and versioned capability catalogue;
 - raw-once, hash-only module workload credentials;
@@ -383,8 +385,7 @@ operational guidance, and review worksheets.
 | VII | ADAS | Baseline complete - VII-1 through VII-7, including cross-platform evidence |
 | VIII | Test Framework | Complete — VIII-1 through VIII-7, including bounded performance and stress evidence |
 | IX | AI Test Engineer | Complete IX-1 through IX-7 with cross-platform cited AI evidence |
-| X | Dashboard | In progress - X-1 through X-6 backend scope delivered (X-5 reduced scope); X-7.10 native engineering panel implemented; actual AAOS/deployment acceptance pending |
-| X | Dashboard | Planned |
+| X | Dashboard | In progress - X-1 through X-6 backend scope delivered (X-5 reduced scope); X-7.11 to X-7.19 actual AAOS acceptance and X-7.20 to X-7.23 local proxy, TLS, shared-admission and certificate-lifecycle acceptance passed; combined TLS/multiprocess profile and full deployment gate pending |
 | XI | DevOps | Planned |
 | XII | Enterprise Features | Planned |
 

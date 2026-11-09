@@ -23,6 +23,7 @@ from atep.core.observability import (
     current_trace_context,
 )
 from atep.core.rate_limit import api_rate_limit
+from atep.core.security import metrics_request_authorized
 from atep.cross_platform_automation.router import router as cross_platform_automation_router
 from atep.dashboard.realtime import router as dashboard_websocket_router
 from atep.dashboard.router import router as dashboard_router
@@ -108,7 +109,9 @@ app.state.observability = observability
 if settings.metrics_enabled:
 
     @app.get("/metrics", include_in_schema=False)
-    async def prometheus_metrics() -> Response:
+    async def prometheus_metrics(request: Request) -> Response:
+        if not metrics_request_authorized(request, settings):
+            return Response(status_code=401, headers={"WWW-Authenticate": "Bearer"})
         content, media_type = observability.render_metrics()
         return Response(content=content, media_type=media_type)
 

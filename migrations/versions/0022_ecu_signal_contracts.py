@@ -40,9 +40,7 @@ def upgrade() -> None:
             ["target_ecu_id"], ["electronic_control_units.id"], ondelete="CASCADE"
         ),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint(
-            "gateway_ecu_id", "identifier", name="uq_ecu_signal_route_identifier"
-        ),
+        sa.UniqueConstraint("gateway_ecu_id", "identifier", name="uq_ecu_signal_route_identifier"),
     )
     op.create_index("ix_ecu_signal_routes_gateway_ecu_id", "ecu_signal_routes", ["gateway_ecu_id"])
     op.create_index("ix_ecu_signal_routes_source_ecu_id", "ecu_signal_routes", ["source_ecu_id"])

@@ -75,9 +75,7 @@ def scenario_command(*, execution_id: str = "campaign-001") -> EcuScenarioExecut
 
 def test_scenario_contract_bounds_actions_and_requires_kind_fields() -> None:
     with pytest.raises(ValidationError, match="requires ecu_id, duration_ms"):
-        EcuScenarioExecuteCommand(
-            execution_id="scenario-001", actions=[{"kind": "advance_time"}]
-        )
+        EcuScenarioExecuteCommand(execution_id="scenario-001", actions=[{"kind": "advance_time"}])
     with pytest.raises(ValidationError, match="at most 16 ECUs"):
         EcuScenarioExecuteCommand(
             execution_id="scenario-002",
@@ -90,8 +88,7 @@ def test_scenario_contract_bounds_actions_and_requires_kind_fields() -> None:
         EcuScenarioExecuteCommand(
             execution_id="scenario-003",
             actions=[
-                {"kind": "advance_time", "ecu_id": "bms-ecu", "duration_ms": 1}
-                for _ in range(33)
+                {"kind": "advance_time", "ecu_id": "bms-ecu", "duration_ms": 1} for _ in range(33)
             ],
         )
 

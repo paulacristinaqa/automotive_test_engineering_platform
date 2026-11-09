@@ -1,0 +1,9 @@
+# Reviewed gitleaks findings that are not secrets. One fingerprint per line:
+# <commit>:<file>:<rule>:<line>. Add an entry only after checking the value.
+
+# RFC 6455 sample WebSocket key ("the sample nonce"), a public protocol constant
+# sent by the proxy acceptance runner to provoke a refused upgrade.
+c0f57ea5d77ff064e1388bda92733e78f1896041:tools/run_dashboard_proxy_acceptance.py:generic-api-key:114
+
+# Fixed JWT signing secret of a unit-test Settings fixture (environment="test").
+e3a0ef3c3631b0dab89bce6694b6697589bf4630:tests/test_observability.py:generic-api-key:13

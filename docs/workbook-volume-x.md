@@ -443,6 +443,418 @@ PostgreSQL backup/restore passed, and temporary integration containers were remo
 
 No paid services, new dependencies or GPU workload. Markdown remains current; DOCX remains X-1/X-2.
 
+## X-7.11 — AAOS acceptance preparation (in progress)
+
+The companion Android project now contains a platform instrumentation smoke runner
+and stable Compose test tags. The optional `-DashboardAaosAcceptance` integration
+switch connects that runner to the disposable localhost backend; it does not change
+the default integration workflow or require a paid service.
+
+Test objectives: establish a native live snapshot, verify that the token field is
+cleared, and verify background cleanup with explicit reconnection required. These
+objectives are not yet validated on the device. Permission loss, server-side expiry,
+network partitions and broader accessibility acceptance remain separate gaps.
+
+Local preparation evidence (2026-09-16): Android debug and instrumentation APKs
+built successfully; 57 JVM tests passed with zero failures/errors; the lint task,
+Python harness Ruff/mypy checks and PowerShell syntax check passed. The actual AAOS
+application rendered on the emulator, but this is not dashboard acceptance.
+AAOS uses driver user 10 on this AVD; the harness selects the active Android user
+rather than assuming that the system-user accessibility context can inspect it.
+
+The combined emulator/backend attempt was stopped when host CPU remained at 100%,
+including after lowering emulator priority and limiting its CPU affinity. No live
+dashboard smoke result was obtained. Subsequent checks confirmed no emulator,
+matching test-runner process or `atep-integration` containers remained running.
+Resume device execution only in a lower-load window. Do not mark X-7.11 accepted
+or merge it as verified on the basis of compilation alone. Changes remain uncommitted.
+Markdown is the current record; the DOCX workbook has not been regenerated.
+
+Sequential follow-up on 2026-09-16: the basic real-device smoke passed after
+correcting first-launch versus resumed-activity synchronization. LIVE snapshot,
+token-field clearing and background/return cleanup were verified on AAOS API 35.
+Both backend integration tests and the PostgreSQL restore drill passed, and the
+temporary stack/emulator were removed. CPU samples during the sequential workload
+were 33–82%, not a sustained 100%; these are samples, not measured peaks.
+See `dashboard-aaos-acceptance.md` for reproduction and remaining acceptance gaps.
+The subsequent initial no-role denial scenario also passed on device: a valid
+token from a newly created disposable account without roles produced FORBIDDEN,
+an empty token field and no envelope in the accessible tree. This is initial
+authorization denial, not loss of permission during an established session.
+Real permission loss, expiry, reconnect and normal ten-snapshot completion
+remain pending.
+
+Final expanded verification: two integration tests passed (19.25 seconds),
+AAOS smoke plus no-role denial passed, and PostgreSQL restore passed
+(87 tables/287 rows, 77.906 seconds). Ruff/mypy/PowerShell syntax checks passed;
+Android retained 57 passing JVM tests and lint with zero errors/15 warnings.
+Owned emulator and disposable containers were confirmed removed. Changes are
+saved locally; no commit/PR/merge or DOCX regeneration was performed in this run.
+
+## X-7.12 — Active-session AAOS permission loss
+
+A dedicated disposable user starts with only `dashboard:read`. The Android
+instrumentation waits for LIVE, emits an exact checkpoint, and the host then
+removes that user's fixture role through the public API. Administrator credentials
+are no longer sent to the Android smoke; both permitted sessions use the narrow
+dashboard-reader token. No production authorization or refresh settings change.
+
+The real device scenario passed: FORBIDDEN was observed at the next authorization
+check, the credential field was empty and the accessible tree contained no snapshot.
+The retained local screenshot was inspected. This does not establish instantaneous
+revocation, inactive-user acceptance or whole-process memory erasure.
+
+Seven new host coordinator tests cover exact/missing/duplicate checkpoints,
+bounded timeout/output, callback failure and child failure. All passed, as did
+Ruff/strict mypy. Android build/lint passed in 27 seconds with one worker, retaining
+57 passing JVM tests and zero lint errors/15 warnings. Two integration tests
+passed in 19.93 seconds. Sampled host CPU was 27–57%, GPU 10–21%; one active-device
+sample had 10.5 GiB RAM free. Compilation and emulator execution were sequential.
+
+See `dashboard-aaos-permission-loss.md` for reproduction and evidence boundaries.
+The restore drill passed (87 tables/296 rows, 77.594 seconds), and the owned
+emulator/temporary containers were confirmed removed. Final sampled CPU was 33%.
+Changes remain local and uncommitted; no PR or merge was performed in this increment.
+Expiry, inactive-user handling, reconnect/staleness and ten-snapshot completion
+remain pending; trusted-proxy acceptance follows the Android gate. No paid service
+was added. Markdown is current; DOCX has not been regenerated.
+
+## X-7.13 — AAOS local session expiration
+
+The real device reached LIVE with a 30-second local budget, applied the existing
+ten-second safety margin, then reached AUTH_REQUIRED. The token input and visible
+evidence cleared, and the state remained terminal over a 32-second observation.
+The host confirmed the exact JWT still returned HTTP 200 with dashboard permission.
+Explicit reconnection and the following permission-loss scenario also passed.
+
+Eleven coordinator tests and Ruff/mypy passed. Android build/lint passed in
+28 seconds with 57 JVM tests retained and zero lint errors/15 warnings. Both
+integration tests passed (19.70 seconds); restore passed with 87 tables/296 rows
+in 75.14 seconds. Resources were cleaned up. CPU samples were 25–67%, not peak
+measurements. See `dashboard-aaos-local-expiry.md`. DOCX is unchanged.
+
+## X-7.14 — Natural server JWT expiration
+
+A distinct disposable reader uses an API-issued five-minute JWT and a longer
+600-second local client budget. No clock, JWT signature, production policy or
+server token lifetime is modified. Device AUTH_REQUIRED must precede the local
+deadline. The host must confirm HTTP 401 for the same token and separately verify
+that the account remains active and retains dashboard permission.
+
+The expanded run has a bounded 480-second deadline. Sixteen coordinator tests
+cover checkpoint ordering, missing/duplicate signals and failed verification;
+Ruff/mypy passed. Android build/lint passed in 41 seconds, retaining 57 JVM tests
+and zero lint errors/15 warnings. The real AAOS scenario passed: AUTH_REQUIRED
+preceded the local deadline, the input/evidence cleared, and the host confirmed
+HTTP 401 for the original token with the account still active and authorized.
+The retained screenshot was inspected. Two integration tests passed in
+24.86 seconds. CPU samples were 37–70%, GPU 6–16%; one sample retained 10.1 GiB
+RAM free. See `dashboard-aaos-server-expiry.md`. No paid service was added.
+
+Final restore passed (87 tables/303 rows, 85.218 seconds); all sixteen coordinator
+tests passed again in 0.91 seconds, with Ruff/mypy passing. Owned emulator and
+temporary containers were confirmed absent, and final sampled CPU was 34%.
+Documentation remains in English Markdown; DOCX is unchanged. Changes are local
+and uncommitted; no PR or merge was performed. Next is inactive-user acceptance,
+followed by the remaining real network/reconnect and normal-completion gates.
+
+## X-7.15 — AAOS active-user deactivation
+
+A separate disposable dashboard reader reaches LIVE before the host disables
+its account through the public status API. The role remains assigned; the host
+checks HTTP 401 with the same token. Timing guards reserve an unexpired JWT
+window longer than the 65-second device assertion, and the client uses a longer
+600-second local budget. Thus expiry or role removal cannot substitute for the
+intended cause. Production policies and server refresh intervals are unchanged.
+
+Six new coordinator cases cover successful ordering, early/duplicate signals,
+missing completion, server-expiry ordering and failed deactivation. All 22
+coordinator tests passed, as did Ruff/strict mypy. Android build/lint passed in
+30 seconds with one worker and no emulator, retaining 57 passing JVM tests and
+zero lint errors/15 warnings. Real-device verification passed: LIVE transitioned
+to AUTH_REQUIRED within the unexpired window, with empty token input and no
+displayed envelope. The host confirmed an inactive account, retained role and
+HTTP 401 using the same JWT. The local screenshot was inspected; previous AAOS
+scenarios also passed. Two integration tests passed in 20.52 seconds.
+CPU samples were 40–71%, GPU 13–18%; device-stage samples retained 10.4 GiB RAM
+free. See `dashboard-aaos-inactive-user.md`. No paid service was introduced.
+Markdown remains current and DOCX unchanged.
+
+Final restore passed (87 tables/310 rows, 81.578 seconds), and all 22 coordinator
+tests passed again in 1.16 seconds with Ruff/mypy passing. Owned emulator and
+temporary containers were confirmed removed; final sampled CPU was 39%.
+Changes remain local and uncommitted; no PR/merge was performed. The next gate
+is real network failure/reconnect/staleness, followed by remaining completion
+and deployment acceptance.
+
+## X-7.16 — AAOS stalled transport, staleness and recovery
+
+Added a loopback-only, bounded TCP fault fixture and a separate opt-in Android
+network scenario. After a real LIVE checkpoint, forwarding pauses; Android
+marks the unchanged preview STALE. The host then cuts the connection, Android
+retains stale evidence while RECONNECTING, and the restored route permits one
+delayed reconnect to a fresh LIVE snapshot. Host/device elapsed-time guards
+and an exact two-connection assertion supplement the visible state checks.
+The application retry and authentication policies are unchanged; only a preview
+test tag was added to runtime presentation. No paid service is used.
+
+Thirty-one coordinator/fixture tests passed, with Ruff and strict mypy passing.
+Android build/lint completed in 1m14s with one worker and no emulator, 57 passing
+JVM tests, zero lint errors and 15 existing warnings. The successful actual
+API 35 run passed both integration tests in 19.17 seconds and all four ordered
+network checkpoints. Both local screenshots were inspected: empty token input,
+explicit STALE / NOT LIVE, then CURRENT SERVER QUERY with a newer timestamp.
+
+The first device attempt stopped before LIVE for an undetermined reason.
+Allowlisted phase diagnostics were added; the repeat passed without changing
+production behavior or weakening assertions. One successful run is recorded,
+not repeated-run reliability. Sampled CPU was 20–63%, GPU 7–12%; free RAM during
+device execution included 10.4 and 12.1 GiB. These are samples, not peak bounds.
+See `dashboard-aaos-network-recovery.md` for reproduction and limitations.
+Next are remaining retry-terminal cases and normal ten-snapshot completion,
+before the broader deployment gate. English Markdown is updated; DOCX unchanged.
+
+Final restore passed (87 tables/292 rows, 77.0 seconds). All 31 targeted tests
+passed again in 3.71 seconds with Ruff/mypy and diff checks passing. Owned
+emulator and integration containers were confirmed removed; final sampled
+CPU was 31%, GPU 12%. Changes remain local and uncommitted; no PR/merge was
+performed in this increment.
+
+## X-7.17 — AAOS expiry during reconnect backoff
+
+The next retry-terminal work is split into two bounded increments: expiry
+during retry first, actual-device five-retry exhaustion next (at least 450
+seconds of production backoff). This preserves the planned acceptance scope
+without accelerating production timers or claiming JVM tests as device proof.
+
+A new opt-in scenario reaches LIVE, cuts the local TCP route, observes
+RECONNECTING and then local AUTH_REQUIRED. A 40-second input uses the existing
+ten-second safety margin. The host verifies that the same JWT still receives
+HTTP 200 for an active, authorized account, then restores the route. Android
+remains terminal for 32 seconds and the host confirms only one accepted
+connection. The inspected screenshot has an empty token field and no envelope.
+No production runtime behavior or paid service was added.
+
+Five coordinator tests require every ordered phase; a new JVM boundary test
+proves expiry wins at the exact retry deadline and rejects late callbacks.
+All 36 coordinator/proxy tests and 58 Android JVM tests passed. Android build
+took 37 seconds; lint had zero errors and 15 existing warnings. Two integration
+tests passed in 19.79 seconds. Ruff, strict mypy, PowerShell parsing and diff
+checks passed. CPU samples were 53–67%, GPU 6–10%, with 12.9 GiB free RAM during
+device execution; these are not measured peaks. See
+`dashboard-aaos-retry-expiry.md`. English Markdown updated; DOCX unchanged.
+
+Final restore passed with 87 tables/292 rows in 76.125 seconds. All 36 targeted
+tests passed again in 3.86 seconds with Ruff/mypy and diff checks passing.
+Owned containers/emulator were confirmed removed; final CPU sample was 34%,
+GPU 8%. Changes remain local and uncommitted; no PR/merge was performed.
+
+## X-7.18 — Actual AAOS retry exhaustion
+
+Added an opt-in real-time exhaustion scenario, bounded accept timestamp history
+and host checks for each 30/60/120/120/120-second delay. Actual API 35 reached
+STOPPED after exactly five failed retries, cleared credentials/evidence and
+made no new connection during 122 seconds after route restoration. The local
+900-second budget isolates exhaustion; failed retries never reach the server,
+so the normal five-minute JWT expiration cannot return an auth failure.
+
+All 53 host tests, 59 Android tests, Ruff and mypy passed. Android build took
+38 seconds with zero lint errors/15 existing warnings; two integration tests
+passed in 19.51 seconds. Restore passed (87 tables/292 rows, 74.578 seconds).
+The screenshot was inspected after resumption. Interactive monitoring had
+been interrupted by account limits; the completed process returned success
+and recorded automatic cleanup. Sampled CPU 36–79%, GPU 9–17%, not measured
+peaks. English Markdown updated, DOCX unchanged; no commit/PR/merge performed.
+Next is normal ten-snapshot completion; see dashboard-aaos-retry-exhaustion.md.
+
+## X-7.19 — Normal completion (initial attempts and resolution)
+
+Added an opt-in actual-AAOS ten-snapshot scenario with a single-connection
+check, final sequence/preview retention, empty token input and 32-second
+terminal observation. Four new host cases require all three checkpoints.
+The scenario alone uses a ten-minute disposable JWT fixture; other runner
+modes explicitly retain five minutes. Production configuration is unchanged.
+
+Three device attempts were made. The first failed before LIVE confirmation
+under the narrow five-minute setup budget. The second failed in the combined
+completion phase. Timing review moved the origin from UI recognition of LIVE
+to Connect and added a host TCP-acceptance duration check. The third reached
+COMPLETE and passed timing/stale-status checks, but failed reading/validating
+the final preview. Consequently retention, credential cleanup and no-restart
+are not yet accepted. Further long runs were paused to diagnose the precise
+assertion rather than repeat unchanged tests. A finer preview-sequence phase
+was added afterward but has not yet been rebuilt/executed.
+
+57 host tests, Ruff/mypy and diff checks passed before the final diagnostic
+split. Android initial build/lint passed (37 seconds, 59 JVM tests, zero errors/
+15 existing warnings); instrumentation timing rebuild passed in 19 seconds.
+Backend integration passed in 24.33, 19.11 and 19.28 seconds. All failed runs
+cleaned owned resources; no new restore success is claimed for X-7.19.
+Sampled CPU 26–62%, GPU 10–19%, not measured peaks. English Markdown updated;
+DOCX unchanged. No commit/PR/merge. Next work is preview diagnostics and the
+remaining normal-completion assertions, not a new roadmap feature.
+
+### Resumed validation — successful acceptance
+
+Explicitly refreshed the preview accessibility node before reading its text,
+split lookup/text/sequence diagnostic phases, and added safe local failure
+screenshots after the form stage. The resumed actual API 35 run passed: ten
+snapshots on one connection, COMPLETE with stale indication, empty credential
+input and the identical sequence-10 preview retained for 32 seconds without
+automatic restart. The final screenshot was inspected. The earlier failure
+was consistent with stale accessibility data, but its exact cause cannot be
+proved from the older combined diagnostics. No runtime behavior was changed.
+
+Instrumentation build passed in 22 seconds; retained JVM evidence has 59 tests.
+All 57 host tests passed again in 5.05 seconds, with Ruff/mypy passing on six
+files. Two integration tests passed in 20.28 seconds. Sampled CPU 36–74%, GPU
+5–16%, with 10.3 GiB free RAM in a device-stage sample; not measured peaks.
+The targeted X-7.19 gate is now passed. Next is trusted-proxy deployment
+acceptance, with broader accessibility/device-matrix gaps still explicit.
+
+Final restore passed (87 tables/292 rows, 79.828 seconds). Owned containers
+and emulator were confirmed absent; final sampled CPU was 40%, GPU 5%.
+Both repository diff checks passed. English Markdown updated; DOCX unchanged.
+Changes remain local and uncommitted, with no PR or merge performed.
+
+## X-7.20 — Reverse-proxy identity boundary
+
+Introduced an opt-in Nginx Compose overlay for the first deployment gate slice,
+separate from AAOS execution. Uvicorn trusts only the proxy's dedicated IP.
+Nginx replaces transport identity/scheme headers and strips alternate forwarding
+and client-certificate claims; duplicate client headers cannot create separate
+Redis handshake identities. The fixture is loopback HTTP, not production TLS.
+
+The real sequential run passed: after 29 invalid-credential upgrades, attempt
+30 with a valid token received a snapshot; attempt 31 was denied. All rotating
+duplicate X-Forwarded-For/Forwarded claims shared one observed Redis bucket
+with count 31 and a valid TTL. Only that disposable bucket was reset; no Redis
+flush or admission-policy change was used. Six exact-trust/untrusted-peer
+middleware cases and four existing admission cases passed (10 tests in 0.62s).
+Both integration tests passed in 18.68s; Ruff, strict mypy and diff checks passed.
+
+The pinned official Nginx image resolved to 1.30.5. Inspection confirmed a
+64 MiB memory limit, 0.25 CPU, 32 PIDs, read-only root and UID/GID 101. Temporary
+directories live in 8 MiB tmpfs. An initial readonly-path startup failure was
+diagnosed with isolated nginx -t and corrected without loosening filesystem
+permissions. Two denial-loop attempts exceeded the test deadline; HTTP Upgrade
+probes replaced the WebSocket close lifecycle for rejected handshakes. The
+accepted path remains a real WebSocket. These failures are recorded in
+dashboard-proxy-boundary.md rather than presented as clean first-run success.
+
+Host CPU samples were 36–57%, GPU 5–20%, with 14.0 GiB free RAM in one sample;
+these are not measured peaks. No emulator, paid API or cloud service was used.
+English Markdown updated; DOCX unchanged. TLS/certificate verification and
+upstream isolation are next, not implied passes. No commit/PR/merge performed.
+
+Final restore passed (87 tables/283 rows, 76.719 seconds). The runner removed
+owned containers and networks; the final container query was empty. Final
+CPU sample was 35%, GPU 7%. Changes remain local and uncommitted.
+
+## X-7.21 — Local TLS and API host-port isolation
+
+Implemented DASH-NF-068 using a third Compose overlay and a dedicated TLS
+Nginx configuration. The acceptance runner removes API host publishing and
+replaces the HTTP proxy binding with loopback HTTPS. It creates a one-day local
+self-signed certificate, uses explicit process-local trust, and removes the
+temporary key material after stopping the proxy. No trust-store changes or paid
+services are required. Git for Windows supplies OpenSSL because the pinned Nginx
+image does not include its command-line executable.
+
+Four new unit tests verify trust settings and the negative-test oracle; combined
+with the ten boundary/admission tests, fourteen passed in 0.77 seconds. Ruff and
+strict mypy passed for both new Python files. Two integration tests passed in
+18.20 seconds. Real TLS 1.2/1.3 negotiation, untrusted-certificate rejection,
+hostname mismatch rejection, verified HTTPS login and authenticated WSS snapshot
+all passed. Docker inspection showed no API port bindings, and TCP probes showed
+the former 18000/18800 endpoints closed during the TLS phase.
+
+The restore drill passed: 87 tables, 283 rows, 76.25 seconds, migration
+0064_ai_evidence_projections. Owned containers/networks and TLS temporary
+directories were absent after cleanup. CPU samples were 24–39%, GPU 5–11%, not
+measured maxima. Tests were sequential without an emulator. The existing app
+image was reused; backend source is unchanged by this increment.
+
+See dashboard-proxy-tls.md for reproduction and limitations: internal HTTP,
+reachable trusted Docker peers, unchanged dependency publishing, no production
+certificate lifecycle, no browser/AAOS TLS trust or capacity claim. Next is
+bounded multi-worker/shared-admission deployment validation. The full X-7 gate
+remains open. English Markdown updated; DOCX unchanged. No commit, PR or merge
+performed; these changes and preceding increments remain local.
+
+## X-7.22 — Two-process shared handshake budget
+
+Implemented DASH-NF-069 with two independently identified single-worker API
+containers and deterministic proxy routing. The test verifies distinct Docker
+container and host process IDs, then checks Nginx's actual upstream address on
+each successful or denied handshake. No process-identification route was added
+to the application. Each API has enforced 512 MiB, 0.5 CPU and 64-PID bounds.
+Replica B's reconciliation loop is disabled; bootstrap/job distribution is not
+part of this test. Both writers are stopped before the recovery check.
+
+The live scenario first received one real snapshot from each process and verified
+that both incremented the same Redis bucket. After resetting only that disposable
+key, 29 invalid attempts alternated between replicas; valid attempt 30 succeeded
+on B, while valid 31 and 32 were denied on A and B respectively. The final counter
+was 32 with a positive bounded TTL, and forged forwarding headers did not create
+additional changed peer buckets. The sequential handshake phase stayed within
+its 40-second timeout. This is functional evidence, not saturation testing.
+
+On 2026-09-18, eight new oracle cases plus fourteen existing targeted tests passed
+(22 total, 1.07 seconds). Ruff, strict mypy on the changed Python files and
+PowerShell parsing passed. The two existing Docker integration tests passed in
+43.47 seconds under the limited API profile. The restore drill passed with
+87 tables/283 rows in 81.765 seconds at migration 0064_ai_evidence_projections.
+Owned containers/networks were absent after cleanup. CPU samples were 19–71%,
+GPU 3–7%, not peaks; final samples were 27%/3%. No emulator or paid service was used.
+
+See dashboard-multiprocess-admission.md for reproduction and exclusions. The
+16 active-stream slots remain per process; no distributed concurrency cap,
+automatic load balancing, multi-host resilience or production capacity is claimed.
+TLS remains a separate X-7.21 profile. Next is local certificate lifecycle
+acceptance (expiry and replacement); the full release matrix is still open.
+English Markdown updated; DOCX unchanged. No commit, PR or merge was performed.
+Changes remain local, together with earlier uncommitted increments.
+
+## X-7.23 — Certificate lifecycle
+
+On 2026-10-26, implemented DASH-NF-070 as an opt-in extension of the existing
+TLS runner. OpenSSL creates a certificate valid from two days ago to yesterday
+without modifying system time. The negative oracle requires verification code
+10, distinguishing expiration from untrusted issuers, wrong hostnames and TCP
+failures. A new certificate/key pair then replaces the expired mount through a
+proxy restart; the runner verifies its served fingerprint, rejects old explicit
+trust and repeats HTTPS/WSS acceptance using updated process-local trust.
+
+Six new fixture/oracle cases and 22 existing targeted checks passed (28 total,
+3.01 seconds). Strict mypy passed for three Python files. No backend source or
+production certificate configuration changed; all material is disposable. The
+OpenSSL executable already installed with Git for Windows supports the needed
+date options, so no dependency installation or paid service was required.
+
+Docker preflight failed because dockerDesktopLinuxEngine was unavailable. Asked
+the user to open Docker Desktop while implementation proceeded. Therefore the
+real Nginx lifecycle, HTTPS/WSS recovery, restore and Docker cleanup gates have
+not run for this increment. X-7.23 remains in progress; do not advance its roadmap
+status until that evidence is collected. Initial CPU/GPU samples were 9%/1%.
+See dashboard-certificate-lifecycle.md for reproduction and exclusions. Markdown
+updated in English; DOCX unchanged. No commit, PR or merge performed.
+
+### Live acceptance — 2026-11-09
+
+With Docker Desktop available again, the live gate ran and passed: two integration
+tests, the X-7.21 TLS baseline, rejection of the explicitly trusted expired
+certificate with verification code 10, a served replacement certificate with old
+trust rejected and verified HTTPS/WSS recovery, the PostgreSQL restore drill
+(87 tables, 284 rows) and full cleanup of the disposable stack.
+
+The first attempt failed before any test: Windows (Hyper-V/WinNAT) had reserved
+ports 18716-18815, which include the proxy fixture ports 18800-18802. The fix made
+the four fixture ports configurable through `ATEP_ACCEPTANCE_*_PORT` variables and
+runner parameters, keeping the documented defaults; three tests cover defaults,
+overrides and invalid values. The passing run used ports 18900-18902. X-7.23 is
+complete; the combined TLS/multiprocess profile and full deployment gate remain open.
+
 ## Remaining acceptance work after populated verification
 
 X-6: live updates, exports, retention and performance hardening. Full OTA and formal standards

@@ -110,6 +110,10 @@
 | CORE-F-104 | Routine CI shall format, initialize without a backend, validate, and test only mocked Terraform plans without AWS credentials, OIDC issuance, or `apply`. | Security-workflow and Terraform test evidence |
 | CORE-F-105 | An operator-only read-only auditor shall verify the expected AWS account, archive S3 controls, archive KMS key, exact writer/restore IAM trust and actions, and external CloudTrail configuration before live archive acceptance. | Simulated AWS-client audit tests and future operator evidence |
 | CORE-F-106 | The AWS foundation auditor shall emit one bounded non-replacing JSON report only after every check passes and shall retain no caller ARN/session identifier, raw policy, credential, token, or AWS response body. | Positive, negative, and evidence-minimization audit tests |
+| CORE-F-107 | The versioned-API rate limit shall key each request on the verified access-token user, and requests without a valid access token shall share the direct network-client quota regardless of the `Authorization` value presented. | Unit rate-limit identity tests |
+| CORE-F-108 | Configuration shall reject example-placeholder or low-variety JWT signing secrets and shall accept only the `HS256`, `HS384`, or `HS512` signing algorithms. | Settings validation tests |
+| CORE-F-109 | When `ATEP_METRICS_BEARER_TOKEN` is configured, the API scrape endpoint shall return HTTP 401 unless the request presents the exact bearer token; production configuration with metrics enabled shall fail validation without that token. | Unit, endpoint, and settings validation tests |
+| CORE-F-110 | The fast CI quality gate shall reject unformatted Python with `ruff format --check`, and the repository shall normalize text files to LF through `.gitattributes`. | Workflow definition and local gate execution |
 
 ## Non-functional requirements
 
@@ -195,3 +199,6 @@
 | CORE-NF-078 | Audit independence | CloudTrail log-file validation and management/object data-event coverage are enabled while its destination bucket and KMS key remain outside the archive stack |
 | CORE-NF-079 | Live audit non-mutation | Foundation conformance uses only STS/S3/KMS/IAM/CloudTrail read APIs; it never plans/applies infrastructure, assumes a role, performs cryptographic operations, writes an object, changes retention, or changes logging |
 | CORE-NF-080 | Live audit fail-closed behavior | Wrong account, shared boundaries, insufficient retention, wrong encryption, public ownership, missing deny controls, weak key state/rotation, broad or ambiguous IAM trust/actions, stopped/erroring trail, truncated IAM results, or existing report prevents evidence emission |
+| CORE-NF-081 | Rate-limit identity integrity | only cryptographically verified access tokens create per-user buckets; unverified, malformed, or non-bearer `Authorization` values cannot create additional quota |
+| CORE-NF-082 | Signing configuration safety | JWT signing material fails closed on known placeholders and repetitive values; the algorithm is a fixed HMAC allow-list rather than free text |
+| CORE-NF-083 | Metrics access control | the API metrics token is compared in constant time, never logged, and mandatory in production while metrics are enabled; the worker metrics port remains protected by network isolation |

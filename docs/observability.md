@@ -15,6 +15,7 @@ labels. It combines three replaceable signals:
 | Setting | Default | Purpose |
 |---|---:|---|
 | `ATEP_METRICS_ENABLED` | `true` | Exposes the internal `/metrics` scrape endpoint |
+| `ATEP_METRICS_BEARER_TOKEN` | empty | When set, the API `/metrics` endpoint requires `Authorization: Bearer <token>`; mandatory in production while metrics are enabled |
 | `ATEP_TRACING_ENABLED` | `false` | Records sampled spans and enables configured export |
 | `ATEP_OTEL_SERVICE_NAME` | `atep-core` | Stable OpenTelemetry service identity |
 | `ATEP_OTEL_EXPORTER_OTLP_ENDPOINT` | unset | Collector HTTP traces endpoint, including `/v1/traces` |
@@ -184,6 +185,8 @@ reviewed provider routing, ownership, escalation, silences, and notification-del
 ## Security and Production Hardening
 
 - Restrict `/metrics`, Prometheus, Grafana, and OTLP ports to an internal management network.
+- Configure `ATEP_METRICS_BEARER_TOKEN` and give Prometheus the same token through its
+  `authorization` scrape setting; the API refuses to start in production without it.
 - Disable anonymous Grafana access outside the disposable local topology.
 - Send OTLP over TLS with workload identity and collector authentication.
 - Select a sampling ratio from measured traffic and retain error/security traces according to

@@ -34,9 +34,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.ForeignKeyConstraint(["network_id"], ["can_networks.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(
-            ["requested_by_user_id"], ["users.id"], ondelete="RESTRICT"
-        ),
+        sa.ForeignKeyConstraint(["requested_by_user_id"], ["users.id"], ondelete="RESTRICT"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("network_id", "command_id", name="uq_can_arbitration_command"),
     )

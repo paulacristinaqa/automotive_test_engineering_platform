@@ -6,6 +6,7 @@ from uuid import UUID
 
 import jwt
 from pwdlib import PasswordHash
+from starlette.requests import Request
 
 from atep.core.config import Settings
 
@@ -35,6 +36,17 @@ def hash_module_token(token: str) -> str:
 
 def verify_module_token(token: str, encoded_hash: str) -> bool:
     return secrets.compare_digest(hash_module_token(token), encoded_hash)
+
+
+def metrics_request_authorized(request: Request, settings: Settings) -> bool:
+    """Allow the scrape when no metrics token is configured, else require the exact bearer."""
+    if settings.metrics_bearer_token is None:
+        return True
+    scheme, _, token = request.headers.get("Authorization", "").partition(" ")
+    if scheme.casefold() != "bearer":
+        return False
+    expected = settings.metrics_bearer_token.get_secret_value()
+    return secrets.compare_digest(token.strip().encode("utf-8"), expected.encode("utf-8"))
 
 
 def hash_password(password: str) -> str:

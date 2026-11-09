@@ -308,12 +308,8 @@ async def test_regen_unavailable_uses_friction(
 
 def test_charge_acceptance_tapers_near_high_soc() -> None:
     current_vehicle = vehicle()
-    at_eighty = _battery_charge_acceptance_kw(
-        battery(current_vehicle, soc_pct=80.0), 100.0
-    )
-    near_full = _battery_charge_acceptance_kw(
-        battery(current_vehicle, soc_pct=90.0), 100.0
-    )
+    at_eighty = _battery_charge_acceptance_kw(battery(current_vehicle, soc_pct=80.0), 100.0)
+    near_full = _battery_charge_acceptance_kw(battery(current_vehicle, soc_pct=90.0), 100.0)
 
     assert near_full < at_eighty
 

@@ -69,9 +69,7 @@ async def list_definitions_endpoint(
     offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
     status_filter: Annotated[CatalogStatus | None, Query(alias="status")] = None,
 ) -> TestDefinitionPage:
-    items, total = await list_definitions(
-        session, limit=limit, offset=offset, status=status_filter
-    )
+    items, total = await list_definitions(session, limit=limit, offset=offset, status=status_filter)
     return TestDefinitionPage(
         items=[definition_response(item) for item in items],
         total=total,
@@ -89,9 +87,7 @@ async def get_definition_endpoint(
     return definition_response(await require_definition(session, definition_id))
 
 
-@router.patch(
-    "/test-definitions/{definition_id}/status", response_model=TestDefinitionResponse
-)
+@router.patch("/test-definitions/{definition_id}/status", response_model=TestDefinitionResponse)
 async def update_definition_status_endpoint(
     definition_id: Annotated[str, Path(pattern=CATALOG_ID_PATTERN.pattern)],
     command: CatalogStatusUpdate,
@@ -112,9 +108,7 @@ async def update_definition_status_endpoint(
     return definition_response(updated)
 
 
-@router.post(
-    "/test-suites", response_model=TestSuiteResponse, status_code=status.HTTP_201_CREATED
-)
+@router.post("/test-suites", response_model=TestSuiteResponse, status_code=status.HTTP_201_CREATED)
 async def create_suite_endpoint(
     command: TestSuiteCreate,
     request: Request,

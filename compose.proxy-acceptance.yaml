@@ -1,0 +1,38 @@
+# Disposable HTTP trust-boundary fixture, not a production/TLS deployment.
+services:
+  api:
+    command: ["uvicorn", "atep.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "172.30.241.10"]
+    networks:
+      default: {}
+      proxy-boundary:
+        ipv4_address: 172.30.241.20
+
+  proxy:
+    image: nginx:stable-alpine@sha256:73c75df4075c918f91017fdda46ad81e55e5af77ba3a64ca3d5014bd9244fe7f
+    entrypoint: ["nginx", "-g", "daemon off;"]
+    user: "101:101"
+    ports:
+      - "127.0.0.1:${ATEP_ACCEPTANCE_PROXY_PORT:-18800}:8080"
+    volumes:
+      - ./deploy/acceptance/nginx.conf:/etc/nginx/nginx.conf:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=8m
+    mem_limit: 64m
+    cpus: 0.25
+    pids_limit: 32
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      proxy-boundary:
+        ipv4_address: 172.30.241.10
+
+networks:
+  proxy-boundary:
+    ipam:
+      config:
+        - subnet: 172.30.241.0/24

@@ -42,7 +42,35 @@ backend/AAOS acceptance; JVM adapter tests do not pass that gate.
 X-7.10 wires an engineering Compose panel and session ownership; see
 `dashboard-android-panel.md`. The next gate is actual backend/AAOS interaction and
 visual/lifecycle acceptance, not another claim based only on compilation.
-Screen-reader/contrast/browser-matrix checks, real network partitions and server-side JWT expiry
+X-7.11 passes the basic real AAOS LIVE/token-clearing/background-return smoke;
+see `dashboard-aaos-acceptance.md`. Initial no-role denial also passed on device.
+X-7.12 also passes active-session permission loss after a real device LIVE
+checkpoint (`dashboard-aaos-permission-loss.md`). X-7.13 passes local expiry
+with a still-valid server token (`dashboard-aaos-local-expiry.md`); X-7.14 passes
+natural server JWT expiration (`dashboard-aaos-server-expiry.md`).
+X-7.15 passes inactive-user handling (`dashboard-aaos-inactive-user.md`).
+X-7.16 passes controlled TCP stall/interruption, stale retention and delayed
+reconnect on actual AAOS (`dashboard-aaos-network-recovery.md`). One successful
+device run follows an unclassified initial failure; repeatability is not implied.
+X-7.17 passes local expiry during real reconnect backoff, including route
+recovery without automatic restart (`dashboard-aaos-retry-expiry.md`).
+X-7.18 passes actual-device retry exhaustion (`dashboard-aaos-retry-exhaustion.md`).
+X-7.19 normal ten-snapshot completion passed after explicitly refreshing the
+accessibility preview node: sequence 10, retained stale evidence, empty token
+input and no automatic restart on one connection. Earlier failed attempts are
+preserved in `dashboard-aaos-normal-completion.md`. X-7.20 passes the first
+trusted-proxy deployment slice: exact forwarding trust and spoof-resistant
+Redis handshake admission through local Nginx (`dashboard-proxy-boundary.md`).
+X-7.21 passes local TLS/certificate validation and API host-port isolation
+(`dashboard-proxy-tls.md`). X-7.22 passes bounded shared-admission validation with
+two independent single-worker replicas (`dashboard-multiprocess-admission.md`),
+without a stress, automatic-balancing or production-capacity claim. X-7.23 passes
+live local certificate lifecycle acceptance: an explicitly trusted expired certificate
+fails with verification code 10, and a restart-based replacement recovers verified
+HTTPS/WSS (`dashboard-certificate-lifecycle.md`). The complete deployment
+gate, broader accessibility and device/browser matrix remain open.
+The broader Android gate is not yet complete.
+Screen-reader/contrast/browser-matrix checks and real network partitions
 remain explicit evidence gaps rather than implied passes.
 Actual client/deployment evidence remains a release gate; protocol tests do not establish it.
 Small-fixture timings are not capacity guarantees.

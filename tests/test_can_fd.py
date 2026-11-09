@@ -268,9 +268,7 @@ async def test_fd_payload_must_match_contract_length() -> None:
             actor_user_id=uuid4(),
             correlation_id=None,
         )
-    assert exc_info.value.details == {
-        "reason": "payload length must equal the frame contract DLC"
-    }
+    assert exc_info.value.details == {"reason": "payload length must equal the frame contract DLC"}
 
 
 def test_dbc_codec_supports_signals_at_end_of_64_byte_fd_payload() -> None:
@@ -285,9 +283,7 @@ def test_dbc_codec_supports_signals_at_end_of_64_byte_fd_payload() -> None:
             }
         ],
     )
-    payload, raw, physical = encode_message(
-        message, dlc=64, values={"TailCounter": Decimal(165)}
-    )
+    payload, raw, physical = encode_message(message, dlc=64, values={"TailCounter": Decimal(165)})
     assert len(payload) == 64
     assert payload[-1] == 165
     assert raw == {"TailCounter": 165}
