@@ -816,6 +816,30 @@ acceptance (expiry and replacement); the full release matrix is still open.
 English Markdown updated; DOCX unchanged. No commit, PR or merge was performed.
 Changes remain local, together with earlier uncommitted increments.
 
+## X-7.23 — Certificate lifecycle implementation; Docker validation pending
+
+On 2026-10-26, implemented DASH-NF-070 as an opt-in extension of the existing
+TLS runner. OpenSSL creates a certificate valid from two days ago to yesterday
+without modifying system time. The negative oracle requires verification code
+10, distinguishing expiration from untrusted issuers, wrong hostnames and TCP
+failures. A new certificate/key pair then replaces the expired mount through a
+proxy restart; the runner verifies its served fingerprint, rejects old explicit
+trust and repeats HTTPS/WSS acceptance using updated process-local trust.
+
+Six new fixture/oracle cases and 22 existing targeted checks passed (28 total,
+3.01 seconds). Strict mypy passed for three Python files. No backend source or
+production certificate configuration changed; all material is disposable. The
+OpenSSL executable already installed with Git for Windows supports the needed
+date options, so no dependency installation or paid service was required.
+
+Docker preflight failed because dockerDesktopLinuxEngine was unavailable. Asked
+the user to open Docker Desktop while implementation proceeded. Therefore the
+real Nginx lifecycle, HTTPS/WSS recovery, restore and Docker cleanup gates have
+not run for this increment. X-7.23 remains in progress; do not advance its roadmap
+status until that evidence is collected. Initial CPU/GPU samples were 9%/1%.
+See dashboard-certificate-lifecycle.md for reproduction and exclusions. Markdown
+updated in English; DOCX unchanged. No commit, PR or merge performed.
+
 ## Remaining acceptance work after populated verification
 
 X-6: live updates, exports, retention and performance hardening. Full OTA and formal standards

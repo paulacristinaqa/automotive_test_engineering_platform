@@ -1,5 +1,11 @@
 # Volume X Dashboard Requirements
 
+## X-7.23 Certificate lifecycle — live acceptance pending
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-070 | Reject an explicitly trusted expired certificate with the expiration-specific error, then serve a different replacement certificate and recover verified HTTPS/WSS with explicit updated client trust. | Six new local fixture/oracle cases passed; real Nginx expiry/replacement and recovery pending Docker availability; dashboard-certificate-lifecycle.md |
+
 ## X-7.22 Multiprocess shared admission
 
 | ID | Requirement | Evidence |
