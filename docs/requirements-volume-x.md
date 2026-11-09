@@ -1,5 +1,12 @@
 # Volume X Dashboard Requirements
 
+## X-7.13 / X-7.14 AAOS expiration acceptance
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-060 | Expire a real AAOS local session, clear the form/evidence and avoid automatic restart while the exact JWT remains valid on the server. | X-7.13 instrumented PASS, 32-second terminal-state observation and HTTP 200 permission probe |
+| DASH-NF-061 | Observe natural server JWT expiration on a LIVE AAOS session before its deliberately longer local deadline, with account/permission unchanged. | X-7.14 instrumented PASS, exact-token HTTP 401 and independent active/authorized-account probe |
+
 ## X-7.12 active-session AAOS permission loss
 
 | ID | Requirement | Evidence |

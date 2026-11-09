@@ -519,6 +519,45 @@ Expiry, inactive-user handling, reconnect/staleness and ten-snapshot completion
 remain pending; trusted-proxy acceptance follows the Android gate. No paid service
 was added. Markdown is current; DOCX has not been regenerated.
 
+## X-7.13 — AAOS local session expiration
+
+The real device reached LIVE with a 30-second local budget, applied the existing
+ten-second safety margin, then reached AUTH_REQUIRED. The token input and visible
+evidence cleared, and the state remained terminal over a 32-second observation.
+The host confirmed the exact JWT still returned HTTP 200 with dashboard permission.
+Explicit reconnection and the following permission-loss scenario also passed.
+
+Eleven coordinator tests and Ruff/mypy passed. Android build/lint passed in
+28 seconds with 57 JVM tests retained and zero lint errors/15 warnings. Both
+integration tests passed (19.70 seconds); restore passed with 87 tables/296 rows
+in 75.14 seconds. Resources were cleaned up. CPU samples were 25–67%, not peak
+measurements. See `dashboard-aaos-local-expiry.md`. DOCX is unchanged.
+
+## X-7.14 — Natural server JWT expiration
+
+A distinct disposable reader uses an API-issued five-minute JWT and a longer
+600-second local client budget. No clock, JWT signature, production policy or
+server token lifetime is modified. Device AUTH_REQUIRED must precede the local
+deadline. The host must confirm HTTP 401 for the same token and separately verify
+that the account remains active and retains dashboard permission.
+
+The expanded run has a bounded 480-second deadline. Sixteen coordinator tests
+cover checkpoint ordering, missing/duplicate signals and failed verification;
+Ruff/mypy passed. Android build/lint passed in 41 seconds, retaining 57 JVM tests
+and zero lint errors/15 warnings. The real AAOS scenario passed: AUTH_REQUIRED
+preceded the local deadline, the input/evidence cleared, and the host confirmed
+HTTP 401 for the original token with the account still active and authorized.
+The retained screenshot was inspected. Two integration tests passed in
+24.86 seconds. CPU samples were 37–70%, GPU 6–16%; one sample retained 10.1 GiB
+RAM free. See `dashboard-aaos-server-expiry.md`. No paid service was added.
+
+Final restore passed (87 tables/303 rows, 85.218 seconds); all sixteen coordinator
+tests passed again in 0.91 seconds, with Ruff/mypy passing. Owned emulator and
+temporary containers were confirmed absent, and final sampled CPU was 34%.
+Documentation remains in English Markdown; DOCX is unchanged. Changes are local
+and uncommitted; no PR or merge was performed. Next is inactive-user acceptance,
+followed by the remaining real network/reconnect and normal-completion gates.
+
 ## Remaining acceptance work after populated verification
 
 X-6: live updates, exports, retention and performance hardening. Full OTA and formal standards
