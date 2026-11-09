@@ -9,7 +9,7 @@ Backend tests do not establish graphical client acceptance or automotive safety 
 | Linux containers | Authenticated snapshot, forbidden role, exports and read-only queries | Docker integration suite |
 | Android/AAOS client | Header-based authentication, reconnect, stale indicator and permission loss | X-7.11–X-7.19 targeted engineering-panel cases passed, including actual normal completion; broader accessibility/device coverage and arbitrary network partitions remain gaps |
 | Browser dashboard | Actual browser login/stream, origin protection, reconnect and expired-session behavior | X-7.4 login; X-7.5 lifecycle/basic keyboard; X-7.6 targeted responsive/skip-link checks passed; screen-reader/contrast/browser matrix remain gaps |
-| Trusted reverse proxy | Transport peer integrity, shared quota, TLS and resource limits | Deployment acceptance pending |
+| Trusted reverse proxy | Transport peer integrity, shared quota, TLS and resource limits | X-7.20 forwarding/Redis, X-7.21 local TLS/API isolation and X-7.22 shared admission across two independent replicas passed; bounds inspected, not stress-tested; certificate lifecycle, combined TLS/multiprocess profile and full deployment acceptance remain pending |
 
 Every supported client must distinguish server query time from vehicle measurement time, mark
 disconnected snapshots stale, back off reconnect attempts and respect the 30-second refresh floor.

@@ -1,0 +1,36 @@
+# Two bounded single-worker replicas; test-only deterministic routing, not load testing.
+services:
+  api:
+    ports: !override
+      - "127.0.0.1:18000:8000"
+    mem_limit: 512m
+    cpus: 0.5
+    pids_limit: 64
+  api-peer:
+    extends:
+      file: compose.integration.yaml
+      service: api
+    command: ["uvicorn", "atep.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "172.30.241.10"]
+    ports: !reset []
+    environment:
+      ATEP_MODULE_RECONCILIATION_ENABLED: false
+    mem_limit: 512m
+    cpus: 0.5
+    pids_limit: 64
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      default: {}
+      proxy-boundary:
+        ipv4_address: 172.30.241.21
+  proxy:
+    ports: !override
+      - "127.0.0.1:18801:8081"
+      - "127.0.0.1:18802:8082"
+    volumes:
+      - ./deploy/acceptance/nginx-multiprocess.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/acceptance/proxy-multiprocess-headers.conf:/etc/nginx/proxy-acceptance-headers.conf:ro
+    depends_on:
+      api-peer:
+        condition: service_healthy

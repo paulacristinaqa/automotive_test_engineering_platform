@@ -1,5 +1,11 @@
 # Volume X Dashboard Requirements
 
+## X-7.22 Multiprocess shared admission
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-069 | Two independently verified API processes must share one Redis handshake budget behind the trusted proxy; switching processes or spoofing forwarding headers must not create a fresh allowance. | Both replicas served snapshots; alternating attempts 1–29 consumed one counter, attempt 30 passed on B, 31 failed on A and 32 failed on B; eight oracle tests and bounded real Docker acceptance; dashboard-multiprocess-admission.md |
+
 ## X-7.21 Local TLS and upstream isolation
 
 | ID | Requirement | Evidence |

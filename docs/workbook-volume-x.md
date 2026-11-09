@@ -782,6 +782,40 @@ bounded multi-worker/shared-admission deployment validation. The full X-7 gate
 remains open. English Markdown updated; DOCX unchanged. No commit, PR or merge
 performed; these changes and preceding increments remain local.
 
+## X-7.22 — Two-process shared handshake budget
+
+Implemented DASH-NF-069 with two independently identified single-worker API
+containers and deterministic proxy routing. The test verifies distinct Docker
+container and host process IDs, then checks Nginx's actual upstream address on
+each successful or denied handshake. No process-identification route was added
+to the application. Each API has enforced 512 MiB, 0.5 CPU and 64-PID bounds.
+Replica B's reconciliation loop is disabled; bootstrap/job distribution is not
+part of this test. Both writers are stopped before the recovery check.
+
+The live scenario first received one real snapshot from each process and verified
+that both incremented the same Redis bucket. After resetting only that disposable
+key, 29 invalid attempts alternated between replicas; valid attempt 30 succeeded
+on B, while valid 31 and 32 were denied on A and B respectively. The final counter
+was 32 with a positive bounded TTL, and forged forwarding headers did not create
+additional changed peer buckets. The sequential handshake phase stayed within
+its 40-second timeout. This is functional evidence, not saturation testing.
+
+On 2026-09-18, eight new oracle cases plus fourteen existing targeted tests passed
+(22 total, 1.07 seconds). Ruff, strict mypy on the changed Python files and
+PowerShell parsing passed. The two existing Docker integration tests passed in
+43.47 seconds under the limited API profile. The restore drill passed with
+87 tables/283 rows in 81.765 seconds at migration 0064_ai_evidence_projections.
+Owned containers/networks were absent after cleanup. CPU samples were 19–71%,
+GPU 3–7%, not peaks; final samples were 27%/3%. No emulator or paid service was used.
+
+See dashboard-multiprocess-admission.md for reproduction and exclusions. The
+16 active-stream slots remain per process; no distributed concurrency cap,
+automatic load balancing, multi-host resilience or production capacity is claimed.
+TLS remains a separate X-7.21 profile. Next is local certificate lifecycle
+acceptance (expiry and replacement); the full release matrix is still open.
+English Markdown updated; DOCX unchanged. No commit, PR or merge was performed.
+Changes remain local, together with earlier uncommitted increments.
+
 ## Remaining acceptance work after populated verification
 
 X-6: live updates, exports, retention and performance hardening. Full OTA and formal standards
