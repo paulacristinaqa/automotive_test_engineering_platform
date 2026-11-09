@@ -41,3 +41,10 @@ def test_transport_failure_cannot_pass_certificate_case() -> None:
     with patch("tools.run_dashboard_tls_acceptance.handshake", side_effect=ConnectionRefusedError):
         with pytest.raises(ConnectionRefusedError):
             rejected_certificate(ssl.create_default_context(), "localhost")
+
+
+def test_every_client_context_refuses_tls_below_1_2() -> None:
+    from tools.run_dashboard_tls_acceptance import client_context
+
+    assert client_context().minimum_version is ssl.TLSVersion.TLSv1_2
+    assert client_context().verify_mode is ssl.CERT_REQUIRED

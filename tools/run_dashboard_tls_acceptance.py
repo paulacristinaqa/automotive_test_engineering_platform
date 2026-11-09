@@ -65,10 +65,19 @@ def certificates(directory: Path) -> None:
     )
 
 
-def trusted_context(certificate: Path) -> ssl.SSLContext:
-    context = ssl.create_default_context(cafile=str(certificate))
+def client_context(certificate: Path | None = None) -> ssl.SSLContext:
+    """Verifying client context that never offers TLS below 1.2.
+
+    Without `certificate` it trusts only the system store, which the acceptance
+    uses to prove that the self-signed fixture certificate is rejected.
+    """
+    context = ssl.create_default_context(cafile=str(certificate) if certificate else None)
     context.minimum_version = ssl.TLSVersion.TLSv1_2
     return context
+
+
+def trusted_context(certificate: Path) -> ssl.SSLContext:
+    return client_context(certificate)
 
 
 def handshake(context: ssl.SSLContext, hostname: str) -> str | None:
@@ -102,7 +111,7 @@ async def acceptance(certificate: Path) -> None:
         assert await asyncio.to_thread(
             handshake, version_context, "localhost"
         ) == version.name.replace("_", ".")
-    await asyncio.to_thread(rejected_certificate, ssl.create_default_context(), "localhost")
+    await asyncio.to_thread(rejected_certificate, client_context(), "localhost")
     await asyncio.to_thread(rejected_certificate, context, "wrong-host.invalid")
     async with httpx.AsyncClient(
         base_url=f"https://localhost:{port(PROXY_TLS)}", verify=context, trust_env=False, timeout=10
