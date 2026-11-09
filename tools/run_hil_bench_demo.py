@@ -313,7 +313,12 @@ def h15_scpi_errors(bench: HilBench) -> list[Check]:
 
 
 CASES: tuple[TestCase[HilBench], ...] = (
-    TestCase("HIL-T01", "Rack identification and reset", ("BENCH-F-036",), h01_rack_identification),
+    TestCase(
+        "HIL-T01",
+        "Rack identification and reset",
+        ("BENCH-F-036", "BENCH-F-039"),
+        h01_rack_identification,
+    ),
     TestCase(
         "HIL-T02", "Quiescent current with ignition off", ("BENCH-F-043",), h02_quiescent_current
     ),

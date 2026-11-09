@@ -86,6 +86,8 @@ def report_text(value: object) -> str:
         return value.name
     if isinstance(value, (list, tuple)):
         return "(" + ", ".join(report_text(item) for item in value) + ")"
+    if isinstance(value, (set, frozenset)):
+        return "{" + ", ".join(sorted(report_text(item) for item in value)) + "}"
     return str(value)
 
 

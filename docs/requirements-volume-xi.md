@@ -142,6 +142,27 @@ to `tools/run_emc_bench_demo.py`.
 | BENCH-NF-016 | The EMC campaign must fail on an ACU without firing inhibit, with too short an input filter, or with an energy reserve that cannot bridge pulse 1. | `tests/test_bench_emc_demo.py` |
 | BENCH-NF-017 | Campaign checks support limits (`at_most`) as well as equality, so a required class "B or better" is expressed directly. | `tests/test_bench_emc.py` |
 
+## XI-6 vTESTstudio-style authoring
+
+### Functional requirements
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| BENCH-F-051 | Test modules group test cases that each run on a fresh bench through CAPL-like primitives: `wait`, `wait_for_message`, `wait_for_signal`, `on_message`, `on_timer`, `expect_signal`, `expect_diag` and `scpi`, recording steps with expected and actual values. | `tests/test_bench_testunit.py` |
+| BENCH-F-052 | Verdicts are pass, inconclusive, fail and error; the worst step decides the case and the worst case decides the module; a case without steps is inconclusive and an exception becomes an error step. | `tests/test_bench_testunit.py` |
+| BENCH-F-053 | JSON test tables describe cases as steps from a fixed action list; each parameter set becomes its own case (`ID[n]`); placeholders keep their type when they make up the whole value; invalid tables are rejected with the test and step named. | `tests/test_bench_testtable.py` |
+| BENCH-F-054 | Write a CANoe-style XML report (module, cases, steps, requirements, parameters, times), JUnit XML (fail as failure, error as error, inconclusive as skipped), an HTML report and a sorted traceability CSV for ALM import. | `tests/test_bench_reports.py` |
+| BENCH-F-055 | Build a requirement coverage matrix from this document: verified, failed, unit tests only or not covered, and list requirements that test cases cite but the document does not define. | `tests/test_bench_reports.py` |
+| BENCH-F-056 | Provide a consolidated run of an event-driven test unit, a JSON test table and the ACU, HiL and EMC campaigns that writes every report and the coverage matrix. | `tools/run_test_units_demo.py`, `tests/test_bench_test_units_demo.py` |
+
+### Non-functional requirements
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| BENCH-NF-018 | Every report must be identical for identical runs: times come from the logical clock and a fixed report date. | `tests/test_bench_reports.py`, `tests/test_bench_test_units_demo.py` |
+| BENCH-NF-019 | Every requirement in this document must be verified by a system test case or a unit test, and test cases must cite only requirements defined here. | `tests/test_bench_test_units_demo.py` |
+| BENCH-NF-020 | Test tables must be editable without Python; the shipped table is validated by the test suite. | `tests/test_bench_testtable.py` |
+
 ## Deliberate limits
 
 - The bench simulates the network and the logic of a test bench. It does not model analog
@@ -150,6 +171,8 @@ to `tools/run_emc_bench_demo.py`.
   `virtual` interface.
 - ISO-TP messages are limited to 4,095 bytes; the 32-bit first-frame length escape is not
   implemented. Functional (broadcast) addressing is not modelled.
+- The XML report follows the structure of a CANoe test report but is not a byte-compatible
+  CANoe file, and test tables run on this bench, not in vTESTstudio.
 - EMC results are behavioural: no coupling physics, no radiated or conducted emission or
   immunity tests, and pulse levels are illustrative, not ISO severity levels.
 - Instruments are models: no measurement noise, accuracy class, settling time or current limit.

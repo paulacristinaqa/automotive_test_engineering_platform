@@ -22,13 +22,14 @@ vTESTstudio and HiL benches.
   1, 2a, 3a, 3b and load dump 5b), ACU input protection with a latched firing inhibit, CAN error
   frames with retransmission and bus-off, functional status classification A-E, and a 7-case EMC
   campaign with a test plan. Conceptual only; no real EMC measurement.
-- [ ] **XI-6 vTESTstudio-style authoring** - event-driven test units (`on_message`, `on_timer`,
-  `wait_for_signal`), test tables, verdicts, HTML/XML reports and ALM traceability export.
+- [x] **XI-6 vTESTstudio-style authoring** - event-driven test units (`on_message`, `on_timer`,
+  `wait_for_signal`, `expect_diag`), JSON test tables with parameters, worst-wins verdicts,
+  CANoe-style XML, JUnit, HTML and traceability CSV reports, and a requirement coverage matrix.
 - [ ] **XI-7 System test campaign** - test specification, plan, execution on the virtual bench,
   report and traceability matrix for the virtual airbag control unit.
 
 ## Next recommended increment
 
-XI-6 vTESTstudio-style authoring. The shared campaign model (`atep.bench.campaign`) already holds
-cases, checks with limits and reports; XI-6 adds event-driven test units, test tables, verdicts
-and an ALM traceability export.
+XI-7 System test campaign. Everything is in place to write the ACU system test as an engineer
+would deliver it: a test specification and plan, execution of all test definitions on the virtual
+bench, one consolidated report and a traceability matrix that closes Volume XI.

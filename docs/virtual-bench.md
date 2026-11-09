@@ -333,6 +333,93 @@ airbag ECU must rather disable its firing path than risk an unintended deploymen
 signals that state with the lamp and a DTC. The campaign writes `emc-test-plan.md`, the reports,
 `acu.dbc` and `emc-pulse-3a.asc/.blf`, whose error frames show in CANoe.
 
+## XI-6 vTESTstudio-style authoring
+
+XI-6 lets a test engineer write bench tests the way they would in vTESTstudio and CANoe, and get
+the reports and traceability an ALM tool expects.
+
+### Event-driven test units (`atep.bench.testunit`)
+
+```python
+unit = TestModule("ACU event-driven test unit")
+
+
+@unit.test_case(
+    "TU-ACU-003",
+    "Warning lamp reaction to an open squib loop",
+    requirements=("BENCH-F-025", "BENCH-F-026"),
+)
+def lamp_reaction(t: TestContext) -> None:
+    t.scpi("PSU", "OUTP ON")
+    t.scpi("REL", "ROUT:CLOS (@1)")
+    t.expect_signal("acu_status", "SystemState", low=2, high=2, timeout_ms=6_500)
+    t.scpi("FIB", "ROUT:OPEN (@2)")
+    t.expect_signal("acu_status", "WarningLamp", low=1, high=1, timeout_ms=800)
+```
+
+| CAPL / vTESTstudio | Bench test unit |
+|---|---|
+| `TestStep`, `TestStepPass`, `TestStepFail` | `step`, `check` (equality or `at_most` limit) |
+| `TestWaitForTimeout` | `wait` |
+| `TestWaitForMessage` | `wait_for_message` (returns decoded signals or `None`) |
+| `TestWaitForSignalInRange` | `wait_for_signal`, `expect_signal` |
+| `on message` / `on timer` | `on_message`, `on_timer` (handlers must not wait) |
+| Diagnostic request with expected response | `expect_diag(request, response_prefix=… or nrc=…)` |
+
+Each test case runs on a fresh `HilBench`. Verdicts follow the worst-wins rule
+(error > fail > inconclusive > pass); a case without steps is inconclusive, and an exception
+becomes an error step instead of stopping the module.
+
+### Test tables (`atep.bench.testtable`)
+
+Test tables are JSON files a test engineer can edit without Python. Each parameter set becomes
+its own test case: `TT-ACU-001` below expands into `TT-ACU-001[1]` to `TT-ACU-001[5]`.
+
+```json
+{
+  "id": "TT-ACU-001",
+  "title": "Driver airbag loop at {ohm} ohm reports failure type {failure}",
+  "requirements": ["BENCH-F-025", "BENCH-F-040"],
+  "parameters": [{"ohm": 1.4, "failure": "1A"}, {"ohm": 1.5, "failure": "none"}],
+  "steps": [
+    {"do": "switch_on"},
+    {"do": "scpi", "address": "FIB", "command": "SOUR:RES {ohm},(@1)"},
+    {"do": "wait", "ms": 600},
+    {"do": "check_dtc", "dtc": "B1001", "failure": "{failure}"}
+  ]
+}
+```
+
+Actions: `switch_on`, `ignition`, `scpi` (optional `expect`), `wait`, `expect_diag`, `check_dtc`,
+`expect_signal`, `check_state`, `check_lamp`, `occupancy`, `crash`, `check_fired`. The shipped
+table `tools/test_tables/acu_system_tests.json` holds 11 cases: the loop resistance boundaries,
+the deployment matrix by occupancy, a diagnostic session and an ignition cycle.
+
+### Reports and traceability (`atep.bench.reports`)
+
+| File | Content |
+|---|---|
+| `test-report.xml` | CANoe-style report: test module, test cases with requirements, parameters and times, test steps with expected and actual |
+| `junit.xml` | For CI: fail as `<failure>`, error as `<error>`, inconclusive as `<skipped>` |
+| `report.html` | One page with verdict colours and the steps of every case that did not pass |
+| `traceability.csv` | Requirement ID, test case ID, title, verdict, module; for ALM import |
+| `coverage.md` | Each requirement of this volume: verified, failed, unit tests only or not covered |
+
+Coverage reads the requirement tables of `requirements-volume-xi.md`. A requirement cited by a
+passing system-level case is *verified*; one whose evidence column points only to `tests/` is
+*unit tests only*. The first run found two real traceability gaps: BENCH-F-039 and BENCH-NF-015
+named test cases as evidence that did not cite them. Both are fixed, and a test now fails if a
+case cites an undefined requirement or a requirement is left uncovered.
+
+### Consolidated run
+
+```bash
+python tools/run_test_units_demo.py --output out/test-units
+```
+
+Runs the event-driven test unit (5 cases), the JSON test table (11 cases) and the ACU, HiL and
+EMC campaigns (37 cases), and writes every report above.
+
 ## Limits
 
 - The bench simulates the network and test logic. There is no electrical layer, no bit stuffing

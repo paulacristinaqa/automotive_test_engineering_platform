@@ -1,0 +1,83 @@
+{
+  "module": "ACU system tests (test table)",
+  "tests": [
+    {
+      "id": "TT-ACU-001",
+      "title": "Driver airbag loop at {ohm} ohm reports failure type {failure}",
+      "requirements": ["BENCH-F-025", "BENCH-F-040"],
+      "parameters": [
+        {"ohm": 1.4, "failure": "1A"},
+        {"ohm": 1.5, "failure": "none"},
+        {"ohm": 5.0, "failure": "none"},
+        {"ohm": 5.1, "failure": "1B"},
+        {"ohm": 25.0, "failure": "13"}
+      ],
+      "steps": [
+        {"do": "switch_on"},
+        {"do": "scpi", "address": "FIB", "command": "SOUR:RES {ohm},(@1)"},
+        {"do": "wait", "ms": 600},
+        {"do": "check_dtc", "dtc": "B1001", "failure": "{failure}"}
+      ]
+    },
+    {
+      "id": "TT-ACU-002",
+      "title": "Severe crash, passenger occupied={occupied}, airbag enabled={enabled}, driver buckled={buckled}",
+      "requirements": ["BENCH-F-029"],
+      "parameters": [
+        {"occupied": true, "enabled": true, "buckled": true,
+         "loops": ["driver_airbag", "driver_pretensioner", "passenger_airbag", "passenger_pretensioner"]},
+        {"occupied": true, "enabled": false, "buckled": true,
+         "loops": ["driver_airbag", "driver_pretensioner", "passenger_pretensioner"]},
+        {"occupied": false, "enabled": true, "buckled": true,
+         "loops": ["driver_airbag", "driver_pretensioner"]},
+        {"occupied": false, "enabled": true, "buckled": false,
+         "loops": ["driver_airbag"]}
+      ],
+      "steps": [
+        {"do": "switch_on"},
+        {"do": "occupancy", "passenger_occupied": "{occupied}",
+         "passenger_airbag_enabled": "{enabled}", "driver_buckled": "{buckled}"},
+        {"do": "crash", "peak_g": 30, "duration_ms": 60},
+        {"do": "wait", "ms": 300},
+        {"do": "check_fired", "loops": "{loops}"},
+        {"do": "expect_signal", "message": "acu_status", "signal": "CrashStored",
+         "low": 1, "high": 1, "timeout_ms": 150}
+      ]
+    },
+    {
+      "id": "TT-ACU-003",
+      "title": "Diagnostic session and security access",
+      "requirements": ["BENCH-F-018", "BENCH-F-034"],
+      "steps": [
+        {"do": "switch_on"},
+        {"do": "expect_diag", "request": "22F190", "response_prefix": "62F190",
+         "description": "Read VIN"},
+        {"do": "expect_diag", "request": "2701", "nrc": "0x7F",
+         "description": "Security access refused in the default session"},
+        {"do": "expect_diag", "request": "1003", "response_prefix": "5003",
+         "description": "Enter extended session"},
+        {"do": "expect_diag", "request": "224030", "response_prefix": "6240300200",
+         "description": "System state NORMAL, lamp off"},
+        {"do": "check_state", "state": "normal"},
+        {"do": "check_lamp", "on": false}
+      ]
+    },
+    {
+      "id": "TT-ACU-004",
+      "title": "Ignition cycle repeats the self-test",
+      "requirements": ["BENCH-F-024"],
+      "steps": [
+        {"do": "switch_on"},
+        {"do": "ignition", "on": false},
+        {"do": "wait", "ms": 500},
+        {"do": "check_state", "state": "off"},
+        {"do": "ignition", "on": true},
+        {"do": "expect_signal", "message": "acu_status", "signal": "WarningLamp",
+         "low": 1, "high": 1, "timeout_ms": 200},
+        {"do": "expect_signal", "message": "acu_status", "signal": "SystemState",
+         "low": 2, "high": 2, "timeout_ms": 6500},
+        {"do": "scpi", "address": "REL", "command": "ROUT:CLOS? (@1)", "expect": "1"}
+      ]
+    }
+  ]
+}

@@ -1,13 +1,14 @@
 # ATEP Volume XI Virtual Test Bench Engineering Workbook
 
-Version 0.5.0 completes XI-1 to XI-5. XI-1 delivers Vector-compatible DBC, ASC and BLF
+Version 0.6.0 completes XI-1 to XI-6. XI-1 delivers Vector-compatible DBC, ASC and BLF
 artifacts and a python-can bench bus. XI-2 adds ISO-TP, a UDS tester with P2/P2* timing, a
 virtual ECU, cyclic message supervision and E2E protection, all running on logical time. XI-3
 adds a virtual airbag control unit as the device under test, with a 15-case system-test
 campaign. XI-4 adds SCPI bench instruments (supply with voltage profiles, KL15 relay, fault box,
 multimeter, climate chamber) and a 15-case HiL campaign. XI-5 adds a transient generator, ACU
 input protection, CAN error frames with bus-off, functional status classification and an
-EMC-concept campaign.
+EMC-concept campaign. XI-6 adds vTESTstudio-style test units and JSON test tables, CANoe-style,
+JUnit, HTML and traceability reports, and a requirement coverage matrix.
 
 ## Scope and architecture
 
@@ -105,6 +106,23 @@ Architecture details are in [virtual-bench.md](virtual-bench.md).
   confirmed, because the timeout lasts less than the debounce; and SCPI parameter order matters
   (`PULS:COUN 1` before a long `PULS:WIDT`), as on real generators.
 
+### XI-6
+
+- Keep the CAPL vocabulary (`on message`, `on timer`, wait-for-signal, test steps) so a test
+  written here maps one-to-one to a vTESTstudio test unit.
+- Use the worst-wins verdict rule and turn exceptions into error steps: one broken test must
+  not hide the results of the others.
+- Describe parameterised tests as JSON tables, so boundary values and occupancy matrices are
+  data, not code, and an engineer can review or extend them without Python.
+- Convert campaign results into the same test-module model, so one report and one coverage
+  matrix cover every kind of test definition.
+- Read coverage from the requirement document itself, and separate system-level verification
+  from unit-test-only evidence.
+- Findings while building XI-6: the coverage matrix exposed two traceability gaps
+  (BENCH-F-039, BENCH-NF-015) between this document and the test cases; a test-table step
+  written as a bare string passed validation and would only fail at run time. All are fixed
+  and covered by tests.
+
 ## Tests and objectives
 
 | Objective | Test |
@@ -131,6 +149,10 @@ Architecture details are in [virtual-bench.md](virtual-bench.md).
 | The 15-case HiL campaign passes, is reproducible and fails on four kinds of defective ACU | `tests/test_bench_hil_demo.py` |
 | FSC classification, pulses, input protection, firing inhibit, error frames, bus-off, TRG SCPI | `tests/test_bench_emc.py` |
 | The 7-case EMC campaign passes, is reproducible and fails on three kinds of defective ACU | `tests/test_bench_emc_demo.py` |
+| Verdict rules, checks, waits, handlers, diagnostics, fresh benches, campaign conversion | `tests/test_bench_testunit.py` |
+| Placeholders, parameter expansion, validation messages, shipped table | `tests/test_bench_testtable.py` |
+| XML, JUnit, HTML, CSV and coverage outputs; determinism | `tests/test_bench_reports.py` |
+| 53 cases from five modules pass; no requirement uncovered or undefined | `tests/test_bench_test_units_demo.py` |
 
 ## Risks and technical debt
 
@@ -147,6 +169,8 @@ Architecture details are in [virtual-bench.md](virtual-bench.md).
 - The virtual ECU and the ACU keep their own in-memory state and are not connected to the ATEP
   diagnostics domain in PostgreSQL. The bench is meant to run standalone; a bridge can come with
   XI-7 if campaign evidence must be stored by the platform.
+- The XML report mirrors the structure of a CANoe report but is not a byte-compatible CANoe
+  file; test tables run on this bench, not in vTESTstudio.
 - EMC results are behavioural: no coupling physics and no emission or immunity measurement.
 - Instruments have no noise, accuracy class, settling time or current limit; profiles are
   shortened ISO 16750-2 shapes, not certified levels.
@@ -181,7 +205,13 @@ XI-5 is complete. `tools/run_emc_bench_demo.py` meets the required functional st
 all 7 tests without any deployment, writes an EMC test plan with achieved classes, and a trace
 whose error frames show in CANoe.
 
+## XI-6 outcome
+
+XI-6 is complete. `tools/run_test_units_demo.py` runs 53 test cases from an event-driven test
+unit, a JSON test table and the three campaigns, all passing, and writes CANoe-style XML,
+JUnit, HTML, traceability CSV and a coverage matrix with no requirement left uncovered.
+
 ## Next increment
 
-XI-6 vTESTstudio-style authoring: event-driven test units, test tables, verdicts and an ALM
-traceability export.
+XI-7 System test campaign: test specification and plan, consolidated execution, report and
+traceability matrix that close Volume XI.

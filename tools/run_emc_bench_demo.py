@@ -165,42 +165,47 @@ CASES: tuple[TestCase[HilBench], ...] = (
     TestCase(
         "EMC-T01",
         "ISO 7637-2 pulse 1, -100 V, 2 ms, 10x",
-        ("BENCH-F-045", "BENCH-F-047"),
+        ("BENCH-F-045", "BENCH-F-047", "BENCH-NF-015"),
         _pulse_case("1", FunctionalStatus.B, _pulse_1_extra),
     ),
     TestCase(
         "EMC-T02",
         "ISO 7637-2 pulse 2a, +50 V, 50 us, 10x",
-        ("BENCH-F-045", "BENCH-F-046"),
+        ("BENCH-F-045", "BENCH-F-046", "BENCH-NF-015"),
         _pulse_case("2a", FunctionalStatus.A, _pulse_2a_extra),
     ),
     TestCase(
         "EMC-T03",
         "ISO 7637-2 pulse 3a coupled to CAN, 10 ms bursts",
-        ("BENCH-F-045", "BENCH-F-048"),
+        ("BENCH-F-045", "BENCH-F-048", "BENCH-NF-015"),
         _pulse_case("3a", FunctionalStatus.A, _burst_extra),
     ),
     TestCase(
         "EMC-T04",
         "ISO 7637-2 pulse 3b coupled to CAN, 10 ms bursts",
-        ("BENCH-F-045", "BENCH-F-048"),
+        ("BENCH-F-045", "BENCH-F-048", "BENCH-NF-015"),
         _pulse_case("3b", FunctionalStatus.A, _burst_extra),
     ),
     TestCase(
         "EMC-T05",
         "Load dump 5b, 35 V suppressed, 400 ms",
-        ("BENCH-F-046", "BENCH-F-047"),
+        ("BENCH-F-046", "BENCH-F-047", "BENCH-NF-015"),
         emc_t05_load_dump,
     ),
     TestCase(
         "EMC-T06",
         "CAN disturbance burst of 800 ms",
-        ("BENCH-F-048", "BENCH-F-049"),
+        ("BENCH-F-048", "BENCH-F-049", "BENCH-NF-015"),
         _pulse_case(
             "3a", FunctionalStatus.B, _long_burst_extra, commands=("PULS:COUN 1", "PULS:WIDT 0.8")
         ),
     ),
-    TestCase("EMC-T07", "Supply interruption of 300 ms", ("BENCH-F-047",), emc_t07_interruption),
+    TestCase(
+        "EMC-T07",
+        "Supply interruption of 300 ms",
+        ("BENCH-F-047", "BENCH-NF-015"),
+        emc_t07_interruption,
+    ),
 )
 
 PLAN = {
