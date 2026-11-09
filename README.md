@@ -102,6 +102,26 @@ An intended end-to-end scenario is:
   fail-closed environment enablement, and retained manifest evidence;
 - protected main-only GHCR publishing with commit-addressed images, signed SLSA provenance and
   CycloneDX SBOM attestations, plus fail-closed provenance verification before promotion;
+- Vector-compatible DBC, ASC and BLF exports of CAN evidence, and a python-can bench bus
+  (virtual, SocketCAN, Vector, PEAK, slcan) with a demo cross-checked by cantools;
+- virtual test bench protocols on logical time: ISO-TP with flow control, a UDS tester with
+  P2/P2* timing, a virtual ECU diagnostic server, cyclic timeout supervision and E2E protection
+  (alive counter and CRC-8 SAE J1850) with fault injection;
+- a virtual airbag control unit as bench device under test (squib loop monitoring, safing-
+  confirmed deployment, self-test, energy reserve, debounced DTCs, E2E crash output, UDS) with a
+  15-case system-test campaign traced to requirements;
+- SCPI bench instruments around the ACU (programmable supply with ISO 16750-2-style profiles,
+  KL15 relay, squib fault-injection box, multimeter, climate chamber) and a 15-case HiL campaign
+  with a timestamped command log;
+- transient and EMC concepts: ISO 7637-2-style pulses from a SCPI transient generator, ACU input
+  protection with a latched firing inhibit, CAN error frames with bus-off, and functional status
+  classification (A-E) checked against an EMC test plan;
+- vTESTstudio-style test authoring: event-driven test units with CAPL-like primitives, JSON test
+  tables with parameters, worst-wins verdicts, CANoe-style XML, JUnit, HTML and traceability CSV
+  reports, and a requirement coverage matrix read from the requirements document;
+- an ACU system test with a test plan and specification mapped to Automotive SPICE SYS.5, six
+  exit criteria, a computed release recommendation, defect drafts, an evidence manifest and
+  seeded-defect variants that block the release;
 - Ruff, strict mypy, pytest, and GitHub Actions quality gates.
 
 ## Architecture
@@ -367,6 +387,13 @@ companion project also passes 27 unit tests, Android lint, and debug APK assembl
 - [Volume X — Dashboard roadmap](docs/roadmap-volume-x.md)
 - [Volume X — Dashboard editable workbook](docs/workbook-volume-x.md)
 - [Volume X — Dashboard formatted workbook](docs/ATEP_Volume_X_Dashboard_Engineering_Workbook.docx)
+- [Volume XI — Virtual Test Bench architecture](docs/virtual-bench.md)
+- [Volume XI — Virtual Test Bench requirements](docs/requirements-volume-xi.md)
+- [Volume XI — Virtual Test Bench roadmap](docs/roadmap-volume-xi.md)
+- [Volume XI — Virtual Test Bench editable workbook](docs/workbook-volume-xi.md)
+- [Volume XI — Virtual Test Bench formatted workbook](docs/ATEP_Volume_XI_Virtual_Test_Bench_Engineering_Workbook.docx)
+- [Volume XI — ACU system test plan](docs/acu-system-test-plan.md)
+- [Volume XI — ACU system test specification](docs/acu-system-test-specification.md)
 
 The workbook is a living English-language engineering record containing requirements,
 architecture decisions, implementation evidence, test objectives, risks, technical debt,
@@ -386,8 +413,9 @@ operational guidance, and review worksheets.
 | VIII | Test Framework | Complete — VIII-1 through VIII-7, including bounded performance and stress evidence |
 | IX | AI Test Engineer | Complete IX-1 through IX-7 with cross-platform cited AI evidence |
 | X | Dashboard | In progress - X-1 through X-6 backend scope delivered (X-5 reduced scope); X-7.11 to X-7.19 actual AAOS acceptance and X-7.20 to X-7.23 local proxy, TLS, shared-admission and certificate-lifecycle acceptance passed; combined TLS/multiprocess profile and full deployment gate pending |
-| XI | DevOps | Planned |
-| XII | Enterprise Features | Planned |
+| XI | Virtual Test Bench | Complete - XI-1 through XI-7: Vector artifacts, ECU communication, virtual airbag ECU, HiL instruments, EMC concepts, test authoring and an ACU system test with release recommendation |
+| XII | DevOps | Planned |
+| XIII | Enterprise Features | Planned |
 
 The runnable CarSystemUI showcase connects simulated or AAOS property changes to this telemetry
 contract through a persistent, idempotent Vehicle Gateway. Its read-only CarPropertyManager/VHAL

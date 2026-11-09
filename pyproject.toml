@@ -22,6 +22,7 @@ dependencies = [
   "pydantic-settings>=2.7,<3",
   "prometheus-client>=0.22,<1",
   "PyJWT>=2.10,<3",
+  "python-can>=4.5,<5",
   "python-multipart>=0.0.20,<1",
   "redis>=5.2,<6",
   "sqlalchemy[asyncio]>=2.0.36,<3",
@@ -31,6 +32,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+  "cantools>=40,<41",
   "httpx>=0.28,<1",
   "mypy>=1.14,<2",
   "pip-audit==2.10.0",
