@@ -233,7 +233,7 @@ outside this orchestration boundary.
    domain identifiers never enter labels. Telemetry failure must not alter authoritative state.
 29. **Supply-chain inputs are immutable and independently evidenced.** Linux x86-64/Python 3.14 is
    the canonical dependency-lock platform because it matches the digest-pinned official Python
-   3.14.6/Alpine 3.24 runtime container; CI still tests Python 3.12 as the supported minimum. Runtime and
+   3.14.10/Alpine 3.24 runtime container; CI still tests Python 3.12 as the supported minimum. Runtime and
    development graphs, including build requirements, are committed with SHA-256 hashes. The runtime
    base image is digest-pinned and third-party workflow actions use full commit SHAs. Separate CI
    jobs scan repository history, Python dependencies, Python source, and the built image while

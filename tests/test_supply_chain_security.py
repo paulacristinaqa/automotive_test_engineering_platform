@@ -70,7 +70,7 @@ def test_image_and_update_policy_are_immutable_and_maintained() -> None:
     ecosystems = {entry["package-ecosystem"] for entry in dependabot["updates"]}
 
     assert re.search(
-        r"^FROM python:3\.14\.6-alpine3\.24@sha256:[0-9a-f]{64} AS runtime$",
+        r"^FROM python:3\.14\.10-alpine3\.24@sha256:[0-9a-f]{64} AS runtime$",
         dockerfile,
         flags=re.MULTILINE,
     )
