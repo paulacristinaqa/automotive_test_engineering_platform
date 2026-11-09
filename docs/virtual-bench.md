@@ -75,7 +75,73 @@ interface, for example `--interface vector --channel 0`, the same traffic goes t
 To inspect the result in CANoe or CANalyzer, add `network.dbc` as the database and open
 `trace.asc` or `trace.blf` in offline mode.
 
-### Limits
+## XI-2 ECU communication
+
+XI-2 adds the protocols a system tester exercises on a bench: ISO-TP transport, UDS diagnostics
+with response timing, cyclic message supervision and E2E protection. Every protocol is a
+*sans-IO* node: it receives frames and the current logical time, and returns frames to send. It
+never reads a clock or touches a bus, so the same node runs on two kinds of link.
+
+```mermaid
+flowchart LR
+    subgraph Nodes["Bench nodes (no I/O)"]
+        Tester["UdsClient + ISO-TP"]
+        Ecu["VirtualEcu + ISO-TP"]
+        Sender["CyclicSender + E2E"]
+        Receiver["E2EReceiver"]
+        Monitor["TimeoutMonitor"]
+    end
+    Nodes --> Sim["SimulatedLink: logical time, frame times from bitrate"]
+    Nodes --> Real["BusNodeRunner: python-can bus, wall clock"]
+    Sim --> Trace["ASC / BLF trace"]
+```
+
+### ISO-TP (`atep.bench.isotp`)
+
+| Frame | First byte | Use |
+|---|---|---|
+| Single frame | `0L` (or `00 LL` on CAN FD) | Payload up to 7 bytes (62 on CAN FD with 64-byte frames) |
+| First frame | `1L LL` | Starts a longer message, up to 4,095 bytes |
+| Consecutive frame | `2N` | Next chunk; N counts 1..15 then wraps to 0 |
+| Flow control | `3S BS ST` | Receiver says continue (0), wait (1) or overflow (2), with block size and STmin |
+
+The sender waits up to N_Bs for each flow control and the receiver waits up to N_Cr for each
+consecutive frame. Errors are reported as events, not exceptions.
+
+### UDS tester and virtual ECU (`atep.bench.uds`, `atep.bench.virtual_ecu`)
+
+- P2 (50 ms) runs from the end of the request transmission to the start of the response.
+  A `7F <SID> 78` response-pending answer switches the wait to P2* (5 s).
+- Bit 7 of the sub-function suppresses the positive response, only for services that have a
+  sub-function. `22 F1 90` is not suppressed even though `0xF1` has bit 7 set.
+- The virtual ECU supports session control, ECU reset, clear and read DTC (by status mask),
+  read and write DID, security access and tester present. Non-default sessions fall back after
+  S3 (5 s) without traffic. Three wrong keys lock security access for a delay. DIDs listed in
+  `slow_dids` answer with response pending.
+
+### Supervision and E2E (`atep.bench.supervision`, `atep.bench.e2e`, `atep.bench.cyclic`)
+
+- `TimeoutMonitor` reports `waiting`, `ok` and `timeout` per message, including a message that
+  never arrives, and debounces recovery.
+- E2E stamps a 4-bit alive counter (0-14) and a CRC-8 SAE J1850 over a 16-bit data ID and the
+  payload. The checker returns `initial`, `ok`, `ok_some_lost`, `repeated`, `wrong_sequence`,
+  `wrong_crc` or `invalid_counter`.
+- `CyclicSender` injects drop, corrupted-CRC, repeated-counter and skipped-counter faults on
+  chosen cycles.
+
+### Demo
+
+```bash
+python tools/run_ecu_communication_demo.py --output out/ecu-communication
+```
+
+The demo runs a 19-step diagnostic session (multi-frame transfers with flow control, security
+access with a wrong key, response pending, suppressed response, DTCs, S3 timeout, reset) and an
+E2E scenario with injected faults and timeout supervision. Each step has an expected result. It
+writes `diagnostics.asc/.blf`, `e2e.asc/.blf` and `report.json`. Add `--bus virtual` to run the
+diagnostic session on a python-can bus with the wall clock instead of the simulated link.
+
+## Limits
 
 - The bench simulates the network and test logic. There is no electrical layer, no bit stuffing
   on the wire and no error frames from a physical bus.

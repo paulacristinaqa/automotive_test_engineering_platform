@@ -7,8 +7,9 @@ vTESTstudio and HiL benches.
 - [x] **XI-1 Real CAN stack and Vector artifacts** - DBC export, ASC and BLF trace export,
   python-can bench bus with allowlisted interfaces, deterministic and real-time replay, and a
   virtual bench demo cross-checked with an independent DBC implementation.
-- [ ] **XI-2 ECU communication** - ISO-TP (ISO 15765-2), UDS over CAN frames with P2/P2* timing,
-  cyclic messages with timeout supervision, and E2E protection with alive counter and CRC.
+- [x] **XI-2 ECU communication** - ISO-TP (ISO 15765-2) with flow control, a UDS tester with
+  P2/P2* timing, a virtual ECU diagnostic server, cyclic message timeout supervision, E2E
+  protection with alive counter and CRC-8, fault injection, and a deterministic simulated link.
 - [ ] **XI-3 Virtual airbag control unit** - device under test with squib loop resistance
   monitoring, crash sensors, warning lamp, start-up self-test, DTCs and crash output message.
 - [ ] **XI-4 Bench instruments** - programmable power supply (KL30/KL15, undervoltage, cranking,
@@ -23,5 +24,6 @@ vTESTstudio and HiL benches.
 
 ## Next recommended increment
 
-XI-2 ECU communication. It reuses the XI-1 bench bus and makes diagnostic tests run over real
-CAN frames instead of direct API calls.
+XI-3 Virtual airbag control unit. It becomes the device under test for the rest of the volume and
+reuses the XI-2 virtual ECU for diagnostics, E2E protection for its crash output and timeout
+supervision for the messages it depends on.

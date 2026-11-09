@@ -104,6 +104,9 @@ An intended end-to-end scenario is:
   CycloneDX SBOM attestations, plus fail-closed provenance verification before promotion;
 - Vector-compatible DBC, ASC and BLF exports of CAN evidence, and a python-can bench bus
   (virtual, SocketCAN, Vector, PEAK, slcan) with a demo cross-checked by cantools;
+- virtual test bench protocols on logical time: ISO-TP with flow control, a UDS tester with
+  P2/P2* timing, a virtual ECU diagnostic server, cyclic timeout supervision and E2E protection
+  (alive counter and CRC-8 SAE J1850) with fault injection;
 - Ruff, strict mypy, pytest, and GitHub Actions quality gates.
 
 ## Architecture
@@ -373,6 +376,7 @@ companion project also passes 27 unit tests, Android lint, and debug APK assembl
 - [Volume XI — Virtual Test Bench requirements](docs/requirements-volume-xi.md)
 - [Volume XI — Virtual Test Bench roadmap](docs/roadmap-volume-xi.md)
 - [Volume XI — Virtual Test Bench editable workbook](docs/workbook-volume-xi.md)
+- [Volume XI — Virtual Test Bench formatted workbook](docs/ATEP_Volume_XI_Virtual_Test_Bench_Engineering_Workbook.docx)
 
 The workbook is a living English-language engineering record containing requirements,
 architecture decisions, implementation evidence, test objectives, risks, technical debt,
@@ -392,7 +396,7 @@ operational guidance, and review worksheets.
 | VIII | Test Framework | Complete — VIII-1 through VIII-7, including bounded performance and stress evidence |
 | IX | AI Test Engineer | Complete IX-1 through IX-7 with cross-platform cited AI evidence |
 | X | Dashboard | In progress - X-1 through X-6 backend scope delivered (X-5 reduced scope); X-7.11 to X-7.19 actual AAOS acceptance and X-7.20 to X-7.23 local proxy, TLS, shared-admission and certificate-lifecycle acceptance passed; combined TLS/multiprocess profile and full deployment gate pending |
-| XI | Virtual Test Bench | In progress - XI-1 Vector artifacts and python-can bench bus implemented |
+| XI | Virtual Test Bench | In progress - XI-1 Vector artifacts and bench bus; XI-2 ISO-TP, UDS timing, virtual ECU, supervision and E2E |
 | XII | DevOps | Planned |
 | XIII | Enterprise Features | Planned |
 

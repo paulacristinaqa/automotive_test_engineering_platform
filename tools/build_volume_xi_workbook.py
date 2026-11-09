@@ -1,0 +1,46 @@
+from pathlib import Path
+
+import build_volume_i_workbook as workbook
+
+SOURCE = workbook.ROOT / "docs" / "workbook-volume-xi.md"
+OUTPUT = workbook.ROOT / "docs" / "ATEP_Volume_XI_Virtual_Test_Bench_Engineering_Workbook.docx"
+VOLUME_NUMBER = "XI"
+VOLUME_NAME = "Virtual Test Bench"
+DOCUMENT_VERSION = "0.2.0"
+DOCUMENT_STATUS = "Implemented increments: XI-1 to XI-2"
+BASELINE_DATE = "9 November 2026"
+
+
+def build() -> Path:
+    original = (
+        workbook.SOURCE,
+        workbook.OUTPUT,
+        workbook.VOLUME_NUMBER,
+        workbook.VOLUME_NAME,
+        workbook.DOCUMENT_VERSION,
+        workbook.DOCUMENT_STATUS,
+        workbook.BASELINE_DATE,
+    )
+    try:
+        workbook.SOURCE = SOURCE
+        workbook.OUTPUT = OUTPUT
+        workbook.VOLUME_NUMBER = VOLUME_NUMBER
+        workbook.VOLUME_NAME = VOLUME_NAME
+        workbook.DOCUMENT_VERSION = DOCUMENT_VERSION
+        workbook.DOCUMENT_STATUS = DOCUMENT_STATUS
+        workbook.BASELINE_DATE = BASELINE_DATE
+        return workbook.build()
+    finally:
+        (
+            workbook.SOURCE,
+            workbook.OUTPUT,
+            workbook.VOLUME_NUMBER,
+            workbook.VOLUME_NAME,
+            workbook.DOCUMENT_VERSION,
+            workbook.DOCUMENT_STATUS,
+            workbook.BASELINE_DATE,
+        ) = original
+
+
+if __name__ == "__main__":
+    print(build())
