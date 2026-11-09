@@ -649,6 +649,24 @@ tests passed again in 3.86 seconds with Ruff/mypy and diff checks passing.
 Owned containers/emulator were confirmed removed; final CPU sample was 34%,
 GPU 8%. Changes remain local and uncommitted; no PR/merge was performed.
 
+## X-7.18 — Actual AAOS retry exhaustion
+
+Added an opt-in real-time exhaustion scenario, bounded accept timestamp history
+and host checks for each 30/60/120/120/120-second delay. Actual API 35 reached
+STOPPED after exactly five failed retries, cleared credentials/evidence and
+made no new connection during 122 seconds after route restoration. The local
+900-second budget isolates exhaustion; failed retries never reach the server,
+so the normal five-minute JWT expiration cannot return an auth failure.
+
+All 53 host tests, 59 Android tests, Ruff and mypy passed. Android build took
+38 seconds with zero lint errors/15 existing warnings; two integration tests
+passed in 19.51 seconds. Restore passed (87 tables/292 rows, 74.578 seconds).
+The screenshot was inspected after resumption. Interactive monitoring had
+been interrupted by account limits; the completed process returned success
+and recorded automatic cleanup. Sampled CPU 36–79%, GPU 9–17%, not measured
+peaks. English Markdown updated, DOCX unchanged; no commit/PR/merge performed.
+Next is normal ten-snapshot completion; see dashboard-aaos-retry-exhaustion.md.
+
 ## Remaining acceptance work after populated verification
 
 X-6: live updates, exports, retention and performance hardening. Full OTA and formal standards

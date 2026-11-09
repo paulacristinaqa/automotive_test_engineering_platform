@@ -1,5 +1,11 @@
 # Volume X Dashboard Requirements
 
+## X-7.18 AAOS retry exhaustion
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-065 | Exhaust five transport retries at production backoff intervals, clear evidence on STOPPED, and avoid automatic restart beyond maximum backoff. | X-7.18 actual AAOS PASS, six TCP accepts, five timing checks, 122-second terminal observation and inspected screenshot |
+
 ## X-7.17 AAOS expiry during reconnect backoff
 
 | ID | Requirement | Evidence |
