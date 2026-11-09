@@ -443,6 +443,54 @@ PostgreSQL backup/restore passed, and temporary integration containers were remo
 
 No paid services, new dependencies or GPU workload. Markdown remains current; DOCX remains X-1/X-2.
 
+## X-7.11 — AAOS acceptance preparation (in progress)
+
+The companion Android project now contains a platform instrumentation smoke runner
+and stable Compose test tags. The optional `-DashboardAaosAcceptance` integration
+switch connects that runner to the disposable localhost backend; it does not change
+the default integration workflow or require a paid service.
+
+Test objectives: establish a native live snapshot, verify that the token field is
+cleared, and verify background cleanup with explicit reconnection required. These
+objectives are not yet validated on the device. Permission loss, server-side expiry,
+network partitions and broader accessibility acceptance remain separate gaps.
+
+Local preparation evidence (2026-09-16): Android debug and instrumentation APKs
+built successfully; 57 JVM tests passed with zero failures/errors; the lint task,
+Python harness Ruff/mypy checks and PowerShell syntax check passed. The actual AAOS
+application rendered on the emulator, but this is not dashboard acceptance.
+AAOS uses driver user 10 on this AVD; the harness selects the active Android user
+rather than assuming that the system-user accessibility context can inspect it.
+
+The combined emulator/backend attempt was stopped when host CPU remained at 100%,
+including after lowering emulator priority and limiting its CPU affinity. No live
+dashboard smoke result was obtained. Subsequent checks confirmed no emulator,
+matching test-runner process or `atep-integration` containers remained running.
+Resume device execution only in a lower-load window. Do not mark X-7.11 accepted
+or merge it as verified on the basis of compilation alone. Changes remain uncommitted.
+Markdown is the current record; the DOCX workbook has not been regenerated.
+
+Sequential follow-up on 2026-09-16: the basic real-device smoke passed after
+correcting first-launch versus resumed-activity synchronization. LIVE snapshot,
+token-field clearing and background/return cleanup were verified on AAOS API 35.
+Both backend integration tests and the PostgreSQL restore drill passed, and the
+temporary stack/emulator were removed. CPU samples during the sequential workload
+were 33–82%, not a sustained 100%; these are samples, not measured peaks.
+See `dashboard-aaos-acceptance.md` for reproduction and remaining acceptance gaps.
+The subsequent initial no-role denial scenario also passed on device: a valid
+token from a newly created disposable account without roles produced FORBIDDEN,
+an empty token field and no envelope in the accessible tree. This is initial
+authorization denial, not loss of permission during an established session.
+Real permission loss, expiry, reconnect and normal ten-snapshot completion
+remain pending.
+
+Final expanded verification: two integration tests passed (19.25 seconds),
+AAOS smoke plus no-role denial passed, and PostgreSQL restore passed
+(87 tables/287 rows, 77.906 seconds). Ruff/mypy/PowerShell syntax checks passed;
+Android retained 57 passing JVM tests and lint with zero errors/15 warnings.
+Owned emulator and disposable containers were confirmed removed. Changes are
+saved locally; no commit/PR/merge or DOCX regeneration was performed in this run.
+
 ## Remaining acceptance work after populated verification
 
 X-6: live updates, exports, retention and performance hardening. Full OTA and formal standards

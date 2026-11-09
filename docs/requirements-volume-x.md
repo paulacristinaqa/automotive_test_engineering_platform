@@ -1,11 +1,18 @@
 # Volume X Dashboard Requirements
 
+## X-7.11 real AAOS smoke acceptance
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| DASH-NF-056 | Verify a real native snapshot, empty credential field and background/return cleanup on AAOS, without automatic session restart. | API 35 instrumentation PASS; local LIVE screenshot; dashboard-aaos-acceptance.md |
+| DASH-NF-057 | Reject a valid token without dashboard permission on the real Android client, clearing the input and displaying no snapshot. | Disposable no-role AAOS instrumentation PASS; dashboard-aaos-acceptance.md |
+
 ## X-7.10 Android engineering presentation
 
 | ID | Requirement | Evidence |
 |---|---|---|
 | DASH-NF-054 | Own one native session, invalidate queued callbacks on replacement/stop, and close partially started transports. | Companion session unit tests |
-| DASH-NF-055 | Provide masked transient token entry, bounded evidence preview and background cleanup without automatic restart. | Compose/ViewModel/Activity implementation; device acceptance pending |
+| DASH-NF-055 | Provide masked transient token entry, bounded evidence preview and background cleanup without automatic restart. | Compose/ViewModel/Activity implementation; X-7.11 basic device smoke passed; broader acceptance pending |
 
 ## X-7.9 native transport prerequisite
 
