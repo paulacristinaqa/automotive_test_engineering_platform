@@ -1,4 +1,4 @@
-FROM python:3.14.6-alpine3.24@sha256:26730869004e2b9c4b9ad09cab8625e81d256d1ce97e72df5520e806b1709f92 AS runtime
+FROM python:3.14.10-alpine3.24@sha256:a18b20ad69e74df6cf6d2e1b1a260d7a1ecf5380fd83b310f83ba88c461cf894 AS runtime
 
 ARG ATEP_SOURCE_REVISION=unknown
 LABEL org.opencontainers.image.source="https://github.com/paulacristinaqa/automotive_test_engineering_platform" \
