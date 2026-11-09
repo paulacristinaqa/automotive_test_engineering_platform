@@ -59,6 +59,36 @@ test authoring. It does not replace a hardware bench; see the limits at the end.
 | BENCH-NF-007 | The simulated demo must write identical traces on every run. | `tests/test_bench_ecu_demo.py` |
 | BENCH-NF-008 | A simulated link must fail fast instead of looping when a node reports a deadline it never clears. | `tests/test_bench_link.py` |
 
+## XI-3 Virtual airbag control unit
+
+Thresholds are illustrative bench values, not a real ACU calibration. Test case IDs refer to
+`tools/run_airbag_bench_demo.py`.
+
+### Functional requirements
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| BENCH-F-024 | At ignition on, the ACU runs a 6 s self-test with the warning lamp on, then switches the lamp off when no fault is active, and sends an E2E-protected status message every 100 ms. | ACU-T01 |
+| BENCH-F-025 | Each of the four squib loops is valid between 1.5 and 5.0 Ω; below, above and open (≥ 20 Ω) raise loop DTCs B1001-B1004 with failure types 0x1A, 0x1B and 0x13. | ACU-T02, ACU-T03 |
+| BENCH-F-026 | A failing condition sets testFailed and pending at once and confirmed after 500 ms; a repaired condition clears testFailed and keeps confirmed until a DTC clear; the lamp follows active confirmed faults. | ACU-T02, ACU-T03, ACU-T14 |
+| BENCH-F-027 | Supply voltage below 9 V or above 16 V raises B1010 with failure type 0x16 or 0x17. | ACU-T04 |
+| BENCH-F-028 | The vehicle status message is supervised; 500 ms without it raises U0121. | ACU-T05 |
+| BENCH-F-029 | Deployment needs a delta-v over a 30 ms window confirmed by a safing sensor of at least 3 g: pretensioners at 6 km/h (driver if buckled, passenger if occupied), airbags at 14 km/h (passenger only if occupied and enabled), and nothing during the 200 ms arming delay. | ACU-T07, ACU-T08, ACU-T09, ACU-T13 |
+| BENCH-F-030 | A hammer blow whose main-sensor delta-v exceeds the airbag threshold but is not confirmed by the safing sensor causes no deployment. | ACU-T06 |
+| BENCH-F-031 | After supply loss the energy reserve keeps the firing path alive for 150 ms without CAN traffic; after that the ACU is off. | ACU-T10, ACU-T11 |
+| BENCH-F-032 | The first firing stores a crash record and DTC B1050, sends an E2E-protected crash message at once and five more every 20 ms, and blocks any firing after the 100 ms crash event. The crash DTC survives a DTC clear. | ACU-T08, ACU-T14, ACU-T15 |
+| BENCH-F-033 | A loop outside its valid window is reported as failed, not fired, in the crash record and crash message. | ACU-T12 |
+| BENCH-F-034 | Diagnostic DIDs report loop resistances (0x4001-0x4004), supply voltage (0x4010), the crash record (0x4020) and system state with lamp (0x4030). | ACU-T04, ACU-T08 |
+| BENCH-F-035 | Provide a system-test campaign whose cases list their requirements and compare every observation with an expected value, writing a JSON and Markdown report, the ACU DBC and traces of the severe crash. | `tools/run_airbag_bench_demo.py`, `tests/test_bench_airbag_demo.py` |
+
+### Non-functional requirements
+
+| ID | Requirement | Evidence |
+|---|---|---|
+| BENCH-NF-009 | The campaign must fail on a miscalibrated ACU and on an ACU without safing confirmation, proving that its checks detect defects. | `tests/test_bench_airbag_demo.py` |
+| BENCH-NF-010 | ACU CAN frames must be encoded from the same DBC that is exported, and decode with cantools. | `tests/test_bench_airbag.py` |
+| BENCH-NF-011 | A test case must report a failed check instead of raising when the ACU misbehaves. | `tests/test_bench_airbag_demo.py` |
+
 ## Deliberate limits
 
 - The bench simulates the network and the logic of a test bench. It does not model analog
@@ -67,5 +97,8 @@ test authoring. It does not replace a hardware bench; see the limits at the end.
   `virtual` interface.
 - ISO-TP messages are limited to 4,095 bytes; the 32-bit first-frame length escape is not
   implemented. Functional (broadcast) addressing is not modelled.
+- The ACU deployment algorithm, thresholds and timings are illustrative. Real calibrations are
+  confidential, use more sensors (side, satellite, rollover) and are validated with physical
+  crash tests.
 - The virtual ECU's seed/key algorithm is a public XOR mask for teaching. The E2E model follows
   AUTOSAR E2E Profile 1 ideas but is not a certified implementation.

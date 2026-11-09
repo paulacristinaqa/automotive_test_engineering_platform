@@ -107,6 +107,9 @@ An intended end-to-end scenario is:
 - virtual test bench protocols on logical time: ISO-TP with flow control, a UDS tester with
   P2/P2* timing, a virtual ECU diagnostic server, cyclic timeout supervision and E2E protection
   (alive counter and CRC-8 SAE J1850) with fault injection;
+- a virtual airbag control unit as bench device under test (squib loop monitoring, safing-
+  confirmed deployment, self-test, energy reserve, debounced DTCs, E2E crash output, UDS) with a
+  15-case system-test campaign traced to requirements;
 - Ruff, strict mypy, pytest, and GitHub Actions quality gates.
 
 ## Architecture
@@ -396,7 +399,7 @@ operational guidance, and review worksheets.
 | VIII | Test Framework | Complete — VIII-1 through VIII-7, including bounded performance and stress evidence |
 | IX | AI Test Engineer | Complete IX-1 through IX-7 with cross-platform cited AI evidence |
 | X | Dashboard | In progress - X-1 through X-6 backend scope delivered (X-5 reduced scope); X-7.11 to X-7.19 actual AAOS acceptance and X-7.20 to X-7.23 local proxy, TLS, shared-admission and certificate-lifecycle acceptance passed; combined TLS/multiprocess profile and full deployment gate pending |
-| XI | Virtual Test Bench | In progress - XI-1 Vector artifacts and bench bus; XI-2 ISO-TP, UDS timing, virtual ECU, supervision and E2E |
+| XI | Virtual Test Bench | In progress - XI-1 Vector artifacts and bench bus; XI-2 ISO-TP, UDS timing, virtual ECU, supervision and E2E; XI-3 virtual airbag control unit and system-test campaign |
 | XII | DevOps | Planned |
 | XIII | Enterprise Features | Planned |
 

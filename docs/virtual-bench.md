@@ -141,6 +141,74 @@ E2E scenario with injected faults and timeout supervision. Each step has an expe
 writes `diagnostics.asc/.blf`, `e2e.asc/.blf` and `report.json`. Add `--bus virtual` to run the
 diagnostic session on a python-can bus with the wall clock instead of the simulated link.
 
+## XI-3 Virtual airbag control unit
+
+The ACU (`atep.bench.airbag`) is the device under test of the bench. Bench inputs are methods
+that take the current time, the way a HiL operator changes the supply, a squib load or a seat
+mat: `set_power`, `set_loop_resistance`, `set_occupancy` and `inject_crash`. `AcuBench`
+(`atep.bench.airbag_bench`) puts the ACU, a vehicle-status sender and a UDS tester on a simulated
+bus. All thresholds are illustrative.
+
+```mermaid
+stateDiagram-v2
+    [*] --> OFF
+    OFF --> SELF_TEST: KL15 on, KL30 >= 6 V
+    SELF_TEST --> NORMAL: 6 s, no active fault
+    SELF_TEST --> FAULT: 6 s, confirmed fault active
+    NORMAL --> FAULT: fault confirmed after 500 ms
+    FAULT --> NORMAL: fault repaired
+    NORMAL --> CRASH: squib fired
+    FAULT --> CRASH: squib fired
+    NORMAL --> OFF: KL15 off, or 150 ms after KL30 loss
+    FAULT --> OFF: KL15 off, or 150 ms after KL30 loss
+    CRASH --> OFF: KL15 off
+```
+
+The warning lamp is on in SELF_TEST, FAULT and CRASH.
+
+### Deployment decision
+
+| Condition | Value |
+|---|---|
+| Delta-v window on the main sensor | 30 ms |
+| Safing sensor confirmation | at least 3 g in the same window |
+| Pretensioners | delta-v ≥ 6 km/h; driver if buckled, passenger if seat occupied |
+| Airbags | delta-v ≥ 14 km/h; passenger only if seat occupied and airbag enabled |
+| Arming delay after power-on | 200 ms |
+| Energy reserve after supply loss | 150 ms, firing path only, no CAN |
+| Crash event | firing allowed for 100 ms after the first squib, then latched |
+
+A squib outside its 1.5-5.0 Ω window cannot fire and is recorded as failed.
+
+### CAN and diagnostics
+
+| ID | Message | Content |
+|---|---|---|
+| 0x0A0 | vehicle_status (VCU, 100 ms) | Vehicle speed; supervised, U0121 after 500 ms |
+| 0x090 | acu_status (ACU, 100 ms) | E2E CRC and counter, system state, lamp, passenger airbag enabled, driver buckled, crash stored, active faults |
+| 0x050 | acu_crash (ACU, on crash, 6 × 20 ms) | E2E CRC and counter, severity, fired and failed loop masks, delta-v |
+| 0x7E2 / 0x7EA | UDS request / response | ISO-TP, served by the XI-2 virtual ECU with live DTCs and DIDs |
+
+| DTC | Meaning |
+|---|---|
+| B1001-B1004 (0x13, 0x1A, 0x1B) | Driver airbag, passenger airbag, driver and passenger pretensioner loop: open, resistance low, resistance high |
+| B1010 (0x16, 0x17) | Supply voltage low, high |
+| U0121 | Lost communication with the vehicle status sender |
+| B1050 | Crash recorded; survives a DTC clear |
+
+### System-test campaign
+
+```bash
+python tools/run_airbag_bench_demo.py --output out/airbag-bench
+```
+
+Fifteen cases cover self-test, loop faults, supply range, lost communication, hammer-blow
+misuse, low and severe crashes, the passenger airbag switch, energy reserve, an open loop during
+a crash, the arming delay, DTC clearing and one-shot deployment. Every case lists its
+requirements and compares each observation with an expected value. The campaign writes
+`report.json`, `report.md`, `acu.dbc` and `acu-severe-crash.asc/.blf`. Load `acu.dbc` in CANoe or
+CANalyzer to decode the trace.
+
 ## Limits
 
 - The bench simulates the network and test logic. There is no electrical layer, no bit stuffing

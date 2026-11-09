@@ -10,8 +10,10 @@ vTESTstudio and HiL benches.
 - [x] **XI-2 ECU communication** - ISO-TP (ISO 15765-2) with flow control, a UDS tester with
   P2/P2* timing, a virtual ECU diagnostic server, cyclic message timeout supervision, E2E
   protection with alive counter and CRC-8, fault injection, and a deterministic simulated link.
-- [ ] **XI-3 Virtual airbag control unit** - device under test with squib loop resistance
-  monitoring, crash sensors, warning lamp, start-up self-test, DTCs and crash output message.
+- [x] **XI-3 Virtual airbag control unit** - device under test with squib loop resistance
+  monitoring, a two-sensor deployment decision, warning lamp and self-test, energy reserve,
+  debounced DTCs, E2E-protected status and crash messages, UDS diagnostics, and a 15-case
+  system-test campaign.
 - [ ] **XI-4 Bench instruments** - programmable power supply (KL30/KL15, undervoltage, cranking,
   overvoltage profiles), fault-injection box, multimeter and climate chamber with SCPI-style
   commands.
@@ -24,6 +26,6 @@ vTESTstudio and HiL benches.
 
 ## Next recommended increment
 
-XI-3 Virtual airbag control unit. It becomes the device under test for the rest of the volume and
-reuses the XI-2 virtual ECU for diagnostics, E2E protection for its crash output and timeout
-supervision for the messages it depends on.
+XI-4 Bench instruments. A programmable power supply with ISO 16750-2-style profiles (slow
+decrease, cranking, undervoltage, overvoltage) and a fault-injection box will drive the XI-3 ACU
+through SCPI-style commands, the way a HiL operator does.

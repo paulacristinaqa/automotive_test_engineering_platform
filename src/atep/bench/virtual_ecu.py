@@ -127,10 +127,22 @@ class VirtualEcu:
         response = bytearray([0x62])
         for index in range(1, len(request), 2):
             did = int.from_bytes(request[index : index + 2], "big")
-            if did not in self.data:
+            value = self.read_data(did)
+            if value is None:
                 return self._negative(0x22, Nrc.REQUEST_OUT_OF_RANGE)
-            response += did.to_bytes(2, "big") + self.data[did]
+            response += did.to_bytes(2, "big") + value
         return bytes(response)
+
+    # Data sources: subclasses override these to serve live values.
+
+    def read_data(self, did: int) -> bytes | None:
+        return self.data.get(did)
+
+    def dtc_records(self) -> list[Dtc]:
+        return self.profile.dtcs
+
+    def clear_dtcs(self) -> None:
+        self.profile.dtcs = []
 
     def _write_did(self, request: bytes) -> bytes:
         if len(request) < 4:
@@ -189,7 +201,7 @@ class VirtualEcu:
             return self._negative(0x19, Nrc.INCORRECT_MESSAGE_LENGTH)
         mask = request[2]
         response = bytearray([0x59, 0x02, 0xFF])
-        for dtc in self.profile.dtcs:
+        for dtc in self.dtc_records():
             if dtc.status & mask:
                 response += dtc.code.to_bytes(3, "big") + bytes([dtc.status])
         return bytes(response)
@@ -200,7 +212,7 @@ class VirtualEcu:
         group = int.from_bytes(request[1:4], "big")
         if group != 0xFFFFFF:
             return self._negative(0x14, Nrc.REQUEST_OUT_OF_RANGE)
-        self.profile.dtcs = []
+        self.clear_dtcs()
         return bytes([0x54])
 
     def _reset(self, request: bytes) -> bytes:
